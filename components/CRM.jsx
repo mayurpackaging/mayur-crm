@@ -182,8 +182,12 @@ export default function CRM({ currentUser, onLogout }) {
   };
   const updOrderItem = (pid, k, v) => {
     setOrderItems(p=>p.map(i=>{
-      if(i.product_id!==pid) return i;
+      if(i.product_id!==pid && i.id!==pid) return i;
       const updated = {...i,[k]:v};
+      // auto calculate price_per_pcs when ctn_price changes
+      if(k==="ctn_price" && updated.packing) {
+        updated.price_per_pcs = +(Number(v) / Number(updated.packing)).toFixed(2);
+      }
       const base = (Number(updated.qty_cases)||0) * (Number(updated.ctn_price)||0);
       const disc = Number(updated.discount)||0;
       updated.amount = base - disc;
