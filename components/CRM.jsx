@@ -303,7 +303,7 @@ export default function CRM({ currentUser, onLogout }) {
       </table>
       <div class="total">
         Subtotal: ₹${Number(selOrder?.items?.reduce((s,i)=>s+(Number(i.amount)||0),0)||0).toLocaleString("en-IN")}<br/>
-        EPR @1%: ₹${Math.round((selOrder?.items?.reduce((s,i)=>s+(Number(i.amount)||0),0)||0)*0.01).toLocaleString("en-IN")}<br/>
+        ${selOrder?.epr_applied ? `EPR @1%: ₹${Math.round((selOrder?.items?.reduce((s,i)=>s+(Number(i.amount)||0),0)||0)*0.01).toLocaleString("en-IN")}<br/>` : ""}
         <b>Total: ₹${Number(selOrder?.total_amount||0).toLocaleString("en-IN")}</b>
       </div>
       ${selOrder?.notes?`<div style="margin-top:12px;font-size:12px;"><b>Notes:</b> ${selOrder.notes}</div>`:""}
