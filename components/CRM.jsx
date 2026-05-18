@@ -336,7 +336,7 @@ export default function CRM({ currentUser, onLogout }) {
         <div className="card">
           <div className="sh"><div><div className="sh-t">📋 Recent Orders</div></div><button className="btn btn-o btn-sm" onClick={()=>setView("orders")}>All →</button></div>
           {ORDERS.length===0?<div className="empty"><p>Koi order nahi</p></div>
-            :ORDERS.slice(0,5).map(o=>(
+            :[...ORDERS].sort((a,b)=>new Date(b.order_date)-new Date(a.order_date)).slice(0,5).map(o=>(
               <div key={o.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 0",borderBottom:"1px solid var(--bdr)"}}>
                 <div><div style={{fontSize:12.5,fontWeight:600}}>{o.company}</div><div style={{fontSize:10.5,color:"var(--mut)"}}>{fd(o.order_date)}</div></div>
                 <div style={{display:"flex",gap:7,alignItems:"center"}}>
