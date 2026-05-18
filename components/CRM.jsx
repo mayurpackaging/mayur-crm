@@ -479,6 +479,7 @@ export default function CRM({ currentUser, onLogout }) {
                     <div>
                       <div style={{fontWeight:700,fontSize:13.5}}>{o.company}</div>
                       <div style={{fontSize:10.5,color:"var(--mut)",marginTop:2}}>{fd(o.order_date)} · {o.created_by} · {o.payment_mode?.replace("_"," ")}</div>
+                    {o.items_summary && <div style={{fontSize:11,color:"var(--txt)",marginTop:4,padding:"4px 8px",background:"var(--card2)",borderRadius:6,display:"inline-block"}}>{o.items_summary}</div>}
                     </div>
                     <div style={{display:"flex",gap:6,alignItems:"center"}}>
                       <div style={{fontSize:15,fontWeight:800,color:"#10b981"}}>{fr(o.total_amount)}</div>
