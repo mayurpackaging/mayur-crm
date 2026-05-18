@@ -483,7 +483,11 @@ export default function CRM({ currentUser, onLogout }) {
                     </div>
                     <div style={{display:"flex",gap:6,alignItems:"center"}}>
                       <div style={{fontSize:15,fontWeight:800,color:"#10b981"}}>{fr(o.total_amount)}</div>
-                      <button className="btn btn-o btn-sm" onClick={()=>{setForm({...o});setOrderItems([]);setModal("editorder");}}>✏️</button>
+                      <button className="btn btn-o btn-sm" onClick={async()=>{
+                        setForm({...o});
+                        try { const items = await sbGetOrderItems(o.id); setOrderItems(items||[]); } catch(e){ setOrderItems([]); }
+                        setModal("editorder");
+                      }}>✏️</button>
                       <button className="btn btn-o btn-sm" onClick={()=>openOrder(o)}><Printer size={11}/></button>
                     </div>
                   </div>
@@ -1031,43 +1035,136 @@ export default function CRM({ currentUser, onLogout }) {
       </div>
     );
 
-    if(modal==="editorder") return (
-      <div className="ov" onClick={closeM}>
-        <div className="mod mod-sm" onClick={e=>e.stopPropagation()}>
-          <div className="mod-ttl">Edit Order <button className="btn btn-o btn-sm" onClick={closeM}><X size={13}/></button></div>
-          <div className="fr"><label className="lbl">Customer</label><input className="inp" value={form.company||""} disabled style={{opacity:.6}}/></div>
-          <div className="fr fr2">
-            <div><label className="lbl">Order Date</label><input type="date" className="inp" value={form.order_date||""} onChange={e=>sf("order_date",e.target.value)}/></div>
-            <div><label className="lbl">Payment Mode</label>
-              <select className="inp" value={form.payment_mode||"cash"} onChange={e=>sf("payment_mode",e.target.value)}>
-                <option value="cash">💵 Cash</option>
-                <option value="credit">🏦 Credit</option>
-                <option value="bank_transfer">↗ Bank Transfer</option>
-                <option value="cheque">📝 Cheque</option>
-              </select>
+    if(modal==="editorder") {
+      const editTotal = orderItems.reduce((s,i)=>s+(Number(i.amount)||0),0);
+      const editEpr = form.epr ? Math.round(editTotal*0.01) : 0;
+      const editGst = form.gst_type==="including" ? 0 : Math.round(editTotal*0.18);
+      return (
+        <div className="ov" onClick={closeM}>
+          <div className="mod" style={{width:860,maxWidth:"96vw"}} onClick={e=>e.stopPropagation()}>
+            <div className="mod-ttl">✏️ Edit Order — {form.company} <button className="btn btn-o btn-sm" onClick={closeM}><X size={13}/></button></div>
+
+            {/* Top fields */}
+            <div className="fr fr2" style={{marginBottom:12}}>
+              <div><label className="lbl">Order Date</label><input type="date" className="inp" value={form.order_date||""} onChange={e=>sf("order_date",e.target.value)}/></div>
+              <div><label className="lbl">Payment Mode</label>
+                <select className="inp" value={form.payment_mode||"cash"} onChange={e=>sf("payment_mode",e.target.value)}>
+                  <option value="cash">💵 Cash</option>
+                  <option value="credit">🏦 Credit</option>
+                  <option value="bank_transfer">↗ Bank Transfer</option>
+                  <option value="cheque">📝 Cheque</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="g2" style={{gap:14}}>
+              {/* LEFT: product picker */}
+              <div>
+                <label className="lbl">Product Add Karo</label>
+                <div style={{maxHeight:280,overflowY:"auto",border:"1px solid var(--bdr)",borderRadius:8}}>
+                  {PRODS.map(p=>(
+                    <div key={p.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"7px 10px",borderBottom:"1px solid var(--bdr)",fontSize:11.5}}>
+                      <div>
+                        <div style={{fontWeight:600,fontSize:11.5}}>{p.name}</div>
+                        <div style={{fontSize:10,color:"var(--mut)"}}>{p.sku_code} · ₹{p.ctn_price}/ctn</div>
+                      </div>
+                      <button className="btn btn-g btn-sm" onClick={()=>addOrderItem(p)}>+ Add</button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* RIGHT: items */}
+              <div>
+                <label className="lbl">Order Items ({orderItems.length})</label>
+                {orderItems.length===0
+                  ?<div className="empty" style={{padding:20,border:"1px solid var(--bdr)",borderRadius:8}}><p>Koi item nahi</p></div>
+                  :<div style={{border:"1px solid var(--bdr)",borderRadius:8,overflow:"hidden"}}>
+                    {orderItems.map(item=>(
+                      <div key={item.product_id||item.id} style={{padding:"8px 10px",borderBottom:"1px solid var(--bdr)"}}>
+                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+                          <div style={{fontWeight:600,fontSize:12}}>{item.product_name}</div>
+                          <button style={{background:"none",border:"none",color:"var(--err)",cursor:"pointer"}} onClick={()=>removeOrderItem(item.product_id||item.id)}><Trash2 size={12}/></button>
+                        </div>
+                        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:6}}>
+                          <div><div style={{fontSize:9,color:"var(--mut)",marginBottom:2}}>CASES</div>
+                            <NumInput style={{padding:"4px 8px",fontSize:12}} value={item.qty_cases} onChange={v=>updOrderItem(item.product_id||item.id,"qty_cases",v)}/>
+                          </div>
+                          <div><div style={{fontSize:9,color:"var(--mut)",marginBottom:2}}>CTN PRICE (₹)</div>
+                            <NumInput style={{padding:"4px 8px",fontSize:12}} value={item.ctn_price} onChange={v=>updOrderItem(item.product_id||item.id,"ctn_price",v)}/>
+                          </div>
+                          <div><div style={{fontSize:9,color:"var(--mut)",marginBottom:2}}>DISCOUNT (₹)</div>
+                            <NumInput style={{padding:"4px 8px",fontSize:12}} value={item.discount||0} onChange={v=>updOrderItem(item.product_id||item.id,"discount",v)}/>
+                          </div>
+                          <div><div style={{fontSize:9,color:"var(--mut)",marginBottom:2}}>AMOUNT</div>
+                            <div style={{fontSize:13,fontWeight:800,color:"#10b981",paddingTop:6}}>₹{Number(item.amount||0).toLocaleString("en-IN")}</div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                    <div style={{padding:"10px 12px",background:"var(--card2)"}}>
+                      <div style={{display:"flex",justifyContent:"space-between",fontSize:12,marginBottom:4}}><span style={{color:"var(--mut)"}}>Subtotal</span><span style={{fontWeight:600}}>₹{editTotal.toLocaleString("en-IN")}</span></div>
+                      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",fontSize:12,marginBottom:4}}>
+                        <label style={{display:"flex",alignItems:"center",gap:5,cursor:"pointer",color:"var(--mut)"}}>
+                          <input type="checkbox" checked={!!form.epr} onChange={e=>sf("epr",e.target.checked)} style={{accentColor:"var(--acc)",width:14,height:14}}/>
+                          EPR @1%
+                        </label>
+                        <span style={{fontWeight:600}}>₹{editEpr.toLocaleString("en-IN")}</span>
+                      </div>
+                      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",fontSize:12,marginBottom:6}}>
+                        <div style={{display:"flex",alignItems:"center",gap:8}}>
+                          <span style={{color:"var(--mut)"}}>GST @18%:</span>
+                          <label style={{display:"flex",alignItems:"center",gap:4,cursor:"pointer"}}>
+                            <input type="radio" name="egst" value="excluding" checked={form.gst_type!=="including"} onChange={()=>sf("gst_type","excluding")} style={{accentColor:"var(--acc)",width:13,height:13}}/>
+                            <span style={{fontSize:11}}>Excl.</span>
+                          </label>
+                          <label style={{display:"flex",alignItems:"center",gap:4,cursor:"pointer"}}>
+                            <input type="radio" name="egst" value="including" checked={form.gst_type==="including"} onChange={()=>sf("gst_type","including")} style={{accentColor:"var(--acc)",width:13,height:13}}/>
+                            <span style={{fontSize:11}}>Incl.</span>
+                          </label>
+                        </div>
+                        <span style={{fontWeight:600}}>{form.gst_type==="including"?"(included)":"₹"+editGst.toLocaleString("en-IN")}</span>
+                      </div>
+                      <div style={{display:"flex",justifyContent:"space-between",fontSize:14,borderTop:"1px solid var(--bdr)",paddingTop:6}}><span style={{fontWeight:700}}>Total</span><span style={{fontWeight:800,color:"#10b981"}}>₹{(editTotal+editEpr+editGst).toLocaleString("en-IN")}</span></div>
+                    </div>
+                  </div>}
+              </div>
+            </div>
+
+            <div className="fr fr2" style={{marginTop:12}}>
+              <div><label className="lbl">Notes</label><textarea className="inp" defaultValue={form.notes||""} onBlur={e=>sf("notes",e.target.value)} style={{minHeight:38,resize:"none"}}/></div>
+              <div style={{display:"flex",alignItems:"flex-end"}}>
+                <button className="btn btn-p" style={{width:"100%",justifyContent:"center",fontSize:13}} disabled={saving} onClick={async()=>{
+                  setSv(true);
+                  const newTotal = editTotal + editEpr + editGst;
+                  try {
+                    await sbPatch("crm_orders", form.id, {
+                      order_date: form.order_date,
+                      payment_mode: form.payment_mode,
+                      gst_type: form.gst_type||"excluding",
+                      epr_applied: !!form.epr,
+                      total_amount: newTotal,
+                      notes: form.notes,
+                    });
+                    // delete old items and reinsert
+                    await sbFetch(`crm_order_items?order_id=eq.${form.id}`, {method:"DELETE"});
+                    if(orderItems.length>0){
+                      const items = orderItems.map(i=>({...i, order_id:form.id, product_id: i.product_id||i.id}));
+                      // remove id field from items
+                      const cleanItems = items.map(({id,...rest})=>rest);
+                      await sbInsert("crm_order_items", cleanItems);
+                    }
+                    setORDERS(p=>p.map(x=>x.id===form.id?{...x,...form,total_amount:newTotal}:x));
+                    toast$("Order updated ✓"); closeM();
+                  } catch(e){ toast$(e.message,true); }
+                  setSv(false);
+                }}>{saving?<Spin/>:"💾 Save Order"}</button>
+              </div>
             </div>
           </div>
-          <div className="fr fr2">
-            <div><label className="lbl">Total Amount (₹)</label><input type="number" className="inp" value={form.total_amount||""} onChange={e=>sf("total_amount",Number(e.target.value))}/></div>
-            <div><label className="lbl">Status</label>
-              <select className="inp" value={form.status||"draft"} onChange={e=>sf("status",e.target.value)}>
-                {["draft","confirmed","dispatched","delivered","cancelled"].map(s=><option key={s} value={s}>{s}</option>)}
-              </select>
-            </div>
-          </div>
-          <div className="fr"><label className="lbl">Notes</label><textarea className="inp" defaultValue={form.notes||""} onBlur={e=>sf("notes",e.target.value)} style={{minHeight:50,resize:"none"}}/></div>
-          <button className="btn btn-p" style={{width:"100%",justifyContent:"center",marginTop:6}} disabled={saving} onClick={async()=>{
-            setSv(true);
-            try {
-              await sbPatch("crm_orders",form.id,{order_date:form.order_date,payment_mode:form.payment_mode,total_amount:form.total_amount,status:form.status,notes:form.notes});
-              setORDERS(p=>p.map(x=>x.id===form.id?{...x,...form}:x));
-              toast$("Order updated ✓"); closeM();
-            } catch(e){ toast$(e.message,true); }
-            setSv(false);
-          }}>{saving?<Spin/>:"Save"}</button>
         </div>
-      </div>
-    );
+      );
+    }
 
     const FM = {
       acust:{t:"Add Customer",fn:saveCust,f:<>
