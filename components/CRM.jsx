@@ -193,6 +193,7 @@ export default function CRM({ currentUser, onLogout }) {
 
   const orderTotal = useMemo(()=>orderItems.reduce((s,i)=>s+(Number(i.amount)||0),0),[orderItems]);
   const eprAmount  = useMemo(()=>form.epr ? Math.round(orderTotal*0.01) : 0,[orderTotal, form.epr]);
+  const gstAmount  = useMemo(()=>form.gst==="including" ? 0 : Math.round(orderTotal*0.18),[orderTotal, form.gst]);
 
   const saveOrder = async() => {
     if(!form.customer_id) return toast$("Customer select karo",true);
@@ -206,7 +207,7 @@ export default function CRM({ currentUser, onLogout }) {
         company: c?.company,
         order_date: form.order_date || new Date().toISOString().split("T")[0],
         status: "draft",
-        total_amount: orderTotal + eprAmount,
+        total_amount: orderTotal + eprAmount + (form.gst==="including" ? 0 : gstAmount),
         payment_mode: form.payment_mode||"cash",
         epr_applied: !!form.epr,
         gst_type: form.gst||"excluding",
@@ -785,18 +786,23 @@ export default function CRM({ currentUser, onLogout }) {
                       </label>
                       <span style={{fontWeight:600,color:form.epr?"var(--txt)":"var(--mut)"}}>₹{eprAmount.toLocaleString("en-IN")}</span>
                     </div>
-                    <div style={{display:"flex",alignItems:"center",gap:8,fontSize:12,marginBottom:6}}>
-                      <span style={{color:"var(--mut)"}}>GST:</span>
-                      <label style={{display:"flex",alignItems:"center",gap:4,cursor:"pointer"}}>
-                        <input type="radio" name="gst" value="excluding" checked={form.gst!=="including"} onChange={()=>sf("gst","excluding")} style={{accentColor:"var(--acc)"}}/>
-                        <span style={{fontSize:11}}>Excluding</span>
-                      </label>
-                      <label style={{display:"flex",alignItems:"center",gap:4,cursor:"pointer"}}>
-                        <input type="radio" name="gst" value="including" checked={form.gst==="including"} onChange={()=>sf("gst","including")} style={{accentColor:"var(--acc)"}}/>
-                        <span style={{fontSize:11}}>Including</span>
-                      </label>
+                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",fontSize:12,marginBottom:6}}>
+                      <div style={{display:"flex",alignItems:"center",gap:8}}>
+                        <span style={{color:"var(--mut)"}}>GST @18%:</span>
+                        <label style={{display:"flex",alignItems:"center",gap:4,cursor:"pointer"}}>
+                          <input type="radio" name="gst" value="excluding" checked={form.gst!=="including"} onChange={()=>sf("gst","excluding")} style={{accentColor:"var(--acc)",width:14,height:14}}/>
+                          <span style={{fontSize:11}}>Excluding</span>
+                        </label>
+                        <label style={{display:"flex",alignItems:"center",gap:4,cursor:"pointer"}}>
+                          <input type="radio" name="gst" value="including" checked={form.gst==="including"} onChange={()=>sf("gst","including")} style={{accentColor:"var(--acc)",width:14,height:14}}/>
+                          <span style={{fontSize:11}}>Including</span>
+                        </label>
+                      </div>
+                      <span style={{fontWeight:600,color:form.gst!=="including"?"var(--txt)":"var(--mut)"}}>
+                        {form.gst==="including"?"(included)":"₹"+gstAmount.toLocaleString("en-IN")}
+                      </span>
                     </div>
-                    <div style={{display:"flex",justifyContent:"space-between",fontSize:14,borderTop:"1px solid var(--bdr)",paddingTop:6}}><span style={{fontWeight:700}}>Total</span><span style={{fontWeight:800,color:"#10b981"}}>₹{(orderTotal+eprAmount).toLocaleString("en-IN")}</span></div>
+                    <div style={{display:"flex",justifyContent:"space-between",fontSize:14,borderTop:"1px solid var(--bdr)",paddingTop:6}}><span style={{fontWeight:700}}>Total</span><span style={{fontWeight:800,color:"#10b981"}}>₹{(orderTotal+eprAmount+(form.gst==="including"?0:gstAmount)).toLocaleString("en-IN")}</span></div>
                   </div>
                 </div>}
             </div>
@@ -831,6 +837,7 @@ export default function CRM({ currentUser, onLogout }) {
     if(!selOrder) return null;
     const subtotal = selOrder.items?.reduce((s,i)=>s+(Number(i.amount)||0),0)||0;
     const epr = selOrder.epr_applied ? Math.round(subtotal*0.01) : 0;
+    const gst = selOrder.gst_type==="including" ? 0 : Math.round(subtotal*0.18);
     return (
       <div className="ov" onClick={closeM}>
         <div className="mod mod-lg" onClick={e=>e.stopPropagation()}>
@@ -892,7 +899,8 @@ export default function CRM({ currentUser, onLogout }) {
             <div style={{width:240}}>
               <div style={{display:"flex",justifyContent:"space-between",padding:"5px 0",fontSize:12,borderBottom:"1px solid var(--bdr)"}}><span style={{color:"var(--mut)"}}>Subtotal</span><span style={{fontWeight:600}}>₹{subtotal.toLocaleString("en-IN")}</span></div>
               {selOrder.epr_applied && <div style={{display:"flex",justifyContent:"space-between",padding:"5px 0",fontSize:12,borderBottom:"1px solid var(--bdr)"}}><span style={{color:"var(--mut)"}}>EPR @1%</span><span style={{fontWeight:600}}>₹{epr.toLocaleString("en-IN")}</span></div>}
-              <div style={{display:"flex",justifyContent:"space-between",padding:"8px 0",fontSize:15}}><span style={{fontWeight:700}}>Total</span><span style={{fontWeight:800,color:"#10b981",fontFamily:"'Sora',sans-serif"}}>₹{(subtotal+epr).toLocaleString("en-IN")}</span></div>
+              <div style={{display:"flex",justifyContent:"space-between",padding:"5px 0",fontSize:12,borderBottom:"1px solid var(--bdr)"}}><span style={{color:"var(--mut)"}}>GST @18% ({selOrder.gst_type==="including"?"Incl.":"Excl."})</span><span style={{fontWeight:600}}>{selOrder.gst_type==="including"?"Included":"₹"+gst.toLocaleString("en-IN")}</span></div>
+              <div style={{display:"flex",justifyContent:"space-between",padding:"8px 0",fontSize:15}}><span style={{fontWeight:700}}>Total</span><span style={{fontWeight:800,color:"#10b981",fontFamily:"'Sora',sans-serif"}}>₹{(subtotal+epr+gst).toLocaleString("en-IN")}</span></div>
               {selOrder.payment_mode && <div style={{fontSize:11,color:"var(--mut)",marginTop:4}}>Payment: <span style={{color:"var(--txt)",fontWeight:600,textTransform:"capitalize"}}>{selOrder.payment_mode?.replace("_"," ")}</span></div>}
               <div style={{fontSize:11,color:"var(--mut)",marginTop:2}}>GST: <span style={{color:"var(--txt)",fontWeight:600,textTransform:"capitalize"}}>{selOrder.gst_type||"Excluding"}</span></div>
             </div>
