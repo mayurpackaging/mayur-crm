@@ -734,10 +734,10 @@ export default function CRM({ currentUser, onLogout }) {
                       </div>
                       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6}}>
                         <div><div style={{fontSize:9,color:"var(--mut)",marginBottom:2}}>CASES</div>
-                          <input type="number" className="inp" style={{padding:"4px 8px",fontSize:12}} value={item.qty_cases} onChange={e=>updOrderItem(item.product_id,"qty_cases",Number(e.target.value))}/>
+                          <input type="number" className="inp" style={{padding:"4px 8px",fontSize:12}} value={item.qty_cases} onChange={e=>updOrderItem(item.product_id,"qty_cases",Number(e.target.value))} onFocus={e=>e.target.select()}/>
                         </div>
                         <div><div style={{fontSize:9,color:"var(--mut)",marginBottom:2}}>CTN PRICE (₹)</div>
-                          <input type="number" className="inp" style={{padding:"4px 8px",fontSize:12}} value={item.ctn_price} onChange={e=>updOrderItem(item.product_id,"ctn_price",Number(e.target.value))}/>
+                          <input type="number" className="inp" style={{padding:"4px 8px",fontSize:12}} value={item.ctn_price} onChange={e=>updOrderItem(item.product_id,"ctn_price",Number(e.target.value))} onFocus={e=>e.target.select()}/>
                         </div>
                         <div><div style={{fontSize:9,color:"var(--mut)",marginBottom:2}}>AMOUNT</div>
                           <div style={{fontSize:13,fontWeight:800,color:"#10b981",paddingTop:6}}>₹{Number(item.amount||0).toLocaleString("en-IN")}</div>
