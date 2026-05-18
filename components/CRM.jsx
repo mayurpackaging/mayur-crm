@@ -1,11 +1,11 @@
 "use client";
-import { useState, useMemo, useEffect, useCallback } from "react";
-import { Plus, Search, X, Eye, CheckCircle, Loader } from "lucide-react";
-import { sbGet, sbGetPay, sbInsert, sbPatch } from "../lib/supabase";
+import { useState, useMemo, useEffect, useCallback, useRef } from "react";
+import { Plus, Search, X, Eye, CheckCircle, Loader, Printer, Trash2, Edit } from "lucide-react";
+import { sbGet, sbGetPay, sbGetProducts, sbGetOrders, sbGetOrderItems, sbInsert, sbPatch, sbDelete } from "../lib/supabase";
 
 /* ─── HELPERS ─────────────────────────────────────── */
 const fd  = s => s ? new Date(s).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"}) : "—";
-const fr  = n => n ? "₹"+Number(n).toLocaleString("en-IN") : "₹0";
+const fr  = n => n!=null && n!=="" ? "₹"+Number(n).toLocaleString("en-IN") : "₹0";
 const ini = s => s?.split(" ").map(w=>w[0]).join("").toUpperCase().slice(0,2)||"?";
 const AVC = ["#f59e0b","#10b981","#3b82f6","#8b5cf6","#ef4444","#06b6d4","#f97316"];
 const avc = n => AVC[(n?.charCodeAt(0)||0)%AVC.length];
@@ -20,6 +20,10 @@ const ST = {
   pending:{c:"#60a5fa",bg:"rgba(59,130,246,.12)"},sent:{c:"#a78bfa",bg:"rgba(139,92,246,.12)"},
   approved:{c:"#10b981",bg:"rgba(16,185,129,.12)"},rejected:{c:"#ef4444",bg:"rgba(239,68,68,.12)"},
   revision:{c:"#f59e0b",bg:"rgba(245,158,11,.12)"},
+  draft:{c:"#60a5fa",bg:"rgba(59,130,246,.12)"},
+  confirmed:{c:"#10b981",bg:"rgba(16,185,129,.12)"},
+  dispatched:{c:"#f59e0b",bg:"rgba(245,158,11,.12)"},
+  cancelled:{c:"#ef4444",bg:"rgba(239,68,68,.12)"},
 };
 const Bdg = ({s}) => { const c=ST[s]||{c:"#64748b",bg:"rgba(100,116,139,.1)"}; return <span className="bdg" style={{background:c.bg,color:c.c}}>{s}</span>; };
 const Av  = ({name,size=32}) => <div className="av" style={{width:size,height:size,background:avc(name),fontSize:size*.34}}>{ini(name)}</div>;
@@ -28,23 +32,30 @@ const TC  = {visit:"#10b981",call:"#60a5fa",whatsapp:"#34d399",email:"#a78bfa",m
 const Spin= () => <Loader size={14} className="spin"/>;
 
 /* ─── MAIN ─────────────────────────────────────────── */
-export default function CRM() {
+export default function CRM({ currentUser, onLogout }) {
   const [view,setView]   = useState("dashboard");
   const [C,setC]         = useState([]);
   const [E,setE]         = useState([]);
   const [I,setI]         = useState([]);
   const [S,setS]         = useState([]);
   const [P,setP]         = useState([]);
+  const [PRODS,setPRODS] = useState([]);
+  const [ORDERS,setORDERS] = useState([]);
   const [loading,setLd]  = useState(true);
   const [saving,setSv]   = useState(false);
   const [toast,setToast] = useState(null);
   const [modal,setModal] = useState(null);
   const [selId,setSelId] = useState(null);
+  const [selOrder,setSelOrder] = useState(null);
   const [cTab,setCTab]   = useState("all");
   const [eTab,setETab]   = useState("all");
   const [sTab,setSTb]    = useState("all");
+  const [pCat,setPCat]   = useState("all");
   const [q,setQ]         = useState("");
   const [form,setForm]   = useState({});
+  const [orderItems,setOrderItems] = useState([]);
+  const [editProd,setEditProd] = useState(null);
+  const printRef = useRef();
 
   const toast$ = (msg,err=false) => { setToast({msg,err}); setTimeout(()=>setToast(null),2500); };
   const sf = (k,v) => setForm(p=>({...p,[k]:v}));
@@ -57,22 +68,26 @@ export default function CRM() {
   const odFU = useMemo(()=>I.filter(i=>i.next_follow_up&&isOD(i.next_follow_up)),[I]);
   const tdFU = useMemo(()=>I.filter(i=>i.next_follow_up&&isTD(i.next_follow_up)),[I]);
   const urgN = odFU.length+tdFU.length;
+  const prodCats = useMemo(()=>["all",...[...new Set(PRODS.map(p=>p.category).filter(Boolean))]], [PRODS]);
 
   const load = useCallback(async()=>{
     setLd(true);
     try {
-      const [c,e,i,s,p] = await Promise.all([sbGet("crm_customers"),sbGet("crm_enquiries"),sbGet("crm_interactions"),sbGet("crm_samples"),sbGetPay()]);
-      setC(c||[]); setE(e||[]); setI(i||[]); setS(s||[]); setP(p||[]);
+      const [c,e,i,s,p,pr,o] = await Promise.all([
+        sbGet("crm_customers"), sbGet("crm_enquiries"), sbGet("crm_interactions"),
+        sbGet("crm_samples"), sbGetPay(), sbGetProducts(), sbGetOrders()
+      ]);
+      setC(c||[]); setE(e||[]); setI(i||[]); setS(s||[]); setP(p||[]); setPRODS(pr||[]); setORDERS(o||[]);
     } catch(err){ toast$("Load failed: "+err.message,true); }
     setLd(false);
   },[]);
 
   useEffect(()=>{ load(); },[load]);
 
-  const closeM = () => { setModal(null); setForm({}); };
+  const closeM = () => { setModal(null); setForm({}); setOrderItems([]); setEditProd(null); };
   const openC  = id => { setSelId(id); setModal("detail"); };
 
-  /* ── SAVES ── */
+  /* ── CUSTOMER SAVES ── */
   const saveCust = async() => {
     if(!form.name||!form.company) return toast$("Name aur Company required!",true);
     setSv(true);
@@ -129,6 +144,144 @@ export default function CRM() {
     catch(e){ toast$(e.message,true); }
   };
 
+  /* ── PRODUCT SAVE ── */
+  const saveProd = async() => {
+    if(!form.name||!form.category) return toast$("Name aur Category required!",true);
+    setSv(true);
+    try {
+      if(editProd) {
+        await sbPatch("crm_products",editProd.id,form);
+        setPRODS(p=>p.map(x=>x.id===editProd.id?{...x,...form}:x));
+        toast$("Product updated ✓");
+      } else {
+        const r=await sbInsert("crm_products",form);
+        setPRODS(p=>[...p,r[0]]);
+        toast$("Product add ✓");
+      }
+      closeM();
+    } catch(e){ toast$(e.message,true); }
+    setSv(false);
+  };
+
+  /* ── ORDER / PROFORMA ── */
+  const addOrderItem = (prod) => {
+    const exists = orderItems.find(i=>i.product_id===prod.id);
+    if(exists) return toast$("Yeh item already add hai",true);
+    setOrderItems(p=>[...p, {
+      product_id: prod.id,
+      sku_code: prod.sku_code,
+      product_name: prod.name,
+      packing: prod.packing,
+      qty_cases: 1,
+      price_per_pcs: prod.price_per_pcs||0,
+      ctn_price: prod.ctn_price||0,
+      amount: prod.ctn_price||0,
+    }]);
+  };
+  const updOrderItem = (pid, k, v) => {
+    setOrderItems(p=>p.map(i=>{
+      if(i.product_id!==pid) return i;
+      const updated = {...i,[k]:v};
+      updated.amount = (Number(updated.qty_cases)||0) * (Number(updated.ctn_price)||0);
+      return updated;
+    }));
+  };
+  const removeOrderItem = (pid) => setOrderItems(p=>p.filter(i=>i.product_id!==pid));
+
+  const orderTotal = useMemo(()=>orderItems.reduce((s,i)=>s+(Number(i.amount)||0),0),[orderItems]);
+  const eprAmount  = useMemo(()=>Math.round(orderTotal*0.01),[orderTotal]);
+
+  const saveOrder = async() => {
+    if(!form.customer_id) return toast$("Customer select karo",true);
+    if(orderItems.length===0) return toast$("Koi item add nahi hai",true);
+    const c=gc(form.customer_id);
+    setSv(true);
+    try {
+      const orderData = {
+        customer_id: form.customer_id,
+        customer_name: c?.name,
+        company: c?.company,
+        order_date: form.order_date || new Date().toISOString().split("T")[0],
+        status: "draft",
+        total_amount: orderTotal + eprAmount,
+        notes: form.notes||"",
+        created_by: currentUser?.name||"",
+      };
+      const orderRes = await sbInsert("crm_orders", orderData);
+      const orderId = orderRes[0].id;
+      const items = orderItems.map(i=>({...i, order_id: orderId}));
+      await sbInsert("crm_order_items", items);
+      setORDERS(p=>[{...orderData, id:orderId},...p]);
+      toast$("Order/Proforma save ho gaya ✓");
+      setSelOrder({...orderData, id:orderId, items});
+      setModal("proforma");
+    } catch(e){ toast$(e.message,true); }
+    setSv(false);
+  };
+
+  const openOrder = async(order) => {
+    try {
+      const items = await sbGetOrderItems(order.id);
+      setSelOrder({...order, items: items||[]});
+      setModal("proforma");
+    } catch(e){ toast$(e.message,true); }
+  };
+
+  const updOrderStatus = async(id,st) => {
+    try { await sbPatch("crm_orders",id,{status:st}); setORDERS(p=>p.map(x=>x.id===id?{...x,status:st}:x)); toast$("Status updated ✓"); }
+    catch(e){ toast$(e.message,true); }
+  };
+
+  const printProforma = () => {
+    const win = window.open("","_blank");
+    win.document.write(`
+      <html><head><title>Proforma - ${selOrder?.company}</title>
+      <style>
+        body{font-family:Arial,sans-serif;padding:24px;color:#000;}
+        h2{text-align:center;margin-bottom:4px;}
+        .sub{text-align:center;font-size:12px;margin-bottom:20px;color:#555;}
+        .info{display:flex;justify-content:space-between;margin-bottom:16px;font-size:13px;}
+        table{width:100%;border-collapse:collapse;font-size:12px;}
+        th{background:#f59e0b;padding:8px;text-align:left;border:1px solid #ddd;}
+        td{padding:7px 8px;border:1px solid #ddd;}
+        .total{text-align:right;margin-top:12px;font-size:14px;}
+        .total b{font-size:16px;}
+        .footer{margin-top:30px;font-size:11px;color:#888;border-top:1px solid #ddd;padding-top:10px;}
+      </style></head><body>
+      <h2>Shreeja Packaging Industries Pvt. Ltd.</h2>
+      <div class="sub">Mayur Food Packaging Products | Delhi<br/>PROFORMA INVOICE</div>
+      <div class="info">
+        <div><b>To:</b> ${selOrder?.company||""}<br/>${selOrder?.customer_name||""}</div>
+        <div style="text-align:right"><b>Date:</b> ${fd(selOrder?.order_date)}<br/><b>Status:</b> ${selOrder?.status||"draft"}</div>
+      </div>
+      <table>
+        <thead><tr><th>#</th><th>SKU</th><th>Product</th><th>Packing</th><th>Cases</th><th>Price/Pcs (₹)</th><th>CTN Price (₹)</th><th>Amount (₹)</th></tr></thead>
+        <tbody>
+          ${(selOrder?.items||[]).map((item,idx)=>`
+            <tr>
+              <td>${idx+1}</td>
+              <td>${item.sku_code||""}</td>
+              <td>${item.product_name||""}</td>
+              <td>${item.packing||""}</td>
+              <td>${item.qty_cases||""}</td>
+              <td>${item.price_per_pcs||""}</td>
+              <td>${item.ctn_price||""}</td>
+              <td><b>₹${Number(item.amount||0).toLocaleString("en-IN")}</b></td>
+            </tr>`).join("")}
+        </tbody>
+      </table>
+      <div class="total">
+        Subtotal: ₹${Number(selOrder?.items?.reduce((s,i)=>s+(Number(i.amount)||0),0)||0).toLocaleString("en-IN")}<br/>
+        EPR @1%: ₹${Math.round((selOrder?.items?.reduce((s,i)=>s+(Number(i.amount)||0),0)||0)*0.01).toLocaleString("en-IN")}<br/>
+        <b>Total: ₹${Number(selOrder?.total_amount||0).toLocaleString("en-IN")}</b>
+      </div>
+      ${selOrder?.notes?`<div style="margin-top:12px;font-size:12px;"><b>Notes:</b> ${selOrder.notes}</div>`:""}
+      <div class="footer">Payment Terms: As agreed | This is a computer generated proforma invoice.</div>
+      </body></html>`);
+    win.document.close();
+    win.print();
+  };
+
   if(loading) return (
     <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"100vh",gap:14,background:"var(--bg)"}}>
       <div style={{fontSize:32}}>📦</div>
@@ -176,14 +329,14 @@ export default function CRM() {
               ))}
         </div>
         <div className="card">
-          <div className="sh"><div><div className="sh-t">📋 Recent Enquiries</div></div><button className="btn btn-o btn-sm" onClick={()=>setView("enquiries")}>All →</button></div>
-          {E.length===0?<div className="empty"><p>Koi enquiry nahi</p></div>
-            :E.slice(0,5).map(e=>(
-              <div key={e.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 0",borderBottom:"1px solid var(--bdr)"}}>
-                <div><div style={{fontSize:12.5,fontWeight:600}}>{e.product}</div><div style={{fontSize:10.5,color:"var(--mut)"}}>{e.customer_name}</div></div>
+          <div className="sh"><div><div className="sh-t">📋 Recent Orders</div></div><button className="btn btn-o btn-sm" onClick={()=>setView("orders")}>All →</button></div>
+          {ORDERS.length===0?<div className="empty"><p>Koi order nahi</p></div>
+            :ORDERS.slice(0,5).map(o=>(
+              <div key={o.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 0",borderBottom:"1px solid var(--bdr)"}}>
+                <div><div style={{fontSize:12.5,fontWeight:600}}>{o.company}</div><div style={{fontSize:10.5,color:"var(--mut)"}}>{fd(o.order_date)}</div></div>
                 <div style={{display:"flex",gap:7,alignItems:"center"}}>
-                  <span style={{fontSize:9.5,fontWeight:800,color:e.priority==="high"?"#ef4444":e.priority==="medium"?"#f59e0b":"var(--mut)"}}>{e.priority==="high"?"🔥":e.priority==="medium"?"⚡":"•"}</span>
-                  <Bdg s={e.status}/>
+                  <span style={{fontSize:12,fontWeight:700,color:"#10b981"}}>{fr(o.total_amount)}</span>
+                  <Bdg s={o.status}/>
                 </div>
               </div>
             ))}
@@ -217,6 +370,77 @@ export default function CRM() {
     </div>
   );
 
+  /* ── PRODUCTS MODULE ── */
+  const Products = () => {
+    const list = PRODS.filter(p=>pCat==="all"||p.category===pCat).filter(p=>!q||[p.name,p.sku_code,p.category].some(v=>v?.toLowerCase().includes(q.toLowerCase())));
+    return (
+      <div>
+        <div className="sh">
+          <div><div className="sh-t">Product / SKU List</div><div className="sh-s">{PRODS.length} total SKUs</div></div>
+          <button className="btn btn-p" onClick={()=>{setForm({});setEditProd(null);setModal("aprod");}}><Plus size={13}/> Add SKU</button>
+        </div>
+        <div className="tabs" style={{flexWrap:"wrap"}}>
+          {prodCats.map(t=>(
+            <div key={t} className={`tab ${pCat===t?"a":""}`} onClick={()=>setPCat(t)} style={{textTransform:"capitalize",fontSize:10.5}}>
+              {t} ({t==="all"?PRODS.length:PRODS.filter(p=>p.category===t).length})
+            </div>
+          ))}
+        </div>
+        <div className="sr"><Search size={13} className="sr-ic"/><input className="inp" placeholder="Search SKU, product..." value={q} onChange={e=>setQ(e.target.value)}/></div>
+        {list.length===0?<div className="card empty"><p>Koi product nahi</p></div>
+          :<div className="card" style={{padding:0}}><div className="tw"><table>
+            <thead><tr><th>SKU Code</th><th>Product Name</th><th>Category</th><th>Packing</th><th>Price/Pcs (₹)</th><th>CTN Price (₹)</th><th>Edit</th></tr></thead>
+            <tbody>{list.map(p=>(
+              <tr key={p.id}>
+                <td><span style={{fontSize:10,background:"rgba(245,158,11,.1)",color:"var(--acc)",padding:"2px 7px",borderRadius:6,fontWeight:700}}>{p.sku_code||"—"}</span></td>
+                <td style={{fontWeight:600,fontSize:12.5}}>{p.name}</td>
+                <td><span style={{fontSize:10,padding:"2px 8px",borderRadius:12,background:"rgba(59,130,246,.1)",color:"#60a5fa",fontWeight:700}}>{p.category}</span></td>
+                <td style={{fontSize:12,textAlign:"center"}}>{p.packing||"—"}</td>
+                <td style={{fontSize:13,fontWeight:700,color:"#10b981"}}>₹{p.price_per_pcs||0}</td>
+                <td style={{fontSize:13,fontWeight:700,color:"#60a5fa"}}>₹{p.ctn_price||0}</td>
+                <td>
+                  <button className="btn btn-o btn-sm" onClick={()=>{setEditProd(p);setForm({...p});setModal("aprod");}}>
+                    <Edit size={11}/>
+                  </button>
+                </td>
+              </tr>
+            ))}</tbody>
+          </table></div></div>}
+      </div>
+    );
+  };
+
+  /* ── ORDERS / PROFORMA ── */
+  const Orders = () => {
+    const list = ORDERS.filter(o=>!q||[o.customer_name,o.company].some(v=>v?.toLowerCase().includes(q.toLowerCase())));
+    return (
+      <div>
+        <div className="sh">
+          <div><div className="sh-t">Orders & Proforma</div><div className="sh-s">{ORDERS.length} total orders</div></div>
+          <button className="btn btn-p" onClick={()=>{setForm({order_date:new Date().toISOString().split("T")[0]});setOrderItems([]);setModal("aorder");}}><Plus size={13}/> New Order</button>
+        </div>
+        <div className="sr"><Search size={13} className="sr-ic"/><input className="inp" placeholder="Search customer..." value={q} onChange={e=>setQ(e.target.value)}/></div>
+        {list.length===0?<div className="card empty"><p>Koi order nahi</p><button className="btn btn-p btn-sm" onClick={()=>{setForm({order_date:new Date().toISOString().split("T")[0]});setOrderItems([]);setModal("aorder");}}>+ New Order</button></div>
+          :<div className="card" style={{padding:0}}><div className="tw"><table>
+            <thead><tr><th>Customer</th><th>Date</th><th>Items</th><th>Total</th><th>Status</th><th>Update</th><th>View</th></tr></thead>
+            <tbody>{list.map(o=>(
+              <tr key={o.id}>
+                <td><div style={{fontWeight:700,fontSize:12.5}}>{o.company}</div><div style={{fontSize:10.5,color:"var(--mut)"}}>{o.customer_name}</div></td>
+                <td style={{fontSize:11.5}}>{fd(o.order_date)}</td>
+                <td style={{fontSize:11,color:"var(--mut)"}}>{o.created_by}</td>
+                <td style={{fontSize:13,fontWeight:800,color:"#10b981"}}>{fr(o.total_amount)}</td>
+                <td><Bdg s={o.status}/></td>
+                <td><select className="inp" style={{padding:"3px 8px",fontSize:11,width:"auto"}} value={o.status} onChange={ev=>updOrderStatus(o.id,ev.target.value)}>
+                  {["draft","confirmed","dispatched","cancelled"].map(s=><option key={s} value={s}>{s}</option>)}
+                </select></td>
+                <td><button className="btn btn-p btn-sm" onClick={()=>openOrder(o)}><Printer size={11}/> View</button></td>
+              </tr>
+            ))}</tbody>
+          </table></div></div>}
+      </div>
+    );
+  };
+
   /* ── CUSTOMERS ── */
   const Customers = () => {
     const list = C.filter(c=>cTab==="all"||c.type===cTab).filter(c=>!q||[c.name,c.company,c.city].some(v=>v?.toLowerCase().includes(q.toLowerCase())));
@@ -232,7 +456,7 @@ export default function CRM() {
         <div className="tabs">{[["all","All"],["crm","CRM"],["nbd","NBD"]].map(([id,l])=><div key={id} className={`tab ${cTab===id?"a":""}`} onClick={()=>setCTab(id)}>{l}</div>)}</div>
         <div className="sr"><Search size={13} className="sr-ic"/><input className="inp" placeholder="Search..." value={q} onChange={e=>setQ(e.target.value)}/></div>
         {list.length===0
-          ?<div className="card empty"><p>Koi customer nahi</p><button className="btn btn-p btn-sm" onClick={()=>setModal("acust")}>+ Add</button></div>
+          ?<div className="card empty"><p>Koi customer nahi</p></div>
           :<div className="card" style={{padding:0}}><div className="tw"><table>
             <thead><tr><th>Customer</th><th>Type</th><th>Segment</th><th>Assigned</th><th>Last Interaction</th><th>Last Word</th><th>Follow-up</th><th>Status</th><th></th></tr></thead>
             <tbody>{list.map(c=>{
@@ -433,7 +657,7 @@ export default function CRM() {
               <div style={{fontSize:10,fontWeight:800,color:"var(--mut)",textTransform:"uppercase",letterSpacing:".08em"}}>📁 Interactions ({ilist.length})</div>
               <button className="btn btn-o btn-sm" onClick={()=>{setForm({customer_id:c.id});setModal("ainter-d");}}>+ Add</button>
             </div>
-            <div style={{maxHeight:220,overflowY:"auto",paddingRight:4}}>
+            <div style={{maxHeight:200,overflowY:"auto",paddingRight:4}}>
               {ilist.length===0?<div className="empty"><p>Koi interaction nahi</p></div>
                 :ilist.map((i,idx)=>(
                   <div key={i.id} className="tl-item">
@@ -458,28 +682,202 @@ export default function CRM() {
     );
   };
 
-  /* ── MODALS ── */
-  const InterForm = ({onSave}) => (
-    <>
-      <div className="fr"><label className="lbl">Type</label><select className="inp" value={form.type||"call"} onChange={e=>sf("type",e.target.value)}>{["call","visit","whatsapp","email","meeting"].map(t=><option key={t} value={t}>{TI[t]} {t}</option>)}</select></div>
-      <div className="fr"><label className="lbl">Note *</label><textarea className="inp" placeholder="Client ne kya kaha..." value={form.note||""} onChange={e=>sf("note",e.target.value)}/></div>
-      <div className="fr fr2">
-        <div><label className="lbl">Follow-up Date</label><input type="date" className="inp" value={form.next_follow_up||""} onChange={e=>sf("next_follow_up",e.target.value)}/></div>
-        <div><label className="lbl">Done By</label><input className="inp" value={form.done_by||""} onChange={e=>sf("done_by",e.target.value)}/></div>
-      </div>
-      <div className="fr"><label className="lbl">Follow-up Note</label><input className="inp" value={form.follow_up_note||""} onChange={e=>sf("follow_up_note",e.target.value)}/></div>
-      <button className="btn btn-p" style={{width:"100%",justifyContent:"center",marginTop:6}} disabled={saving} onClick={onSave}>{saving?<Spin/>:"Save"}</button>
-    </>
-  );
+  /* ── ORDER CREATE MODAL ── */
+  const OrderModal = () => {
+    const [prodQ,setProdQ] = useState("");
+    const filtProd = PRODS.filter(p=>!prodQ||[p.name,p.sku_code,p.category].some(v=>v?.toLowerCase().includes(prodQ.toLowerCase())));
+    return (
+      <div className="ov" onClick={closeM}>
+        <div className="mod" style={{width:860,maxWidth:"96vw"}} onClick={e=>e.stopPropagation()}>
+          <div className="mod-ttl">New Order / Proforma <button className="btn btn-o btn-sm" onClick={closeM}><X size={13}/></button></div>
+          <div className="fr fr2" style={{marginBottom:16}}>
+            <div><label className="lbl">Customer *</label>
+              <select className="inp" value={form.customer_id||""} onChange={e=>sf("customer_id",e.target.value)}>
+                <option value="">-- Select Customer --</option>
+                {C.map(c=><option key={c.id} value={c.id}>{c.name} / {c.company}</option>)}
+              </select>
+            </div>
+            <div><label className="lbl">Order Date</label>
+              <input type="date" className="inp" value={form.order_date||""} onChange={e=>sf("order_date",e.target.value)}/>
+            </div>
+          </div>
 
+          <div className="g2" style={{gap:14}}>
+            {/* LEFT: product picker */}
+            <div>
+              <label className="lbl">Products Add Karo</label>
+              <input className="inp" placeholder="SKU ya product search karo..." value={prodQ} onChange={e=>setProdQ(e.target.value)} style={{marginBottom:8}}/>
+              <div style={{maxHeight:260,overflowY:"auto",border:"1px solid var(--bdr)",borderRadius:8}}>
+                {filtProd.map(p=>(
+                  <div key={p.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 10px",borderBottom:"1px solid var(--bdr)",fontSize:11.5}}>
+                    <div>
+                      <div style={{fontWeight:600}}>{p.name}</div>
+                      <div style={{fontSize:10,color:"var(--mut)"}}>{p.sku_code} · ₹{p.ctn_price}/ctn</div>
+                    </div>
+                    <button className="btn btn-g btn-sm" onClick={()=>addOrderItem(p)}>+ Add</button>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* RIGHT: order items */}
+            <div>
+              <label className="lbl">Order Items ({orderItems.length})</label>
+              {orderItems.length===0
+                ?<div className="empty" style={{padding:20,border:"1px solid var(--bdr)",borderRadius:8}}><p>Koi item nahi</p></div>
+                :<div style={{border:"1px solid var(--bdr)",borderRadius:8,overflow:"hidden"}}>
+                  {orderItems.map(item=>(
+                    <div key={item.product_id} style={{padding:"8px 10px",borderBottom:"1px solid var(--bdr)",fontSize:11.5}}>
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}>
+                        <div style={{fontWeight:600,fontSize:12}}>{item.product_name}</div>
+                        <button style={{background:"none",border:"none",color:"var(--err)",cursor:"pointer"}} onClick={()=>removeOrderItem(item.product_id)}><Trash2 size={12}/></button>
+                      </div>
+                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6}}>
+                        <div><div style={{fontSize:9,color:"var(--mut)",marginBottom:2}}>CASES</div>
+                          <input type="number" className="inp" style={{padding:"4px 8px",fontSize:12}} value={item.qty_cases} onChange={e=>updOrderItem(item.product_id,"qty_cases",Number(e.target.value))}/>
+                        </div>
+                        <div><div style={{fontSize:9,color:"var(--mut)",marginBottom:2}}>CTN PRICE (₹)</div>
+                          <input type="number" className="inp" style={{padding:"4px 8px",fontSize:12}} value={item.ctn_price} onChange={e=>updOrderItem(item.product_id,"ctn_price",Number(e.target.value))}/>
+                        </div>
+                        <div><div style={{fontSize:9,color:"var(--mut)",marginBottom:2}}>AMOUNT</div>
+                          <div style={{fontSize:13,fontWeight:800,color:"#10b981",paddingTop:6}}>₹{Number(item.amount||0).toLocaleString("en-IN")}</div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  {/* Totals */}
+                  <div style={{padding:"10px 12px",background:"var(--card2)"}}>
+                    <div style={{display:"flex",justifyContent:"space-between",fontSize:12,marginBottom:4}}><span style={{color:"var(--mut)"}}>Subtotal</span><span style={{fontWeight:600}}>₹{orderTotal.toLocaleString("en-IN")}</span></div>
+                    <div style={{display:"flex",justifyContent:"space-between",fontSize:12,marginBottom:4}}><span style={{color:"var(--mut)"}}>EPR @1%</span><span style={{fontWeight:600}}>₹{eprAmount.toLocaleString("en-IN")}</span></div>
+                    <div style={{display:"flex",justifyContent:"space-between",fontSize:14,borderTop:"1px solid var(--bdr)",paddingTop:6}}><span style={{fontWeight:700}}>Total</span><span style={{fontWeight:800,color:"#10b981"}}>₹{(orderTotal+eprAmount).toLocaleString("en-IN")}</span></div>
+                  </div>
+                </div>}
+            </div>
+          </div>
+
+          <div className="fr" style={{marginTop:12}}>
+            <label className="lbl">Notes</label>
+            <input className="inp" placeholder="Payment terms, delivery notes..." value={form.notes||""} onChange={e=>sf("notes",e.target.value)}/>
+          </div>
+
+          <button className="btn btn-p" style={{width:"100%",justifyContent:"center",marginTop:8,fontSize:13}} disabled={saving} onClick={saveOrder}>
+            {saving?<Spin/>:"💾 Save & View Proforma"}
+          </button>
+        </div>
+      </div>
+    );
+  };
+
+  /* ── PROFORMA VIEW ── */
+  const ProformaModal = () => {
+    if(!selOrder) return null;
+    const subtotal = selOrder.items?.reduce((s,i)=>s+(Number(i.amount)||0),0)||0;
+    const epr = Math.round(subtotal*0.01);
+    return (
+      <div className="ov" onClick={closeM}>
+        <div className="mod mod-lg" onClick={e=>e.stopPropagation()}>
+          <div className="mod-ttl">
+            <span>📄 Proforma Invoice</span>
+            <div style={{display:"flex",gap:8}}>
+              <button className="btn btn-p btn-sm" onClick={printProforma}><Printer size={12}/> Print</button>
+              <button className="btn btn-o btn-sm" onClick={closeM}><X size={13}/></button>
+            </div>
+          </div>
+
+          {/* Header */}
+          <div style={{textAlign:"center",marginBottom:18,paddingBottom:14,borderBottom:"1px solid var(--bdr)"}}>
+            <div style={{fontFamily:"'Sora',sans-serif",fontSize:18,fontWeight:700,color:"var(--acc)"}}>Shreeja Packaging Industries Pvt. Ltd.</div>
+            <div style={{fontSize:11,color:"var(--mut)",marginTop:4}}>Mayur Food Packaging Products | Delhi</div>
+          </div>
+
+          {/* Party + Date */}
+          <div style={{display:"flex",justifyContent:"space-between",marginBottom:16}}>
+            <div className="card2" style={{flex:1,marginRight:12}}>
+              <div style={{fontSize:9.5,color:"var(--mut)",marginBottom:4}}>BILL TO</div>
+              <div style={{fontSize:14,fontWeight:700}}>{selOrder.company}</div>
+              <div style={{fontSize:12,color:"var(--mut)"}}>{selOrder.customer_name}</div>
+            </div>
+            <div className="card2" style={{minWidth:160}}>
+              <div style={{fontSize:9.5,color:"var(--mut)",marginBottom:4}}>ORDER DATE</div>
+              <div style={{fontSize:14,fontWeight:700}}>{fd(selOrder.order_date)}</div>
+              <Bdg s={selOrder.status}/>
+            </div>
+          </div>
+
+          {/* Items Table */}
+          <div className="tw" style={{marginBottom:14}}>
+            <table>
+              <thead><tr><th>#</th><th>SKU</th><th>Product</th><th>Packing</th><th>Cases</th><th>Price/Pcs</th><th>CTN Price</th><th>Amount</th></tr></thead>
+              <tbody>
+                {(selOrder.items||[]).map((item,idx)=>(
+                  <tr key={idx}>
+                    <td style={{fontSize:11}}>{idx+1}</td>
+                    <td><span style={{fontSize:9.5,background:"rgba(245,158,11,.1)",color:"var(--acc)",padding:"2px 6px",borderRadius:4,fontWeight:700}}>{item.sku_code}</span></td>
+                    <td style={{fontWeight:600,fontSize:12}}>{item.product_name}</td>
+                    <td style={{textAlign:"center",fontSize:11}}>{item.packing}</td>
+                    <td style={{textAlign:"center",fontWeight:700}}>{item.qty_cases}</td>
+                    <td style={{fontSize:11}}>₹{item.price_per_pcs}</td>
+                    <td style={{fontSize:11}}>₹{item.ctn_price}</td>
+                    <td style={{fontWeight:800,color:"#10b981"}}>₹{Number(item.amount||0).toLocaleString("en-IN")}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Totals */}
+          <div style={{display:"flex",justifyContent:"flex-end"}}>
+            <div style={{width:240}}>
+              <div style={{display:"flex",justifyContent:"space-between",padding:"5px 0",fontSize:12,borderBottom:"1px solid var(--bdr)"}}><span style={{color:"var(--mut)"}}>Subtotal</span><span style={{fontWeight:600}}>₹{subtotal.toLocaleString("en-IN")}</span></div>
+              <div style={{display:"flex",justifyContent:"space-between",padding:"5px 0",fontSize:12,borderBottom:"1px solid var(--bdr)"}}><span style={{color:"var(--mut)"}}>EPR @1%</span><span style={{fontWeight:600}}>₹{epr.toLocaleString("en-IN")}</span></div>
+              <div style={{display:"flex",justifyContent:"space-between",padding:"8px 0",fontSize:15}}><span style={{fontWeight:700}}>Total</span><span style={{fontWeight:800,color:"#10b981",fontFamily:"'Sora',sans-serif"}}>₹{(subtotal+epr).toLocaleString("en-IN")}</span></div>
+            </div>
+          </div>
+
+          {selOrder.notes&&<div style={{marginTop:10,padding:"8px 12px",background:"var(--card2)",borderRadius:8,fontSize:12}}><span style={{color:"var(--mut)"}}>Notes: </span>{selOrder.notes}</div>}
+        </div>
+      </div>
+    );
+  };
+
+  /* ── ALL MODALS ── */
   const renderModal = () => {
     if(!modal) return null;
-    if(modal==="detail") return <Detail/>;
+    if(modal==="detail")   return <Detail/>;
+    if(modal==="aorder")   return <OrderModal/>;
+    if(modal==="proforma") return <ProformaModal/>;
+
     if(modal==="ainter-d") return (
       <div className="ov" onClick={()=>setModal("detail")}>
         <div className="mod mod-sm" onClick={e=>e.stopPropagation()}>
           <div className="mod-ttl">Add Interaction <button className="btn btn-o btn-sm" onClick={()=>setModal("detail")}><X size={13}/></button></div>
-          <InterForm onSave={()=>saveInter(true)}/>
+          <div className="fr"><label className="lbl">Type</label><select className="inp" value={form.type||"call"} onChange={e=>sf("type",e.target.value)}>{["call","visit","whatsapp","email","meeting"].map(t=><option key={t} value={t}>{TI[t]} {t}</option>)}</select></div>
+          <div className="fr"><label className="lbl">Note *</label><textarea className="inp" value={form.note||""} onChange={e=>sf("note",e.target.value)}/></div>
+          <div className="fr fr2">
+            <div><label className="lbl">Follow-up Date</label><input type="date" className="inp" value={form.next_follow_up||""} onChange={e=>sf("next_follow_up",e.target.value)}/></div>
+            <div><label className="lbl">Done By</label><input className="inp" value={form.done_by||""} onChange={e=>sf("done_by",e.target.value)}/></div>
+          </div>
+          <div className="fr"><label className="lbl">Follow-up Note</label><input className="inp" value={form.follow_up_note||""} onChange={e=>sf("follow_up_note",e.target.value)}/></div>
+          <button className="btn btn-p" style={{width:"100%",justifyContent:"center",marginTop:6}} disabled={saving} onClick={()=>saveInter(true)}>{saving?<Spin/>:"Save"}</button>
+        </div>
+      </div>
+    );
+
+    if(modal==="aprod") return (
+      <div className="ov" onClick={closeM}>
+        <div className="mod mod-sm" onClick={e=>e.stopPropagation()}>
+          <div className="mod-ttl">{editProd?"Edit SKU":"Add SKU"} <button className="btn btn-o btn-sm" onClick={closeM}><X size={13}/></button></div>
+          <div className="fr fr2">
+            <div><label className="lbl">SKU Code</label><input className="inp" value={form.sku_code||""} onChange={e=>sf("sku_code",e.target.value)}/></div>
+            <div><label className="lbl">Category *</label><input className="inp" placeholder="Round Container..." value={form.category||""} onChange={e=>sf("category",e.target.value)}/></div>
+          </div>
+          <div className="fr"><label className="lbl">Product Name *</label><input className="inp" value={form.name||""} onChange={e=>sf("name",e.target.value)}/></div>
+          <div className="fr fr3">
+            <div><label className="lbl">Packing</label><input type="number" className="inp" value={form.packing||""} onChange={e=>sf("packing",Number(e.target.value))}/></div>
+            <div><label className="lbl">Price/Pcs (₹)</label><input type="number" className="inp" value={form.price_per_pcs||""} onChange={e=>sf("price_per_pcs",Number(e.target.value))}/></div>
+            <div><label className="lbl">CTN Price (₹)</label><input type="number" className="inp" value={form.ctn_price||""} onChange={e=>sf("ctn_price",Number(e.target.value))}/></div>
+          </div>
+          <button className="btn btn-p" style={{width:"100%",justifyContent:"center",marginTop:6}} disabled={saving} onClick={saveProd}>{saving?<Spin/>:"Save"}</button>
         </div>
       </div>
     );
@@ -506,7 +904,14 @@ export default function CRM() {
       </>},
       ainter:{t:"Log Interaction",fn:()=>saveInter(false),f:<>
         <div className="fr"><label className="lbl">Customer *</label><select className="inp" value={form.customer_id||""} onChange={e=>sf("customer_id",e.target.value)}><option value="">-- Select --</option>{C.map(c=><option key={c.id} value={c.id}>{c.name} / {c.company}</option>)}</select></div>
-        <InterForm onSave={()=>saveInter(false)}/>
+        <div className="fr"><label className="lbl">Type</label><select className="inp" value={form.type||"call"} onChange={e=>sf("type",e.target.value)}>{["call","visit","whatsapp","email","meeting"].map(t=><option key={t} value={t}>{TI[t]} {t}</option>)}</select></div>
+        <div className="fr"><label className="lbl">Note *</label><textarea className="inp" value={form.note||""} onChange={e=>sf("note",e.target.value)}/></div>
+        <div className="fr fr3">
+          <div><label className="lbl">Follow-up Date</label><input type="date" className="inp" value={form.next_follow_up||""} onChange={e=>sf("next_follow_up",e.target.value)}/></div>
+          <div><label className="lbl">Follow-up Note</label><input className="inp" value={form.follow_up_note||""} onChange={e=>sf("follow_up_note",e.target.value)}/></div>
+          <div><label className="lbl">Done By</label><input className="inp" value={form.done_by||""} onChange={e=>sf("done_by",e.target.value)}/></div>
+        </div>
+        <button className="btn btn-p" style={{width:"100%",justifyContent:"center",marginTop:6}} disabled={saving} onClick={()=>saveInter(false)}>{saving?<Spin/>:"Save"}</button>
       </>},
       asamp:{t:"Add Sample",fn:saveSamp,f:<>
         <div className="fr"><label className="lbl">Customer *</label><select className="inp" value={form.customer_id||""} onChange={e=>sf("customer_id",e.target.value)}><option value="">-- Select --</option>{C.map(c=><option key={c.id} value={c.id}>{c.name} / {c.company}</option>)}</select></div>
@@ -544,6 +949,7 @@ export default function CRM() {
     );
   };
 
+  /* ── NAV ── */
   const navs = [
     {id:"dashboard",lbl:"Dashboard",ic:"🏠"},
     {id:"customers",lbl:"Customers",ic:"👥"},
@@ -551,6 +957,8 @@ export default function CRM() {
     {id:"followups",lbl:"Follow-ups",ic:"⚡",badge:urgN>0?urgN:null},
     {id:"samples",lbl:"Samples",ic:"🧪",badge:S.filter(s=>s.status==="pending").length||null,bc:"info"},
     {id:"payments",lbl:"Payments",ic:"💳",badge:P.filter(p=>p.overdue>0).length||null},
+    {id:"products",lbl:"Products",ic:"📦"},
+    {id:"orders",lbl:"Orders",ic:"🧾",badge:ORDERS.filter(o=>o.status==="draft").length||null,bc:"info"},
   ];
 
   return (
@@ -567,12 +975,17 @@ export default function CRM() {
         </div>
         <div style={{padding:"10px 6px",borderTop:"1px solid var(--bdr)"}}>
           <div className="ni" onClick={load}><span style={{fontSize:14}}>🔄</span><span>Refresh</span></div>
+          <div className="ni" onClick={onLogout}><span style={{fontSize:14}}>🚪</span><span>Logout</span></div>
         </div>
       </div>
       <div className="mn">
         <div className="tb">
-          <div style={{flex:1}}><div className="tb-title">{navs.find(n=>n.id===view)?.lbl||"Dashboard"}</div><div className="tb-sub">Mayur Food Packaging Products</div></div>
+          <div style={{flex:1}}>
+            <div className="tb-title">{navs.find(n=>n.id===view)?.lbl||"Dashboard"}</div>
+            <div className="tb-sub">👤 {currentUser?.name} · Mayur Food Packaging</div>
+          </div>
           {urgN>0&&<div style={{display:"flex",alignItems:"center",gap:5,padding:"5px 12px",background:"rgba(239,68,68,.1)",border:"1px solid rgba(239,68,68,.2)",borderRadius:8,cursor:"pointer"}} onClick={()=>setView("followups")}><span style={{fontSize:11}}>⚡</span><span style={{fontSize:11.5,color:"#ef4444",fontWeight:800}}>{urgN} Urgent</span></div>}
+          <button className="btn btn-o btn-sm" onClick={()=>{setForm({order_date:new Date().toISOString().split("T")[0]});setOrderItems([]);setModal("aorder");}}>🧾 New Order</button>
           <button className="btn btn-p btn-sm" onClick={()=>{setForm({});setModal("ainter");}}><Plus size={13}/> Log Interaction</button>
         </div>
         <div className="content">
@@ -582,6 +995,8 @@ export default function CRM() {
           {view==="followups"&&<Followups/>}
           {view==="samples"&&<Samples/>}
           {view==="payments"&&<Payments/>}
+          {view==="products"&&<Products/>}
+          {view==="orders"&&<Orders/>}
         </div>
       </div>
       {renderModal()}
