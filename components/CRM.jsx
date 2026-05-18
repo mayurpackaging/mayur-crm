@@ -1,7 +1,7 @@
 "use client";
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { Plus, Search, X, Eye, CheckCircle, Loader, Printer, Trash2, Edit } from "lucide-react";
-import { sbGet, sbGetPay, sbGetProducts, sbGetOrders, sbGetOrderItems, sbInsert, sbPatch, sbDelete } from "../lib/supabase";
+import { sbFetch, sbGet, sbGetPay, sbGetProducts, sbGetOrders, sbGetOrderItems, sbInsert, sbPatch, sbDelete } from "../lib/supabase";
 
 /* ─── HELPERS ─────────────────────────────────────── */
 const fd  = s => s ? new Date(s).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"}) : "—";
