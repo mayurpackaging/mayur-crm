@@ -235,13 +235,26 @@ export default function CRM({ currentUser, onLogout }) {
     } catch(e){ toast$(e.message,true); }
   };
 
+  const advanceOrder = async(order, nextStatus) => {
+    const now = new Date().toISOString();
+    const patch = { status: nextStatus };
+    if(nextStatus==="confirmed")  { patch.confirmed_at  = now; patch.confirmed_by  = currentUser?.name||""; }
+    if(nextStatus==="dispatched") { patch.dispatched_at = now; patch.dispatched_by = currentUser?.name||""; }
+    if(nextStatus==="delivered")  { patch.delivered_at  = now; patch.delivered_by  = currentUser?.name||""; }
+    try {
+      await sbPatch("crm_orders", order.id, patch);
+      setORDERS(p=>p.map(x=>x.id===order.id?{...x,...patch}:x));
+      const msgs = {confirmed:"✅ Order Confirmed!",dispatched:"🚚 Dispatched!",delivered:"🎉 Delivered!"};
+      toast$(msgs[nextStatus]||"Updated ✓");
+    } catch(e){ toast$(e.message,true); }
+  };
+
   const updOrderStatus = async(id,st) => {
     try {
       const patch = {status:st};
-      if(st==="delivered") patch.delivered_at = new Date().toISOString();
       await sbPatch("crm_orders",id,patch);
       setORDERS(p=>p.map(x=>x.id===id?{...x,...patch}:x));
-      toast$(st==="delivered"?"✅ Delivered!":"Status updated ✓");
+      toast$("Status updated ✓");
     }
     catch(e){ toast$(e.message,true); }
   };
@@ -427,37 +440,81 @@ export default function CRM({ currentUser, onLogout }) {
   /* ── ORDERS / PROFORMA ── */
   const Orders = () => {
     const list = ORDERS.filter(o=>!q||[o.customer_name,o.company].some(v=>v?.toLowerCase().includes(q.toLowerCase())));
+    const ts = (dt) => dt ? new Date(dt).toLocaleString("en-IN",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"}) : null;
+
+    const PipelineStep = ({done, label, by, at, col}) => (
+      <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2,minWidth:70}}>
+        <div style={{width:22,height:22,borderRadius:"50%",background:done?col:"var(--bdr)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,color:done?"#fff":"var(--mut)",fontWeight:700,flexShrink:0}}>
+          {done?"✓":""}
+        </div>
+        <div style={{fontSize:9,fontWeight:700,color:done?col:"var(--mut)",textTransform:"uppercase",letterSpacing:".05em"}}>{label}</div>
+        {done && by && <div style={{fontSize:8.5,color:"var(--mut)",textAlign:"center"}}>{by}</div>}
+        {done && at && <div style={{fontSize:8,color:"var(--mut)",textAlign:"center"}}>{ts(at)}</div>}
+      </div>
+    );
+
+    const nextStep = (status) => {
+      if(status==="draft") return {label:"Confirm",next:"confirmed",col:"#10b981"};
+      if(status==="confirmed") return {label:"Dispatch",next:"dispatched",col:"#f59e0b"};
+      if(status==="dispatched") return {label:"Delivered",next:"delivered",col:"#3b82f6"};
+      return null;
+    };
+
     return (
       <div>
         <div className="sh">
-          <div><div className="sh-t">Orders & Proforma</div><div className="sh-s">{ORDERS.length} total orders</div></div>
+          <div><div className="sh-t">Orders & Proforma</div><div className="sh-s">{ORDERS.length} total</div></div>
           <button className="btn btn-p" onClick={()=>{setForm({order_date:new Date().toISOString().split("T")[0]});setOrderItems([]);setModal("aorder");}}><Plus size={13}/> New Order</button>
         </div>
         <div className="sr"><Search size={13} className="sr-ic"/><input className="inp" placeholder="Search customer..." value={q} onChange={e=>setQ(e.target.value)}/></div>
-        {list.length===0?<div className="card empty"><p>Koi order nahi</p><button className="btn btn-p btn-sm" onClick={()=>{setForm({order_date:new Date().toISOString().split("T")[0]});setOrderItems([]);setModal("aorder");}}>+ New Order</button></div>
-          :<div className="card" style={{padding:0}}><div className="tw"><table>
-            <thead><tr><th>Customer</th><th>Date</th><th>Items</th><th>Total</th><th>Status</th><th>Update</th><th>View</th></tr></thead>
-            <tbody>{list.map(o=>(
-              <tr key={o.id}>
-                <td><div style={{fontWeight:700,fontSize:12.5}}>{o.company}</div><div style={{fontSize:10.5,color:"var(--mut)"}}>{o.customer_name}</div></td>
-                <td style={{fontSize:11.5}}>{fd(o.order_date)}</td>
-                <td style={{fontSize:11,color:"var(--mut)"}}>{o.created_by}</td>
-                <td style={{fontSize:13,fontWeight:800,color:"#10b981"}}>{fr(o.total_amount)}</td>
-                <td>
-                  <Bdg s={o.status}/>
-                  {o.status==="delivered"&&o.delivered_at&&(
-                    <div style={{fontSize:9,color:"var(--ok)",marginTop:2}}>
-                      ✅ {new Date(o.delivered_at).toLocaleString("en-IN",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"})}
+        {list.length===0
+          ?<div className="card empty"><p>Koi order nahi</p></div>
+          :<div style={{display:"flex",flexDirection:"column",gap:10}}>
+            {list.map(o=>{
+              const ns = nextStep(o.status);
+              return (
+                <div key={o.id} className="card" style={{padding:"14px 16px",borderLeft:`3px solid ${o.status==="delivered"?"#10b981":o.status==="dispatched"?"#f59e0b":o.status==="confirmed"?"#a78bfa":"var(--bdr)"}`}}>
+                  {/* Header */}
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:12}}>
+                    <div>
+                      <div style={{fontWeight:700,fontSize:13.5}}>{o.company}</div>
+                      <div style={{fontSize:10.5,color:"var(--mut)",marginTop:2}}>{fd(o.order_date)} · {o.created_by} · {o.payment_mode?.replace("_"," ")}</div>
                     </div>
-                  )}
-                </td>
-                <td><select className="inp" style={{padding:"3px 8px",fontSize:11,width:"auto"}} value={o.status} onChange={ev=>updOrderStatus(o.id,ev.target.value)}>
-                  {["draft","confirmed","dispatched","delivered","cancelled"].map(s=><option key={s} value={s}>{s}</option>)}
-                </select></td>
-                <td><button className="btn btn-p btn-sm" onClick={()=>openOrder(o)}><Printer size={11}/> View</button></td>
-              </tr>
-            ))}</tbody>
-          </table></div></div>}
+                    <div style={{display:"flex",gap:6,alignItems:"center"}}>
+                      <div style={{fontSize:15,fontWeight:800,color:"#10b981"}}>{fr(o.total_amount)}</div>
+                      <button className="btn btn-o btn-sm" onClick={()=>{setForm({...o});setOrderItems([]);setModal("editorder");}}>✏️</button>
+                      <button className="btn btn-o btn-sm" onClick={()=>openOrder(o)}><Printer size={11}/></button>
+                    </div>
+                  </div>
+
+                  {/* Pipeline */}
+                  <div style={{display:"flex",alignItems:"flex-start",gap:0,marginBottom:12}}>
+                    <PipelineStep done={["draft","confirmed","dispatched","delivered"].includes(o.status)} label="Draft" by={o.created_by} at={o.created_at} col="#60a5fa"/>
+                    <div style={{flex:1,height:2,background:"var(--bdr)",marginTop:10,alignSelf:"flex-start"}}/>
+                    <PipelineStep done={["confirmed","dispatched","delivered"].includes(o.status)} label="Confirmed" by={o.confirmed_by} at={o.confirmed_at} col="#a78bfa"/>
+                    <div style={{flex:1,height:2,background:"var(--bdr)",marginTop:10,alignSelf:"flex-start"}}/>
+                    <PipelineStep done={["dispatched","delivered"].includes(o.status)} label="Dispatched" by={o.dispatched_by} at={o.dispatched_at} col="#f59e0b"/>
+                    <div style={{flex:1,height:2,background:"var(--bdr)",marginTop:10,alignSelf:"flex-start"}}/>
+                    <PipelineStep done={o.status==="delivered"} label="Delivered" by={o.delivered_by} at={o.delivered_at} col="#10b981"/>
+                  </div>
+
+                  {/* Next action button */}
+                  <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                    {ns && o.status!=="cancelled" && (
+                      <button className="btn btn-sm" style={{background:`${ns.col}20`,border:`1px solid ${ns.col}40`,color:ns.col,fontWeight:700}} onClick={()=>advanceOrder(o,ns.next)}>
+                        → {ns.label}
+                      </button>
+                    )}
+                    {o.status==="delivered" && <span style={{fontSize:11,color:"var(--ok)",fontWeight:700}}>🎉 Order Complete</span>}
+                    {o.status!=="cancelled"&&o.status!=="delivered" && (
+                      <button className="btn btn-sm" style={{background:"rgba(239,68,68,.08)",border:"1px solid rgba(239,68,68,.2)",color:"var(--err)",fontSize:10}} onClick={()=>updOrderStatus(o.id,"cancelled")}>✕ Cancel</button>
+                    )}
+                    {o.notes && <span style={{fontSize:10.5,color:"var(--mut)",marginLeft:"auto"}}>📝 {o.notes}</span>}
+                  </div>
+                </div>
+              );
+            })}
+          </div>}
       </div>
     );
   };
@@ -969,6 +1026,44 @@ export default function CRM({ currentUser, onLogout }) {
             <div><label className="lbl">CTN Price (₹)</label><input type="number" className="inp" value={form.ctn_price||""} onChange={e=>sf("ctn_price",Number(e.target.value))}/></div>
           </div>
           <button className="btn btn-p" style={{width:"100%",justifyContent:"center",marginTop:6}} disabled={saving} onClick={saveProd}>{saving?<Spin/>:"Save"}</button>
+        </div>
+      </div>
+    );
+
+    if(modal==="editorder") return (
+      <div className="ov" onClick={closeM}>
+        <div className="mod mod-sm" onClick={e=>e.stopPropagation()}>
+          <div className="mod-ttl">Edit Order <button className="btn btn-o btn-sm" onClick={closeM}><X size={13}/></button></div>
+          <div className="fr"><label className="lbl">Customer</label><input className="inp" value={form.company||""} disabled style={{opacity:.6}}/></div>
+          <div className="fr fr2">
+            <div><label className="lbl">Order Date</label><input type="date" className="inp" value={form.order_date||""} onChange={e=>sf("order_date",e.target.value)}/></div>
+            <div><label className="lbl">Payment Mode</label>
+              <select className="inp" value={form.payment_mode||"cash"} onChange={e=>sf("payment_mode",e.target.value)}>
+                <option value="cash">💵 Cash</option>
+                <option value="credit">🏦 Credit</option>
+                <option value="bank_transfer">↗ Bank Transfer</option>
+                <option value="cheque">📝 Cheque</option>
+              </select>
+            </div>
+          </div>
+          <div className="fr fr2">
+            <div><label className="lbl">Total Amount (₹)</label><input type="number" className="inp" value={form.total_amount||""} onChange={e=>sf("total_amount",Number(e.target.value))}/></div>
+            <div><label className="lbl">Status</label>
+              <select className="inp" value={form.status||"draft"} onChange={e=>sf("status",e.target.value)}>
+                {["draft","confirmed","dispatched","delivered","cancelled"].map(s=><option key={s} value={s}>{s}</option>)}
+              </select>
+            </div>
+          </div>
+          <div className="fr"><label className="lbl">Notes</label><textarea className="inp" defaultValue={form.notes||""} onBlur={e=>sf("notes",e.target.value)} style={{minHeight:50,resize:"none"}}/></div>
+          <button className="btn btn-p" style={{width:"100%",justifyContent:"center",marginTop:6}} disabled={saving} onClick={async()=>{
+            setSv(true);
+            try {
+              await sbPatch("crm_orders",form.id,{order_date:form.order_date,payment_mode:form.payment_mode,total_amount:form.total_amount,status:form.status,notes:form.notes});
+              setORDERS(p=>p.map(x=>x.id===form.id?{...x,...form}:x));
+              toast$("Order updated ✓"); closeM();
+            } catch(e){ toast$(e.message,true); }
+            setSv(false);
+          }}>{saving?<Spin/>:"Save"}</button>
         </div>
       </div>
     );
