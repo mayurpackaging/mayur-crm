@@ -23,6 +23,7 @@ const ST = {
   draft:{c:"#60a5fa",bg:"rgba(59,130,246,.12)"},
   confirmed:{c:"#10b981",bg:"rgba(16,185,129,.12)"},
   dispatched:{c:"#f59e0b",bg:"rgba(245,158,11,.12)"},
+  delivered:{c:"#10b981",bg:"rgba(16,185,129,.15)"},
   cancelled:{c:"#ef4444",bg:"rgba(239,68,68,.12)"},
 };
 const Bdg = ({s}) => { const c=ST[s]||{c:"#64748b",bg:"rgba(100,116,139,.1)"}; return <span className="bdg" style={{background:c.bg,color:c.c}}>{s}</span>; };
@@ -235,7 +236,13 @@ export default function CRM({ currentUser, onLogout }) {
   };
 
   const updOrderStatus = async(id,st) => {
-    try { await sbPatch("crm_orders",id,{status:st}); setORDERS(p=>p.map(x=>x.id===id?{...x,status:st}:x)); toast$("Status updated ✓"); }
+    try {
+      const patch = {status:st};
+      if(st==="delivered") patch.delivered_at = new Date().toISOString();
+      await sbPatch("crm_orders",id,patch);
+      setORDERS(p=>p.map(x=>x.id===id?{...x,...patch}:x));
+      toast$(st==="delivered"?"✅ Delivered!":"Status updated ✓");
+    }
     catch(e){ toast$(e.message,true); }
   };
 
@@ -436,9 +443,16 @@ export default function CRM({ currentUser, onLogout }) {
                 <td style={{fontSize:11.5}}>{fd(o.order_date)}</td>
                 <td style={{fontSize:11,color:"var(--mut)"}}>{o.created_by}</td>
                 <td style={{fontSize:13,fontWeight:800,color:"#10b981"}}>{fr(o.total_amount)}</td>
-                <td><Bdg s={o.status}/></td>
+                <td>
+                  <Bdg s={o.status}/>
+                  {o.status==="delivered"&&o.delivered_at&&(
+                    <div style={{fontSize:9,color:"var(--ok)",marginTop:2}}>
+                      ✅ {new Date(o.delivered_at).toLocaleString("en-IN",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"})}
+                    </div>
+                  )}
+                </td>
                 <td><select className="inp" style={{padding:"3px 8px",fontSize:11,width:"auto"}} value={o.status} onChange={ev=>updOrderStatus(o.id,ev.target.value)}>
-                  {["draft","confirmed","dispatched","cancelled"].map(s=><option key={s} value={s}>{s}</option>)}
+                  {["draft","confirmed","dispatched","delivered","cancelled"].map(s=><option key={s} value={s}>{s}</option>)}
                 </select></td>
                 <td><button className="btn btn-p btn-sm" onClick={()=>openOrder(o)}><Printer size={11}/> View</button></td>
               </tr>
@@ -869,6 +883,11 @@ export default function CRM({ currentUser, onLogout }) {
                 <Bdg s={selOrder.status}/>
                 {selOrder.payment_mode && <span style={{fontSize:9.5,fontWeight:700,padding:"2px 8px",borderRadius:12,background:"rgba(59,130,246,.1)",color:"#60a5fa",textTransform:"capitalize"}}>{selOrder.payment_mode?.replace("_"," ")}</span>}
               </div>
+              {selOrder.status==="delivered"&&selOrder.delivered_at&&(
+                <div style={{fontSize:10,color:"var(--ok)",marginTop:6,fontWeight:600}}>
+                  ✅ Delivered: {new Date(selOrder.delivered_at).toLocaleString("en-IN",{day:"2-digit",month:"short",year:"2-digit",hour:"2-digit",minute:"2-digit"})}
+                </div>
+              )}
             </div>
           </div>
 
