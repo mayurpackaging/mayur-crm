@@ -8,9 +8,9 @@
     "start": "next start"
   },
   "dependencies": {
-    "next": "15.3.3",
-    "react": "^19",
-    "react-dom": "^19",
+    "next": "latest",
+    "react": "latest",
+    "react-dom": "latest",
     "lucide-react": "^0.383.0"
   }
 }
