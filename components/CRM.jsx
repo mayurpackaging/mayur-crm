@@ -184,7 +184,7 @@ export default function CRM({ currentUser, onLogout }) {
       if(i.product_id!==pid) return i;
       const updated = {...i,[k]:v};
       const base = (Number(updated.qty_cases)||0) * (Number(updated.ctn_price)||0);
-      const disc = (base * (Number(updated.discount)||0)) / 100;
+      const disc = Number(updated.discount)||0;
       updated.amount = base - disc;
       return updated;
     }));
@@ -209,6 +209,7 @@ export default function CRM({ currentUser, onLogout }) {
         total_amount: orderTotal + eprAmount,
         payment_mode: form.payment_mode||"cash",
         epr_applied: !!form.epr,
+        gst_type: form.gst||"excluding",
         notes: form.notes||"",
         created_by: currentUser?.name||"",
       };
@@ -765,7 +766,7 @@ export default function CRM({ currentUser, onLogout }) {
                         <div><div style={{fontSize:9,color:"var(--mut)",marginBottom:2}}>CTN PRICE (₹)</div>
                           <NumInput style={{padding:"4px 8px",fontSize:12}} value={item.ctn_price} onChange={v=>updOrderItem(item.product_id,"ctn_price",v)}/>
                         </div>
-                        <div><div style={{fontSize:9,color:"var(--mut)",marginBottom:2}}>DISCOUNT %</div>
+                        <div><div style={{fontSize:9,color:"var(--mut)",marginBottom:2}}>DISCOUNT (₹)</div>
                           <NumInput style={{padding:"4px 8px",fontSize:12}} value={item.discount||0} onChange={v=>updOrderItem(item.product_id,"discount",v)}/>
                         </div>
                         <div><div style={{fontSize:9,color:"var(--mut)",marginBottom:2}}>AMOUNT</div>
@@ -777,12 +778,23 @@ export default function CRM({ currentUser, onLogout }) {
                   {/* Totals */}
                   <div style={{padding:"10px 12px",background:"var(--card2)"}}>
                     <div style={{display:"flex",justifyContent:"space-between",fontSize:12,marginBottom:4}}><span style={{color:"var(--mut)"}}>Subtotal</span><span style={{fontWeight:600}}>₹{orderTotal.toLocaleString("en-IN")}</span></div>
-                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",fontSize:12,marginBottom:4}}>
-                      <label style={{display:"flex",alignItems:"center",gap:6,cursor:"pointer",color:"var(--mut)"}}>
-                        <input type="checkbox" checked={!!form.epr} onChange={e=>sf("epr",e.target.checked)} style={{accentColor:"var(--acc)"}}/>
+                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",fontSize:12,marginBottom:6,gap:12}}>
+                      <label style={{display:"flex",alignItems:"center",gap:5,cursor:"pointer",color:"var(--mut)"}}>
+                        <input type="checkbox" checked={!!form.epr} onChange={e=>sf("epr",e.target.checked)} style={{accentColor:"var(--acc)",width:14,height:14}}/>
                         EPR @1%
                       </label>
-                      <span style={{fontWeight:600}}>₹{eprAmount.toLocaleString("en-IN")}</span>
+                      <span style={{fontWeight:600,color:form.epr?"var(--txt)":"var(--mut)"}}>₹{eprAmount.toLocaleString("en-IN")}</span>
+                    </div>
+                    <div style={{display:"flex",alignItems:"center",gap:8,fontSize:12,marginBottom:6}}>
+                      <span style={{color:"var(--mut)"}}>GST:</span>
+                      <label style={{display:"flex",alignItems:"center",gap:4,cursor:"pointer"}}>
+                        <input type="radio" name="gst" value="excluding" checked={form.gst!=="including"} onChange={()=>sf("gst","excluding")} style={{accentColor:"var(--acc)"}}/>
+                        <span style={{fontSize:11}}>Excluding</span>
+                      </label>
+                      <label style={{display:"flex",alignItems:"center",gap:4,cursor:"pointer"}}>
+                        <input type="radio" name="gst" value="including" checked={form.gst==="including"} onChange={()=>sf("gst","including")} style={{accentColor:"var(--acc)"}}/>
+                        <span style={{fontSize:11}}>Including</span>
+                      </label>
                     </div>
                     <div style={{display:"flex",justifyContent:"space-between",fontSize:14,borderTop:"1px solid var(--bdr)",paddingTop:6}}><span style={{fontWeight:700}}>Total</span><span style={{fontWeight:800,color:"#10b981"}}>₹{(orderTotal+eprAmount).toLocaleString("en-IN")}</span></div>
                   </div>
@@ -802,7 +814,7 @@ export default function CRM({ currentUser, onLogout }) {
             </div>
             <div>
               <label className="lbl">Notes</label>
-              <input className="inp" placeholder="Delivery notes..." value={form.notes||""} onChange={e=>sf("notes",e.target.value)}/>
+              <textarea className="inp" placeholder="Delivery notes..." defaultValue={form.notes||""} onBlur={e=>sf("notes",e.target.value)} style={{minHeight:38,resize:"none"}}/>
             </div>
           </div>
 
@@ -882,6 +894,7 @@ export default function CRM({ currentUser, onLogout }) {
               {selOrder.epr_applied && <div style={{display:"flex",justifyContent:"space-between",padding:"5px 0",fontSize:12,borderBottom:"1px solid var(--bdr)"}}><span style={{color:"var(--mut)"}}>EPR @1%</span><span style={{fontWeight:600}}>₹{epr.toLocaleString("en-IN")}</span></div>}
               <div style={{display:"flex",justifyContent:"space-between",padding:"8px 0",fontSize:15}}><span style={{fontWeight:700}}>Total</span><span style={{fontWeight:800,color:"#10b981",fontFamily:"'Sora',sans-serif"}}>₹{(subtotal+epr).toLocaleString("en-IN")}</span></div>
               {selOrder.payment_mode && <div style={{fontSize:11,color:"var(--mut)",marginTop:4}}>Payment: <span style={{color:"var(--txt)",fontWeight:600,textTransform:"capitalize"}}>{selOrder.payment_mode?.replace("_"," ")}</span></div>}
+              <div style={{fontSize:11,color:"var(--mut)",marginTop:2}}>GST: <span style={{color:"var(--txt)",fontWeight:600,textTransform:"capitalize"}}>{selOrder.gst_type||"Excluding"}</span></div>
             </div>
           </div>
 
