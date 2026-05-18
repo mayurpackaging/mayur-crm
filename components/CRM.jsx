@@ -489,13 +489,13 @@ export default function CRM({ currentUser, onLogout }) {
 
                   {/* Pipeline */}
                   <div style={{display:"flex",alignItems:"flex-start",gap:0,marginBottom:12}}>
-                    <PipelineStep done={["draft","confirmed","dispatched","delivered"].includes(o.status)} label="Draft" by={o.created_by} at={o.created_at} col="#60a5fa"/>
-                    <div style={{flex:1,height:2,background:"var(--bdr)",marginTop:10,alignSelf:"flex-start"}}/>
-                    <PipelineStep done={["confirmed","dispatched","delivered"].includes(o.status)} label="Confirmed" by={o.confirmed_by} at={o.confirmed_at} col="#a78bfa"/>
-                    <div style={{flex:1,height:2,background:"var(--bdr)",marginTop:10,alignSelf:"flex-start"}}/>
-                    <PipelineStep done={["dispatched","delivered"].includes(o.status)} label="Dispatched" by={o.dispatched_by} at={o.dispatched_at} col="#f59e0b"/>
-                    <div style={{flex:1,height:2,background:"var(--bdr)",marginTop:10,alignSelf:"flex-start"}}/>
-                    <PipelineStep done={o.status==="delivered"} label="Delivered" by={o.delivered_by} at={o.delivered_at} col="#10b981"/>
+                    <PipelineStep done={true} label="Draft" by={o.created_by} at={o.order_date} col="#60a5fa"/>
+                    <div style={{flex:1,height:2,background:["confirmed","dispatched","delivered"].includes(o.status)?"#a78bfa":"var(--bdr)",marginTop:10,alignSelf:"flex-start"}}/>
+                    <PipelineStep done={!!o.confirmed_at||["confirmed","dispatched","delivered"].includes(o.status)} label="Confirmed" by={o.confirmed_by||""} at={o.confirmed_at} col="#a78bfa"/>
+                    <div style={{flex:1,height:2,background:["dispatched","delivered"].includes(o.status)?"#f59e0b":"var(--bdr)",marginTop:10,alignSelf:"flex-start"}}/>
+                    <PipelineStep done={!!o.dispatched_at||["dispatched","delivered"].includes(o.status)} label="Dispatched" by={o.dispatched_by||""} at={o.dispatched_at} col="#f59e0b"/>
+                    <div style={{flex:1,height:2,background:o.status==="delivered"?"#10b981":"var(--bdr)",marginTop:10,alignSelf:"flex-start"}}/>
+                    <PipelineStep done={o.status==="delivered"} label="Delivered" by={o.delivered_by||""} at={o.delivered_at} col="#10b981"/>
                   </div>
 
                   {/* Next action button */}
@@ -509,7 +509,7 @@ export default function CRM({ currentUser, onLogout }) {
                     {o.status!=="cancelled"&&o.status!=="delivered" && (
                       <button className="btn btn-sm" style={{background:"rgba(239,68,68,.08)",border:"1px solid rgba(239,68,68,.2)",color:"var(--err)",fontSize:10}} onClick={()=>updOrderStatus(o.id,"cancelled")}>✕ Cancel</button>
                     )}
-                    {o.notes && <span style={{fontSize:10.5,color:"var(--mut)",marginLeft:"auto"}}>📝 {o.notes}</span>}
+                    {o.notes && <span style={{fontSize:10.5,color:"var(--mut)",marginLeft:"auto",maxWidth:200,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",display:"inline-block"}} title={o.notes}>📝 {o.notes.slice(0,40)}{o.notes.length>40?"...":""}</span>}
                   </div>
                 </div>
               );
