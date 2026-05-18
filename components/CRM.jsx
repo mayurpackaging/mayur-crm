@@ -687,6 +687,27 @@ export default function CRM({ currentUser, onLogout }) {
     );
   };
 
+  /* ── NUM INPUT — types freely, updates on blur ── */
+  const NumInput = ({ value, onChange, style }) => {
+    const [local, setLocal] = useState(String(value ?? ""));
+    useEffect(() => { setLocal(String(value ?? "")); }, [value]);
+    return (
+      <input
+        type="text"
+        inputMode="numeric"
+        className="inp"
+        style={style}
+        value={local}
+        onClick={e => e.target.select()}
+        onChange={e => setLocal(e.target.value)}
+        onBlur={() => {
+          const n = parseFloat(local.replace(/[^0-9.]/g, ""));
+          onChange(isNaN(n) ? 0 : n);
+        }}
+      />
+    );
+  };
+
   /* ── ORDER CREATE MODAL ── */
   const OrderModal = () => {
     const [prodQ,setProdQ] = useState("");
@@ -739,13 +760,13 @@ export default function CRM({ currentUser, onLogout }) {
                       </div>
                       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:6}}>
                         <div><div style={{fontSize:9,color:"var(--mut)",marginBottom:2}}>CASES</div>
-                          <input type="number" className="inp" style={{padding:"4px 8px",fontSize:12}} type="text" inputMode="numeric" value={item.qty_cases} onChange={e=>updOrderItem(item.product_id,"qty_cases",Number(e.target.value.replace(/[^0-9.]/g,"")))} onClick={e=>e.target.select()}/>
+                          <NumInput style={{padding:"4px 8px",fontSize:12}} value={item.qty_cases} onChange={v=>updOrderItem(item.product_id,"qty_cases",v)}/>
                         </div>
                         <div><div style={{fontSize:9,color:"var(--mut)",marginBottom:2}}>CTN PRICE (₹)</div>
-                          <input type="number" className="inp" style={{padding:"4px 8px",fontSize:12}} type="text" inputMode="numeric" value={item.ctn_price} onChange={e=>updOrderItem(item.product_id,"ctn_price",Number(e.target.value.replace(/[^0-9.]/g,"")))} onClick={e=>e.target.select()}/>
+                          <NumInput style={{padding:"4px 8px",fontSize:12}} value={item.ctn_price} onChange={v=>updOrderItem(item.product_id,"ctn_price",v)}/>
                         </div>
                         <div><div style={{fontSize:9,color:"var(--mut)",marginBottom:2}}>DISCOUNT %</div>
-                          <input type="number" className="inp" style={{padding:"4px 8px",fontSize:12}} type="text" inputMode="numeric" value={item.discount||0} onChange={e=>updOrderItem(item.product_id,"discount",Number(e.target.value.replace(/[^0-9.]/g,"")))} onClick={e=>e.target.select()}/>
+                          <NumInput style={{padding:"4px 8px",fontSize:12}} value={item.discount||0} onChange={v=>updOrderItem(item.product_id,"discount",v)}/>
                         </div>
                         <div><div style={{fontSize:9,color:"var(--mut)",marginBottom:2}}>AMOUNT</div>
                           <div style={{fontSize:13,fontWeight:800,color:"#10b981",paddingTop:6}}>₹{Number(item.amount||0).toLocaleString("en-IN")}</div>
