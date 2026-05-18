@@ -796,8 +796,9 @@ export default function CRM({ currentUser, onLogout }) {
           <div className="mod-ttl">New Order / Proforma <button className="btn btn-o btn-sm" onClick={closeM}><X size={13}/></button></div>
           <div className="fr fr2" style={{marginBottom:16}}>
             <div><label className="lbl">Customer *</label>
-              <select className="inp" value={form.customer_id||""} onChange={e=>sf("customer_id",e.target.value)}>
+              <select className="inp" value={form.customer_id||""} onChange={e=>{ if(e.target.value==="__new__"){setModal("acust_quick");} else sf("customer_id",e.target.value);}}>
                 <option value="">-- Select Customer --</option>
+                <option value="__new__">➕ New Customer Add Karo</option>
                 {C.map(c=><option key={c.id} value={c.id}>{c.name} / {c.company}</option>)}
               </select>
             </div>
@@ -1035,6 +1036,44 @@ export default function CRM({ currentUser, onLogout }) {
       </div>
     );
 
+    if(modal==="acust_quick") return (
+      <div className="ov" onClick={closeM}>
+        <div className="mod mod-sm" onClick={e=>e.stopPropagation()}>
+          <div className="mod-ttl">➕ New Customer <button className="btn btn-o btn-sm" onClick={closeM}><X size={13}/></button></div>
+          <div className="fr fr2">
+            <div><label className="lbl">Name *</label><input className="inp" placeholder="Contact name" value={form.name||""} onChange={e=>sf("name",e.target.value)}/></div>
+            <div><label className="lbl">Company *</label><input className="inp" placeholder="Company name" value={form.company||""} onChange={e=>sf("company",e.target.value)}/></div>
+          </div>
+          <div className="fr fr2">
+            <div><label className="lbl">Phone</label><input className="inp" value={form.phone||""} onChange={e=>sf("phone",e.target.value)}/></div>
+            <div><label className="lbl">City</label><input className="inp" value={form.city||""} onChange={e=>sf("city",e.target.value)}/></div>
+          </div>
+          <div className="fr fr2">
+            <div><label className="lbl">Type</label>
+              <select className="inp" value={form.type||"nbd"} onChange={e=>sf("type",e.target.value)}>
+                <option value="nbd">NBD (Prospect)</option>
+                <option value="crm">CRM (Existing)</option>
+              </select>
+            </div>
+            <div><label className="lbl">Assigned To</label><input className="inp" value={form.assigned_to||""} onChange={e=>sf("assigned_to",e.target.value)}/></div>
+          </div>
+          <button className="btn btn-p" style={{width:"100%",justifyContent:"center",marginTop:6}} disabled={saving} onClick={async()=>{
+            if(!form.name||!form.company) return toast$("Name aur Company required!",true);
+            setSv(true);
+            try {
+              const r = await sbInsert("crm_customers",{...form, status:form.status||"prospect"});
+              const newCust = r[0];
+              setC(p=>[newCust,...p]);
+              setForm(prev=>({...prev, customer_id:newCust.id, name:undefined, phone:undefined, city:undefined, type:undefined, assigned_to:undefined}));
+              toast$("Customer add ho gaya ✓");
+              setModal("aorder");
+            } catch(e){ toast$(e.message,true); }
+            setSv(false);
+          }}>{saving?<Spin/>:"Save & Select"}</button>
+        </div>
+      </div>
+    );
+
     if(modal==="editorder") {
       const editTotal = orderItems.reduce((s,i)=>s+(Number(i.amount)||0),0);
       const editEpr = form.epr ? Math.round(editTotal*0.01) : 0;
@@ -1178,7 +1217,7 @@ export default function CRM({ currentUser, onLogout }) {
         <div className="fr fr2"><div><label className="lbl">Segment</label><input className="inp" value={form.segment||""} onChange={e=>sf("segment",e.target.value)}/></div><div><label className="lbl">Assigned To</label><input className="inp" value={form.assigned_to||""} onChange={e=>sf("assigned_to",e.target.value)}/></div></div>
       </>},
       aenq:{t:"New Enquiry",fn:saveEnq,f:<>
-        <div className="fr"><label className="lbl">Customer *</label><select className="inp" value={form.customer_id||""} onChange={e=>sf("customer_id",e.target.value)}><option value="">-- Select --</option>{C.map(c=><option key={c.id} value={c.id}>{c.name} / {c.company}</option>)}</select></div>
+        <div className="fr"><label className="lbl">Customer *</label><select className="inp" value={form.customer_id||""} onChange={e=>{ if(e.target.value==="__new__"){setModal("acust_quick");} else sf("customer_id",e.target.value);}}><option value="">-- Select --</option><option value="__new__">➕ New Customer Add Karo</option>{C.map(c=><option key={c.id} value={c.id}>{c.name} / {c.company}</option>)}</select></div>
         <div className="fr fr2"><div><label className="lbl">Product *</label><input className="inp" value={form.product||""} onChange={e=>sf("product",e.target.value)}/></div><div><label className="lbl">Quantity</label><input className="inp" value={form.qty||""} onChange={e=>sf("qty",e.target.value)}/></div></div>
         <div className="fr fr3">
           <div><label className="lbl">Priority</label><select className="inp" value={form.priority||"medium"} onChange={e=>sf("priority",e.target.value)}><option value="high">🔥 High</option><option value="medium">⚡ Medium</option><option value="low">• Low</option></select></div>
@@ -1187,7 +1226,7 @@ export default function CRM({ currentUser, onLogout }) {
         </div>
       </>},
       ainter:{t:"Log Interaction",fn:()=>saveInter(false),f:<>
-        <div className="fr"><label className="lbl">Customer *</label><select className="inp" value={form.customer_id||""} onChange={e=>sf("customer_id",e.target.value)}><option value="">-- Select --</option>{C.map(c=><option key={c.id} value={c.id}>{c.name} / {c.company}</option>)}</select></div>
+        <div className="fr"><label className="lbl">Customer *</label><select className="inp" value={form.customer_id||""} onChange={e=>{ if(e.target.value==="__new__"){setModal("acust_quick");} else sf("customer_id",e.target.value);}}><option value="">-- Select --</option><option value="__new__">➕ New Customer Add Karo</option>{C.map(c=><option key={c.id} value={c.id}>{c.name} / {c.company}</option>)}</select></div>
         <div className="fr"><label className="lbl">Type</label><select className="inp" value={form.type||"call"} onChange={e=>sf("type",e.target.value)}>{["call","visit","whatsapp","email","meeting"].map(t=><option key={t} value={t}>{TI[t]} {t}</option>)}</select></div>
         <div className="fr"><label className="lbl">Note *</label><textarea className="inp" value={form.note||""} onChange={e=>sf("note",e.target.value)}/></div>
         <div className="fr fr3">
