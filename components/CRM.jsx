@@ -175,6 +175,7 @@ export default function CRM({ currentUser, onLogout }) {
       qty_cases: 1,
       price_per_pcs: prod.price_per_pcs||0,
       ctn_price: prod.ctn_price||0,
+      discount: 0,
       amount: prod.ctn_price||0,
     }]);
   };
@@ -182,14 +183,16 @@ export default function CRM({ currentUser, onLogout }) {
     setOrderItems(p=>p.map(i=>{
       if(i.product_id!==pid) return i;
       const updated = {...i,[k]:v};
-      updated.amount = (Number(updated.qty_cases)||0) * (Number(updated.ctn_price)||0);
+      const base = (Number(updated.qty_cases)||0) * (Number(updated.ctn_price)||0);
+      const disc = (base * (Number(updated.discount)||0)) / 100;
+      updated.amount = base - disc;
       return updated;
     }));
   };
   const removeOrderItem = (pid) => setOrderItems(p=>p.filter(i=>i.product_id!==pid));
 
   const orderTotal = useMemo(()=>orderItems.reduce((s,i)=>s+(Number(i.amount)||0),0),[orderItems]);
-  const eprAmount  = useMemo(()=>Math.round(orderTotal*0.01),[orderTotal]);
+  const eprAmount  = useMemo(()=>form.epr ? Math.round(orderTotal*0.01) : 0,[orderTotal, form.epr]);
 
   const saveOrder = async() => {
     if(!form.customer_id) return toast$("Customer select karo",true);
@@ -204,6 +207,8 @@ export default function CRM({ currentUser, onLogout }) {
         order_date: form.order_date || new Date().toISOString().split("T")[0],
         status: "draft",
         total_amount: orderTotal + eprAmount,
+        payment_mode: form.payment_mode||"cash",
+        epr_applied: !!form.epr,
         notes: form.notes||"",
         created_by: currentUser?.name||"",
       };
@@ -732,12 +737,15 @@ export default function CRM({ currentUser, onLogout }) {
                         <div style={{fontWeight:600,fontSize:12}}>{item.product_name}</div>
                         <button style={{background:"none",border:"none",color:"var(--err)",cursor:"pointer"}} onClick={()=>removeOrderItem(item.product_id)}><Trash2 size={12}/></button>
                       </div>
-                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6}}>
+                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:6}}>
                         <div><div style={{fontSize:9,color:"var(--mut)",marginBottom:2}}>CASES</div>
                           <input type="number" className="inp" style={{padding:"4px 8px",fontSize:12}} value={item.qty_cases} onChange={e=>updOrderItem(item.product_id,"qty_cases",Number(e.target.value))} onFocus={e=>e.target.select()}/>
                         </div>
                         <div><div style={{fontSize:9,color:"var(--mut)",marginBottom:2}}>CTN PRICE (₹)</div>
                           <input type="number" className="inp" style={{padding:"4px 8px",fontSize:12}} value={item.ctn_price} onChange={e=>updOrderItem(item.product_id,"ctn_price",Number(e.target.value))} onFocus={e=>e.target.select()}/>
+                        </div>
+                        <div><div style={{fontSize:9,color:"var(--mut)",marginBottom:2}}>DISCOUNT %</div>
+                          <input type="number" className="inp" style={{padding:"4px 8px",fontSize:12}} value={item.discount||0} onChange={e=>updOrderItem(item.product_id,"discount",Number(e.target.value))} onFocus={e=>e.target.select()}/>
                         </div>
                         <div><div style={{fontSize:9,color:"var(--mut)",marginBottom:2}}>AMOUNT</div>
                           <div style={{fontSize:13,fontWeight:800,color:"#10b981",paddingTop:6}}>₹{Number(item.amount||0).toLocaleString("en-IN")}</div>
@@ -748,16 +756,33 @@ export default function CRM({ currentUser, onLogout }) {
                   {/* Totals */}
                   <div style={{padding:"10px 12px",background:"var(--card2)"}}>
                     <div style={{display:"flex",justifyContent:"space-between",fontSize:12,marginBottom:4}}><span style={{color:"var(--mut)"}}>Subtotal</span><span style={{fontWeight:600}}>₹{orderTotal.toLocaleString("en-IN")}</span></div>
-                    <div style={{display:"flex",justifyContent:"space-between",fontSize:12,marginBottom:4}}><span style={{color:"var(--mut)"}}>EPR @1%</span><span style={{fontWeight:600}}>₹{eprAmount.toLocaleString("en-IN")}</span></div>
+                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",fontSize:12,marginBottom:4}}>
+                      <label style={{display:"flex",alignItems:"center",gap:6,cursor:"pointer",color:"var(--mut)"}}>
+                        <input type="checkbox" checked={!!form.epr} onChange={e=>sf("epr",e.target.checked)} style={{accentColor:"var(--acc)"}}/>
+                        EPR @1%
+                      </label>
+                      <span style={{fontWeight:600}}>₹{eprAmount.toLocaleString("en-IN")}</span>
+                    </div>
                     <div style={{display:"flex",justifyContent:"space-between",fontSize:14,borderTop:"1px solid var(--bdr)",paddingTop:6}}><span style={{fontWeight:700}}>Total</span><span style={{fontWeight:800,color:"#10b981"}}>₹{(orderTotal+eprAmount).toLocaleString("en-IN")}</span></div>
                   </div>
                 </div>}
             </div>
           </div>
 
-          <div className="fr" style={{marginTop:12}}>
-            <label className="lbl">Notes</label>
-            <input className="inp" placeholder="Payment terms, delivery notes..." value={form.notes||""} onChange={e=>sf("notes",e.target.value)}/>
+          <div className="fr fr2" style={{marginTop:12}}>
+            <div>
+              <label className="lbl">Payment Mode</label>
+              <select className="inp" value={form.payment_mode||"cash"} onChange={e=>sf("payment_mode",e.target.value)}>
+                <option value="cash">💵 Cash</option>
+                <option value="credit">🏦 Credit</option>
+                <option value="bank_transfer">↗ Bank Transfer</option>
+                <option value="cheque">📝 Cheque</option>
+              </select>
+            </div>
+            <div>
+              <label className="lbl">Notes</label>
+              <input className="inp" placeholder="Delivery notes..." value={form.notes||""} onChange={e=>sf("notes",e.target.value)}/>
+            </div>
           </div>
 
           <button className="btn btn-p" style={{width:"100%",justifyContent:"center",marginTop:8,fontSize:13}} disabled={saving} onClick={saveOrder}>
@@ -772,7 +797,7 @@ export default function CRM({ currentUser, onLogout }) {
   const ProformaModal = () => {
     if(!selOrder) return null;
     const subtotal = selOrder.items?.reduce((s,i)=>s+(Number(i.amount)||0),0)||0;
-    const epr = Math.round(subtotal*0.01);
+    const epr = selOrder.epr_applied ? Math.round(subtotal*0.01) : 0;
     return (
       <div className="ov" onClick={closeM}>
         <div className="mod mod-lg" onClick={e=>e.stopPropagation()}>
@@ -797,17 +822,20 @@ export default function CRM({ currentUser, onLogout }) {
               <div style={{fontSize:14,fontWeight:700}}>{selOrder.company}</div>
               <div style={{fontSize:12,color:"var(--mut)"}}>{selOrder.customer_name}</div>
             </div>
-            <div className="card2" style={{minWidth:160}}>
+            <div className="card2" style={{minWidth:200}}>
               <div style={{fontSize:9.5,color:"var(--mut)",marginBottom:4}}>ORDER DATE</div>
-              <div style={{fontSize:14,fontWeight:700}}>{fd(selOrder.order_date)}</div>
-              <Bdg s={selOrder.status}/>
+              <div style={{fontSize:14,fontWeight:700,marginBottom:6}}>{fd(selOrder.order_date)}</div>
+              <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
+                <Bdg s={selOrder.status}/>
+                {selOrder.payment_mode && <span style={{fontSize:9.5,fontWeight:700,padding:"2px 8px",borderRadius:12,background:"rgba(59,130,246,.1)",color:"#60a5fa",textTransform:"capitalize"}}>{selOrder.payment_mode?.replace("_"," ")}</span>}
+              </div>
             </div>
           </div>
 
           {/* Items Table */}
           <div className="tw" style={{marginBottom:14}}>
             <table>
-              <thead><tr><th>#</th><th>SKU</th><th>Product</th><th>Packing</th><th>Cases</th><th>Price/Pcs</th><th>CTN Price</th><th>Amount</th></tr></thead>
+              <thead><tr><th>#</th><th>SKU</th><th>Product</th><th>Packing</th><th>Cases</th><th>Price/Pcs</th><th>CTN Price</th><th>Disc%</th><th>Amount</th></tr></thead>
               <tbody>
                 {(selOrder.items||[]).map((item,idx)=>(
                   <tr key={idx}>
@@ -818,6 +846,7 @@ export default function CRM({ currentUser, onLogout }) {
                     <td style={{textAlign:"center",fontWeight:700}}>{item.qty_cases}</td>
                     <td style={{fontSize:11}}>₹{item.price_per_pcs}</td>
                     <td style={{fontSize:11}}>₹{item.ctn_price}</td>
+                    <td style={{fontSize:11,textAlign:"center"}}>{item.discount||0}%</td>
                     <td style={{fontWeight:800,color:"#10b981"}}>₹{Number(item.amount||0).toLocaleString("en-IN")}</td>
                   </tr>
                 ))}
@@ -829,8 +858,9 @@ export default function CRM({ currentUser, onLogout }) {
           <div style={{display:"flex",justifyContent:"flex-end"}}>
             <div style={{width:240}}>
               <div style={{display:"flex",justifyContent:"space-between",padding:"5px 0",fontSize:12,borderBottom:"1px solid var(--bdr)"}}><span style={{color:"var(--mut)"}}>Subtotal</span><span style={{fontWeight:600}}>₹{subtotal.toLocaleString("en-IN")}</span></div>
-              <div style={{display:"flex",justifyContent:"space-between",padding:"5px 0",fontSize:12,borderBottom:"1px solid var(--bdr)"}}><span style={{color:"var(--mut)"}}>EPR @1%</span><span style={{fontWeight:600}}>₹{epr.toLocaleString("en-IN")}</span></div>
+              {selOrder.epr_applied && <div style={{display:"flex",justifyContent:"space-between",padding:"5px 0",fontSize:12,borderBottom:"1px solid var(--bdr)"}}><span style={{color:"var(--mut)"}}>EPR @1%</span><span style={{fontWeight:600}}>₹{epr.toLocaleString("en-IN")}</span></div>}
               <div style={{display:"flex",justifyContent:"space-between",padding:"8px 0",fontSize:15}}><span style={{fontWeight:700}}>Total</span><span style={{fontWeight:800,color:"#10b981",fontFamily:"'Sora',sans-serif"}}>₹{(subtotal+epr).toLocaleString("en-IN")}</span></div>
+              {selOrder.payment_mode && <div style={{fontSize:11,color:"var(--mut)",marginTop:4}}>Payment: <span style={{color:"var(--txt)",fontWeight:600,textTransform:"capitalize"}}>{selOrder.payment_mode?.replace("_"," ")}</span></div>}
             </div>
           </div>
 
