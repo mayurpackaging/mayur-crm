@@ -464,7 +464,7 @@ export default function CRM({ currentUser, onLogout }) {
       <div>
         <div className="sh">
           <div><div className="sh-t">Orders & Proforma</div><div className="sh-s">{ORDERS.length} total</div></div>
-          <button className="btn btn-p" onClick={()=>{setForm({order_date:new Date().toISOString().split("T")[0]});setOrderItems([]);setModal("aorder");}}><Plus size={13}/> New Order</button>
+          <button className="btn btn-p" onClick={()=>{setForm({order_date:new Date().toISOString().split("T")[0], epr:false});setOrderItems([]);setModal("aorder");}}><Plus size={13}/> New Order</button>
         </div>
         <div className="sr"><Search size={13} className="sr-ic"/><input className="inp" placeholder="Search customer..." value={q} onChange={e=>setQ(e.target.value)}/></div>
         {list.length===0
@@ -484,7 +484,7 @@ export default function CRM({ currentUser, onLogout }) {
                     <div style={{display:"flex",gap:6,alignItems:"center"}}>
                       <div style={{fontSize:15,fontWeight:800,color:"#10b981"}}>{fr(o.total_amount)}</div>
                       <button className="btn btn-o btn-sm" onClick={async()=>{
-                        setForm({...o});
+                        setForm({...o, epr: !!o.epr_applied});
                         try { const items = await sbGetOrderItems(o.id); setOrderItems(items||[]); } catch(e){ setOrderItems([]); }
                         setModal("editorder");
                       }}>✏️</button>
@@ -1308,7 +1308,7 @@ export default function CRM({ currentUser, onLogout }) {
             <div className="tb-sub">👤 {currentUser?.name} · Mayur Food Packaging</div>
           </div>
           {urgN>0&&<div style={{display:"flex",alignItems:"center",gap:5,padding:"5px 12px",background:"rgba(239,68,68,.1)",border:"1px solid rgba(239,68,68,.2)",borderRadius:8,cursor:"pointer"}} onClick={()=>setView("followups")}><span style={{fontSize:11}}>⚡</span><span style={{fontSize:11.5,color:"#ef4444",fontWeight:800}}>{urgN} Urgent</span></div>}
-          <button className="btn btn-o btn-sm" onClick={()=>{setForm({order_date:new Date().toISOString().split("T")[0]});setOrderItems([]);setModal("aorder");}}>🧾 New Order</button>
+          <button className="btn btn-o btn-sm" onClick={()=>{setForm({order_date:new Date().toISOString().split("T")[0], epr:false});setOrderItems([]);setModal("aorder");}}>🧾 New Order</button>
           <button className="btn btn-p btn-sm" onClick={()=>{setForm({});setModal("ainter");}}><Plus size={13}/> Log Interaction</button>
         </div>
         <div className="content">
