@@ -712,7 +712,10 @@ export default function CRM({ currentUser, onLogout }) {
                     {c.assigned_to&&<span style={{fontSize:9.5,padding:"2px 8px",borderRadius:12,background:"var(--card2)",color:"var(--mut)",border:"1px solid var(--bdr)"}}>👤 {c.assigned_to}</span>}
                   </div>
                 </div>
-                <button className="btn btn-o btn-sm" onClick={closeM}><X size={13}/></button>
+                <div style={{display:"flex",gap:6}}>
+                  <button className="btn btn-o btn-sm" onClick={()=>{ setForm({...c}); setModal("editcust"); }}>✏️ Edit</button>
+                  <button className="btn btn-o btn-sm" onClick={closeM}><X size={13}/></button>
+                </div>
               </div>
             </div>
           </div>
@@ -1089,6 +1092,58 @@ export default function CRM({ currentUser, onLogout }) {
             <div><label className="lbl">CTN Price (₹)</label><input type="number" className="inp" value={form.ctn_price||""} onChange={e=>sf("ctn_price",Number(e.target.value))}/></div>
           </div>
           <button className="btn btn-p" style={{width:"100%",justifyContent:"center",marginTop:6}} disabled={saving} onClick={saveProd}>{saving?<Spin/>:"Save"}</button>
+        </div>
+      </div>
+    );
+
+    if(modal==="editcust") return (
+      <div className="ov" onClick={()=>setModal("detail")}>
+        <div className="mod" onClick={e=>e.stopPropagation()}>
+          <div className="mod-ttl">✏️ Edit Customer <button className="btn btn-o btn-sm" onClick={()=>setModal("detail")}><X size={13}/></button></div>
+          <div className="fr fr2">
+            <div><label className="lbl">Name *</label><input className="inp" value={form.name||""} onChange={e=>sf("name",e.target.value)}/></div>
+            <div><label className="lbl">Company *</label><input className="inp" value={form.company||""} onChange={e=>sf("company",e.target.value)}/></div>
+          </div>
+          <div className="fr fr2">
+            <div><label className="lbl">Phone</label><input className="inp" value={form.phone||""} onChange={e=>sf("phone",e.target.value)}/></div>
+            <div><label className="lbl">Email</label><input className="inp" value={form.email||""} onChange={e=>sf("email",e.target.value)}/></div>
+          </div>
+          <div className="fr fr3">
+            <div><label className="lbl">City</label><input className="inp" value={form.city||""} onChange={e=>sf("city",e.target.value)}/></div>
+            <div><label className="lbl">Type</label>
+              <select className="inp" value={form.type||"nbd"} onChange={e=>sf("type",e.target.value)}>
+                <option value="nbd">NBD</option><option value="crm">CRM</option>
+              </select>
+            </div>
+            <div><label className="lbl">Status</label>
+              <select className="inp" value={form.status||"prospect"} onChange={e=>sf("status",e.target.value)}>
+                <option value="prospect">Prospect</option><option value="active">Active</option><option value="inactive">Inactive</option>
+              </select>
+            </div>
+          </div>
+          <div className="fr fr2">
+            <div><label className="lbl">Segment</label><input className="inp" value={form.segment||""} onChange={e=>sf("segment",e.target.value)}/></div>
+            <div><label className="lbl">Assigned To</label><input className="inp" value={form.assigned_to||""} onChange={e=>sf("assigned_to",e.target.value)}/></div>
+          </div>
+          <div className="fr fr2">
+            <div><label className="lbl">GST No</label><input className="inp" placeholder="22AAAAA0000A1Z5" value={form.gst_no||""} onChange={e=>sf("gst_no",e.target.value.toUpperCase())}/></div>
+            <div><label className="lbl">Address</label><input className="inp" placeholder="Shop No, Street, Area" value={form.address||""} onChange={e=>sf("address",e.target.value)}/></div>
+          </div>
+          <button className="btn btn-p" style={{width:"100%",justifyContent:"center",marginTop:8}} disabled={saving} onClick={async()=>{
+            if(!form.name||!form.company) return toast$("Name aur Company required!",true);
+            setSv(true);
+            try {
+              await sbPatch("crm_customers", form.id, {
+                name:form.name, company:form.company, phone:form.phone, email:form.email,
+                city:form.city, type:form.type, status:form.status, segment:form.segment,
+                assigned_to:form.assigned_to, gst_no:form.gst_no, address:form.address
+              });
+              setC(p=>p.map(x=>x.id===form.id?{...x,...form}:x));
+              toast$("Customer updated ✓");
+              setModal("detail");
+            } catch(e){ toast$(e.message,true); }
+            setSv(false);
+          }}>{saving?<Spin/>:"Save"}</button>
         </div>
       </div>
     );
