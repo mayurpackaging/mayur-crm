@@ -1137,8 +1137,10 @@ export default function CRM({ currentUser, onLogout }) {
 
     if(modal==="editorder") {
       const editTotal = orderItems.reduce((s,i)=>s+(Number(i.amount)||0),0);
-      const editEpr = form.epr ? Math.round(editTotal*0.01) : 0;
-      const editGst = form.gst_type==="including" ? 0 : Math.round(editTotal*0.18);
+      const editEprChecked = !!(form.epr || form.epr_applied);
+      const editEpr = editEprChecked ? Math.round(editTotal*0.01) : 0;
+      const editGstType = form.gst_type || "excluding";
+      const editGst = editGstType==="including" ? 0 : Math.round(editTotal*0.18);
       return (
         <div className="ov" onClick={closeM}>
           <div className="mod" style={{width:860,maxWidth:"96vw"}} onClick={e=>e.stopPropagation()}>
@@ -1206,26 +1208,26 @@ export default function CRM({ currentUser, onLogout }) {
                       <div style={{display:"flex",justifyContent:"space-between",fontSize:12,marginBottom:4}}><span style={{color:"var(--mut)"}}>Subtotal</span><span style={{fontWeight:600}}>₹{editTotal.toLocaleString("en-IN")}</span></div>
                       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",fontSize:12,marginBottom:4}}>
                         <label style={{display:"flex",alignItems:"center",gap:5,cursor:"pointer",color:"var(--mut)"}}>
-                          <input type="checkbox" checked={!!form.epr} onChange={e=>sf("epr",e.target.checked)} style={{accentColor:"var(--acc)",width:14,height:14}}/>
+                          <input type="checkbox" checked={editEprChecked} onChange={e=>{sf("epr",e.target.checked);sf("epr_applied",e.target.checked);}} style={{accentColor:"var(--acc)",width:14,height:14}}/>
                           EPR @1%
                         </label>
-                        <span style={{fontWeight:600}}>₹{editEpr.toLocaleString("en-IN")}</span>
+                        <span style={{fontWeight:600,color:editEprChecked?"var(--txt)":"var(--mut)"}}>₹{editEpr.toLocaleString("en-IN")}</span>
                       </div>
                       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",fontSize:12,marginBottom:6}}>
                         <div style={{display:"flex",alignItems:"center",gap:8}}>
                           <span style={{color:"var(--mut)"}}>GST @18%:</span>
                           <label style={{display:"flex",alignItems:"center",gap:4,cursor:"pointer"}}>
-                            <input type="radio" name="egst" value="excluding" checked={form.gst_type!=="including"} onChange={()=>sf("gst_type","excluding")} style={{accentColor:"var(--acc)",width:13,height:13}}/>
+                            <input type="radio" name="egst" value="excluding" checked={editGstType!=="including"} onChange={()=>sf("gst_type","excluding")} style={{accentColor:"var(--acc)",width:13,height:13}}/>
                             <span style={{fontSize:11}}>Excl.</span>
                           </label>
                           <label style={{display:"flex",alignItems:"center",gap:4,cursor:"pointer"}}>
-                            <input type="radio" name="egst" value="including" checked={form.gst_type==="including"} onChange={()=>sf("gst_type","including")} style={{accentColor:"var(--acc)",width:13,height:13}}/>
+                            <input type="radio" name="egst" value="including" checked={editGstType==="including"} onChange={()=>sf("gst_type","including")} style={{accentColor:"var(--acc)",width:13,height:13}}/>
                             <span style={{fontSize:11}}>Incl.</span>
                           </label>
                         </div>
-                        <span style={{fontWeight:600}}>{form.gst_type==="including"?"(included)":"₹"+editGst.toLocaleString("en-IN")}</span>
+                        <span style={{fontWeight:600}}>{editGstType==="including"?"(included)":"₹"+editGst.toLocaleString("en-IN")}</span>
                       </div>
-                      <div style={{display:"flex",justifyContent:"space-between",fontSize:14,borderTop:"1px solid var(--bdr)",paddingTop:6}}><span style={{fontWeight:700}}>Total</span><span style={{fontWeight:800,color:"#10b981"}}>₹{(editTotal+editEpr+editGst).toLocaleString("en-IN")}</span></div>
+                      <div style={{display:"flex",justifyContent:"space-between",fontSize:14,borderTop:"1px solid var(--bdr)",paddingTop:6}}><span style={{fontWeight:700}}>Total</span><span style={{fontWeight:800,color:"#10b981"}}>₹{(editTotal+editEpr+(editGstType==="including"?0:editGst)).toLocaleString("en-IN")}</span></div>
                     </div>
                   </div>}
               </div>
@@ -1236,13 +1238,13 @@ export default function CRM({ currentUser, onLogout }) {
               <div style={{display:"flex",alignItems:"flex-end"}}>
                 <button className="btn btn-p" style={{width:"100%",justifyContent:"center",fontSize:13}} disabled={saving} onClick={async()=>{
                   setSv(true);
-                  const newTotal = editTotal + editEpr + editGst;
+                  const newTotal = editTotal + editEpr + (editGstType==="including"?0:editGst);
                   try {
                     await sbPatch("crm_orders", form.id, {
                       order_date: form.order_date,
                       payment_mode: form.payment_mode,
                       gst_type: form.gst_type||"excluding",
-                      epr_applied: !!form.epr,
+                      epr_applied: editEprChecked,
                       total_amount: newTotal,
                       notes: form.notes,
                     });
