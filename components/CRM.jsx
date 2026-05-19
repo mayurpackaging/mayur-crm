@@ -225,7 +225,8 @@ export default function CRM({ currentUser, onLogout }) {
       await sbInsert("crm_order_items", items);
       setORDERS(p=>[{...orderData, id:orderId},...p]);
       toast$("Order/Proforma save ho gaya ✓");
-      setSelOrder({...orderData, id:orderId, items});
+      const custData = gc(form.customer_id)||{};
+      setSelOrder({...orderData, id:orderId, items, customerData:{phone:custData.phone,address:custData.address,gst_no:custData.gst_no}});
       setModal("proforma");
     } catch(e){ toast$(e.message,true); }
     setSv(false);
@@ -233,8 +234,11 @@ export default function CRM({ currentUser, onLogout }) {
 
   const openOrder = async(order) => {
     try {
-      const items = await sbGetOrderItems(order.id);
-      setSelOrder({...order, items: items||[]});
+      const [items, custArr] = await Promise.all([
+        sbGetOrderItems(order.id),
+        order.customer_id ? sbFetch(`crm_customers?id=eq.${order.customer_id}&select=phone,address,gst_no`) : Promise.resolve([])
+      ]);
+      setSelOrder({...order, items: items||[], customerData: custArr?.[0]||{}});
       setModal("proforma");
     } catch(e){ toast$(e.message,true); }
   };
@@ -282,7 +286,13 @@ export default function CRM({ currentUser, onLogout }) {
       <h2>Shreeja Packaging Industries Pvt. Ltd.</h2>
       <div class="sub">Mayur Food Packaging Products | Delhi<br/>PROFORMA INVOICE</div>
       <div class="info">
-        <div><b>To:</b> ${selOrder?.company||""}<br/>${selOrder?.customer_name||""}</div>
+        <div>
+          <b>To:</b> ${selOrder?.company||""}<br/>
+          ${selOrder?.customer_name||""}
+          ${selOrder?.customerData?.phone ? `<br/>📞 ${selOrder.customerData.phone}` : ""}
+          ${selOrder?.customerData?.address ? `<br/>📍 ${selOrder.customerData.address}` : ""}
+          ${selOrder?.customerData?.gst_no ? `<br/>GST: <b>${selOrder.customerData.gst_no}</b>` : ""}
+        </div>
         <div style="text-align:right"><b>Date:</b> ${fd(selOrder?.order_date)}<br/><b>Status:</b> ${selOrder?.status||"draft"}</div>
       </div>
       <table>
@@ -706,11 +716,15 @@ export default function CRM({ currentUser, onLogout }) {
               </div>
             </div>
           </div>
-          <div className="g3" style={{marginBottom:14}}>
+          <div className="g3" style={{marginBottom:10}}>
             {[{l:"📞 Phone",v:c.phone||"—"},{l:"📧 Email",v:c.email||"—"},{l:"📅 Since",v:fd(c.created_at)}].map(x=>(
               <div key={x.l} className="card2"><div style={{fontSize:9.5,color:"var(--mut)",marginBottom:3}}>{x.l}</div><div style={{fontSize:12.5,fontWeight:500}}>{x.v}</div></div>
             ))}
           </div>
+          {(c.gst_no||c.address) && <div className="g2" style={{marginBottom:14}}>
+            {c.gst_no && <div className="card2"><div style={{fontSize:9.5,color:"var(--mut)",marginBottom:3}}>🏷️ GST No</div><div style={{fontSize:12.5,fontWeight:600,letterSpacing:".05em"}}>{c.gst_no}</div></div>}
+            {c.address && <div className="card2"><div style={{fontSize:9.5,color:"var(--mut)",marginBottom:3}}>📍 Address</div><div style={{fontSize:12,fontWeight:500}}>{c.address}</div></div>}
+          </div>}
           {li&&(
             <div className="lw">
               <div className="lw-lbl">💬 Last Word · {TI[li.type]} {li.type} · {fd(li.created_at)} · {li.done_by}</div>
@@ -978,6 +992,9 @@ export default function CRM({ currentUser, onLogout }) {
               <div style={{fontSize:9.5,color:"var(--mut)",marginBottom:4}}>BILL TO</div>
               <div style={{fontSize:14,fontWeight:700}}>{selOrder.company}</div>
               <div style={{fontSize:12,color:"var(--mut)"}}>{selOrder.customer_name}</div>
+              {selOrder.customerData?.phone && <div style={{fontSize:11,marginTop:3}}>📞 {selOrder.customerData.phone}</div>}
+              {selOrder.customerData?.address && <div style={{fontSize:11,marginTop:2}}>📍 {selOrder.customerData.address}</div>}
+              {selOrder.customerData?.gst_no && <div style={{fontSize:11,marginTop:2,fontWeight:700,color:"var(--acc)"}}>GST: {selOrder.customerData.gst_no}</div>}
             </div>
             <div className="card2" style={{minWidth:200}}>
               <div style={{fontSize:9.5,color:"var(--mut)",marginBottom:4}}>ORDER DATE</div>
@@ -1087,6 +1104,10 @@ export default function CRM({ currentUser, onLogout }) {
           <div className="fr fr2">
             <div><label className="lbl">Phone</label><input className="inp" value={form.phone||""} onChange={e=>sf("phone",e.target.value)}/></div>
             <div><label className="lbl">City</label><input className="inp" value={form.city||""} onChange={e=>sf("city",e.target.value)}/></div>
+          </div>
+          <div className="fr fr2">
+            <div><label className="lbl">GST No</label><input className="inp" placeholder="22AAAAA0000A1Z5" value={form.gst_no||""} onChange={e=>sf("gst_no",e.target.value.toUpperCase())}/></div>
+            <div><label className="lbl">Address</label><input className="inp" placeholder="Shop No, Street, Area" value={form.address||""} onChange={e=>sf("address",e.target.value)}/></div>
           </div>
           <div className="fr fr2">
             <div><label className="lbl">Type</label>
@@ -1255,6 +1276,7 @@ export default function CRM({ currentUser, onLogout }) {
           <div><label className="lbl">Status</label><select className="inp" value={form.status||"prospect"} onChange={e=>sf("status",e.target.value)}><option value="prospect">Prospect</option><option value="active">Active</option><option value="inactive">Inactive</option></select></div>
         </div>
         <div className="fr fr2"><div><label className="lbl">Segment</label><input className="inp" value={form.segment||""} onChange={e=>sf("segment",e.target.value)}/></div><div><label className="lbl">Assigned To</label><input className="inp" value={form.assigned_to||""} onChange={e=>sf("assigned_to",e.target.value)}/></div></div>
+        <div className="fr fr2"><div><label className="lbl">GST No</label><input className="inp" placeholder="22AAAAA0000A1Z5" value={form.gst_no||""} onChange={e=>sf("gst_no",e.target.value.toUpperCase())}/></div><div><label className="lbl">Address</label><input className="inp" placeholder="Shop No, Street, Area" value={form.address||""} onChange={e=>sf("address",e.target.value)}/></div></div>
       </>},
       aenq:{t:"New Enquiry",fn:saveEnq,f:<>
         <div className="fr"><label className="lbl">Customer *</label><CustomerSearch value={form.customer_id||""} onChange={v=>sf("customer_id",v)}/></div>
