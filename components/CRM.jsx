@@ -1,7 +1,7 @@
 "use client";
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { Plus, Search, X, Eye, CheckCircle, Loader, Printer, Trash2, Edit } from "lucide-react";
-import { sbFetch, sbGet, sbGetPay, sbGetProducts, sbGetOrders, sbGetOrderItems, sbInsert, sbPatch, sbDelete } from "../lib/supabase";
+import { sbFetch, sbGet, sbGetPay, sbGetProducts, sbGetOrders, sbGetOrderItems, sbGetTargets, sbInsert, sbPatch, sbDelete } from "../lib/supabase";
 
 /* ─── HELPERS ─────────────────────────────────────── */
 const fd  = s => s ? new Date(s).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"}) : "—";
@@ -42,6 +42,7 @@ export default function CRM({ currentUser, onLogout }) {
   const [P,setP]         = useState([]);
   const [PRODS,setPRODS] = useState([]);
   const [ORDERS,setORDERS] = useState([]);
+  const [TARGETS,setTARGETS] = useState([]);
   const [loading,setLd]  = useState(true);
   const [saving,setSv]   = useState(false);
   const [toast,setToast] = useState(null);
@@ -74,11 +75,11 @@ export default function CRM({ currentUser, onLogout }) {
   const load = useCallback(async()=>{
     setLd(true);
     try {
-      const [c,e,i,s,p,pr,o] = await Promise.all([
+      const [c,e,i,s,p,pr,o,t] = await Promise.all([
         sbGet("crm_customers"), sbGet("crm_enquiries"), sbGet("crm_interactions"),
-        sbGet("crm_samples"), sbGetPay(), sbGetProducts(), sbGetOrders()
+        sbGet("crm_samples"), sbGetPay(), sbGetProducts(), sbGetOrders(), sbGetTargets()
       ]);
-      setC(c||[]); setE(e||[]); setI(i||[]); setS(s||[]); setP(p||[]); setPRODS(pr||[]); setORDERS(o||[]);
+      setC(c||[]); setE(e||[]); setI(i||[]); setS(s||[]); setP(p||[]); setPRODS(pr||[]); setORDERS(o||[]); setTARGETS(t||[]);
     } catch(err){ toast$("Load failed: "+err.message,true); }
     setLd(false);
   },[]);
@@ -1054,6 +1055,620 @@ export default function CRM({ currentUser, onLogout }) {
     );
   };
 
+
+  /* ── REPORTS ── */
+  const Reports = () => {
+    const [rTab, setRTab] = useState("sales");
+    const [rMonth, setRMonth] = useState(new Date().getMonth()+1);
+    const [rYear, setRYear] = useState(new Date().getFullYear());
+
+    const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+    const SALES_PERSONS = [...new Set(C.map(c=>c.assigned_to).filter(Boolean))];
+
+    // Monthly sales data
+    const monthlyData = Array.from({length:12},(_,mi)=>{
+      const ords = ORDERS.filter(o=>{
+        const d = new Date(o.order_date);
+        return d.getFullYear()===rYear && d.getMonth()===mi;
+      });
+      return { month:months[mi], orders:ords.length, revenue:ords.reduce((s,o)=>s+(Number(o.total_amount)||0),0) };
+    });
+
+    // Party-wise order history
+    const partyWise = C.map(c=>{
+      const ords = ORDERS.filter(o=>o.customer_id===c.id||o.company===c.company);
+      const rev = ords.reduce((s,o)=>s+(Number(o.total_amount)||0),0);
+      return { ...c, orderCount:ords.length, revenue:rev, lastOrder:ords[0]?.order_date };
+    }).filter(c=>c.orderCount>0).sort((a,b)=>b.revenue-a.revenue);
+
+    // Top customers
+    const topCust = partyWise.slice(0,10);
+
+    // NBD conversion
+    const nbdTotal = C.filter(c=>c.type==="nbd").length;
+    const nbdConverted = C.filter(c=>c.type==="crm").length;
+    const nbdWithOrder = ORDERS.map(o=>o.company).filter((v,i,a)=>a.indexOf(v)===i).length;
+
+    // Salesperson performance
+    const spPerf = SALES_PERSONS.map(sp=>{
+      const myCust = C.filter(c=>c.assigned_to===sp);
+      const myOrd = ORDERS.filter(o=>o.created_by===sp);
+      const myRev = myOrd.reduce((s,o)=>s+(Number(o.total_amount)||0),0);
+      const myInter = I.filter(i=>i.done_by===sp).length;
+      const tgt = TARGETS.find(t=>t.user_name===sp && t.month==String(rMonth).padStart(2,"0") && t.year===rYear);
+      return { name:sp, customers:myCust.length, orders:myOrd.length, revenue:myRev, interactions:myInter, target:Number(tgt?.target_amount||0) };
+    });
+
+    // Visit frequency
+    const visitFreq = C.map(c=>{
+      const visits = I.filter(i=>i.customer_id===c.id);
+      const lastVisit = visits[0]?.created_at;
+      const daysSince = lastVisit ? Math.floor((new Date()-new Date(lastVisit))/(1000*60*60*24)) : 999;
+      return { ...c, visits:visits.length, lastVisit, daysSince };
+    }).sort((a,b)=>b.daysSince-a.daysSince);
+
+    return (
+      <div>
+        <div className="sh"><div><div className="sh-t">Reports & Analytics</div><div className="sh-s">Data-driven insights</div></div>
+          <div style={{display:"flex",gap:8,alignItems:"center"}}>
+            <select className="inp" style={{width:"auto",padding:"5px 10px",fontSize:11}} value={rMonth} onChange={e=>setRMonth(Number(e.target.value))}>
+              {months.map((m,i)=><option key={i} value={i+1}>{m}</option>)}
+            </select>
+            <select className="inp" style={{width:"auto",padding:"5px 10px",fontSize:11}} value={rYear} onChange={e=>setRYear(Number(e.target.value))}>
+              {[2025,2026,2027].map(y=><option key={y} value={y}>{y}</option>)}
+            </select>
+          </div>
+        </div>
+        <div className="tabs">
+          {[["sales","📈 Sales"],["party","🏢 Party-wise"],["top","🏆 Top Customers"],["nbd","🎯 NBD Conversion"],["sp","👤 Salesperson"],["visit","📍 Visit Frequency"]].map(([id,lbl])=>(
+            <div key={id} className={`tab ${rTab===id?"a":""}`} onClick={()=>setRTab(id)}>{lbl}</div>
+          ))}
+        </div>
+
+        {/* SALES SUMMARY */}
+        {rTab==="sales" && (
+          <div>
+            <div className="g3" style={{marginBottom:18}}>
+              {[
+                {lbl:"Total Revenue "+rYear,val:fr(ORDERS.filter(o=>new Date(o.order_date).getFullYear()===rYear).reduce((s,o)=>s+(Number(o.total_amount)||0),0)),col:"#10b981"},
+                {lbl:"Total Orders "+rYear,val:ORDERS.filter(o=>new Date(o.order_date).getFullYear()===rYear).length+" orders",col:"#60a5fa"},
+                {lbl:"Delivered Orders",val:ORDERS.filter(o=>o.status==="delivered").length+" orders",col:"#a78bfa"},
+              ].map(c=><div key={c.lbl} className="card" style={{borderLeft:`3px solid ${c.col}`}}><div style={{fontSize:10.5,color:"var(--mut)",marginBottom:4}}>{c.lbl}</div><div style={{fontSize:20,fontWeight:800,fontFamily:"'Sora',sans-serif",color:c.col}}>{c.val}</div></div>)}
+            </div>
+            <div className="card" style={{padding:"16px 20px"}}>
+              <div style={{fontSize:11,fontWeight:800,color:"var(--mut)",textTransform:"uppercase",letterSpacing:".08em",marginBottom:14}}>Monthly Sales {rYear}</div>
+              <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                {monthlyData.map((m,i)=>{
+                  const maxRev = Math.max(...monthlyData.map(x=>x.revenue),1);
+                  const pct = (m.revenue/maxRev)*100;
+                  return (
+                    <div key={i} style={{display:"flex",alignItems:"center",gap:10}}>
+                      <div style={{width:30,fontSize:10.5,color:"var(--mut)",fontWeight:700}}>{m.month}</div>
+                      <div style={{flex:1,height:20,background:"var(--card2)",borderRadius:4,overflow:"hidden"}}>
+                        <div style={{height:"100%",width:pct+"%",background:"linear-gradient(90deg,#10b981,#34d399)",borderRadius:4,minWidth:m.revenue>0?4:0,transition:"width .3s"}}/>
+                      </div>
+                      <div style={{width:80,fontSize:11,fontWeight:700,textAlign:"right",color:m.revenue>0?"#10b981":"var(--mut)"}}>{fr(m.revenue)}</div>
+                      <div style={{width:50,fontSize:10,color:"var(--mut)",textAlign:"right"}}>{m.orders} ord</div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* PARTY-WISE */}
+        {rTab==="party" && (
+          <div className="card" style={{padding:0}}>
+            <div className="tw"><table>
+              <thead><tr><th>Party</th><th>Type</th><th>City</th><th>Assigned</th><th>Total Orders</th><th>Total Revenue</th><th>Last Order</th></tr></thead>
+              <tbody>{partyWise.map(c=>(
+                <tr key={c.id} onClick={()=>openC(c.id)} style={{cursor:"pointer"}}>
+                  <td><div style={{fontWeight:700,fontSize:12.5}}>{c.company}</div><div style={{fontSize:10.5,color:"var(--mut)"}}>{c.name}</div></td>
+                  <td><span style={{fontSize:9.5,fontWeight:800,padding:"2px 8px",borderRadius:12,background:c.type==="crm"?"rgba(16,185,129,.1)":"rgba(59,130,246,.1)",color:c.type==="crm"?"#10b981":"#60a5fa"}}>{c.type?.toUpperCase()}</span></td>
+                  <td style={{fontSize:11,color:"var(--mut)"}}>{c.city||"—"}</td>
+                  <td style={{fontSize:11.5}}>{c.assigned_to||"—"}</td>
+                  <td style={{textAlign:"center",fontWeight:700}}>{c.orderCount}</td>
+                  <td style={{fontWeight:800,color:"#10b981",fontSize:13}}>{fr(c.revenue)}</td>
+                  <td style={{fontSize:11,color:"var(--mut)"}}>{fd(c.lastOrder)}</td>
+                </tr>
+              ))}</tbody>
+            </table></div>
+          </div>
+        )}
+
+        {/* TOP CUSTOMERS */}
+        {rTab==="top" && (
+          <div>
+            {topCust.map((c,i)=>{
+              const maxRev = topCust[0]?.revenue||1;
+              const pct = (c.revenue/maxRev)*100;
+              return (
+                <div key={c.id} className="card" style={{marginBottom:8,padding:"12px 16px",cursor:"pointer"}} onClick={()=>openC(c.id)}>
+                  <div style={{display:"flex",alignItems:"center",gap:12}}>
+                    <div style={{width:28,height:28,borderRadius:"50%",background:i<3?"#f59e0b":"var(--bdr)",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:800,fontSize:12,color:i<3?"#000":"var(--mut)",flexShrink:0}}>#{i+1}</div>
+                    <div style={{flex:1}}>
+                      <div style={{display:"flex",justifyContent:"space-between",marginBottom:5}}>
+                        <div><div style={{fontWeight:700,fontSize:13}}>{c.company}</div><div style={{fontSize:10.5,color:"var(--mut)"}}>{c.city} · {c.orderCount} orders · {c.assigned_to}</div></div>
+                        <div style={{fontWeight:800,fontSize:16,color:"#10b981",fontFamily:"'Sora',sans-serif"}}>{fr(c.revenue)}</div>
+                      </div>
+                      <div style={{height:6,background:"var(--card2)",borderRadius:3,overflow:"hidden"}}>
+                        <div style={{height:"100%",width:pct+"%",background:"linear-gradient(90deg,#10b981,#34d399)",borderRadius:3}}/>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* NBD CONVERSION */}
+        {rTab==="nbd" && (
+          <div>
+            <div className="g3" style={{marginBottom:18}}>
+              {[
+                {lbl:"Total NBD Prospects",val:nbdTotal,col:"#60a5fa",ic:"🎯"},
+                {lbl:"Converted to CRM",val:nbdConverted,col:"#10b981",ic:"✅"},
+                {lbl:"Parties with Orders",val:nbdWithOrder,col:"#a78bfa",ic:"🧾"},
+              ].map(c=><div key={c.lbl} className="card" style={{borderLeft:`3px solid ${c.col}`,textAlign:"center"}}>
+                <div style={{fontSize:24,marginBottom:4}}>{c.ic}</div>
+                <div style={{fontSize:28,fontWeight:800,color:c.col,fontFamily:"'Sora',sans-serif"}}>{c.val}</div>
+                <div style={{fontSize:10.5,color:"var(--mut)"}}>{c.lbl}</div>
+              </div>)}
+            </div>
+            <div className="card">
+              <div style={{fontSize:11,fontWeight:800,color:"var(--mut)",textTransform:"uppercase",letterSpacing:".08em",marginBottom:12}}>Conversion Funnel</div>
+              {[
+                {lbl:"Total Prospects Contacted",val:C.filter(c=>c.type==="nbd").length,col:"#60a5fa",tot:C.length},
+                {lbl:"Had Interactions",val:[...new Set(I.map(i=>i.customer_id))].length,col:"#a78bfa",tot:C.length},
+                {lbl:"Gave Enquiry",val:E.length,col:"#f59e0b",tot:C.length},
+                {lbl:"Placed Order",val:nbdWithOrder,col:"#10b981",tot:C.length},
+              ].map(s=>(
+                <div key={s.lbl} style={{marginBottom:12}}>
+                  <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
+                    <span style={{fontSize:12}}>{s.lbl}</span>
+                    <span style={{fontSize:12,fontWeight:700,color:s.col}}>{s.val}</span>
+                  </div>
+                  <div style={{height:8,background:"var(--card2)",borderRadius:4,overflow:"hidden"}}>
+                    <div style={{height:"100%",width:Math.min((s.val/Math.max(s.tot,1))*100,100)+"%",background:s.col,borderRadius:4}}/>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* SALESPERSON */}
+        {rTab==="sp" && (
+          <div className="card" style={{padding:0}}>
+            <div className="tw"><table>
+              <thead><tr><th>Salesperson</th><th>Customers</th><th>Interactions</th><th>Orders</th><th>Revenue</th><th>Target</th><th>Achievement</th></tr></thead>
+              <tbody>{spPerf.map(sp=>{
+                const ach = sp.target>0 ? ((sp.revenue/sp.target)*100).toFixed(1) : "—";
+                const achNum = sp.target>0 ? (sp.revenue/sp.target)*100 : 0;
+                return (
+                  <tr key={sp.name}>
+                    <td><div style={{display:"flex",gap:8,alignItems:"center"}}><Av name={sp.name} size={28}/><div style={{fontWeight:700,fontSize:12.5}}>{sp.name}</div></div></td>
+                    <td style={{textAlign:"center",fontWeight:700}}>{sp.customers}</td>
+                    <td style={{textAlign:"center",fontWeight:700}}>{sp.interactions}</td>
+                    <td style={{textAlign:"center",fontWeight:700}}>{sp.orders}</td>
+                    <td style={{fontWeight:800,color:"#10b981"}}>{fr(sp.revenue)}</td>
+                    <td style={{color:"var(--mut)"}}>{sp.target>0?fr(sp.target):"—"}</td>
+                    <td>
+                      {sp.target>0 ? (
+                        <div>
+                          <div style={{fontSize:12,fontWeight:800,color:achNum>=100?"#10b981":achNum>=70?"#f59e0b":"#ef4444"}}>{ach}%</div>
+                          <div style={{height:4,background:"var(--card2)",borderRadius:2,marginTop:3,width:80,overflow:"hidden"}}>
+                            <div style={{height:"100%",width:Math.min(achNum,100)+"%",background:achNum>=100?"#10b981":achNum>=70?"#f59e0b":"#ef4444",borderRadius:2}}/>
+                          </div>
+                        </div>
+                      ) : <span style={{color:"var(--mut)",fontSize:11}}>No target</span>}
+                    </td>
+                  </tr>
+                );
+              })}</tbody>
+            </table></div>
+          </div>
+        )}
+
+        {/* VISIT FREQUENCY */}
+        {rTab==="visit" && (
+          <div className="card" style={{padding:0}}>
+            <div className="tw"><table>
+              <thead><tr><th>Party</th><th>City</th><th>Assigned</th><th>Total Visits</th><th>Last Visit</th><th>Days Since</th><th>Alert</th></tr></thead>
+              <tbody>{visitFreq.map(c=>(
+                <tr key={c.id} onClick={()=>openC(c.id)} style={{cursor:"pointer"}}>
+                  <td><div style={{fontWeight:700,fontSize:12.5}}>{c.company}</div><div style={{fontSize:10.5,color:"var(--mut)"}}>{c.name}</div></td>
+                  <td style={{fontSize:11,color:"var(--mut)"}}>{c.city||"—"}</td>
+                  <td style={{fontSize:11.5}}>{c.assigned_to||"—"}</td>
+                  <td style={{textAlign:"center",fontWeight:700}}>{c.visits}</td>
+                  <td style={{fontSize:11}}>{fd(c.lastVisit)}</td>
+                  <td style={{fontSize:12,fontWeight:700,color:c.daysSince>30?"#ef4444":c.daysSince>14?"#f59e0b":"#10b981"}}>{c.daysSince<999?c.daysSince+" days":"Never"}</td>
+                  <td>{c.daysSince>30?<span style={{fontSize:9.5,background:"rgba(239,68,68,.1)",color:"#ef4444",padding:"2px 8px",borderRadius:12,fontWeight:700}}>🔴 Overdue</span>:c.daysSince>14?<span style={{fontSize:9.5,background:"rgba(245,158,11,.1)",color:"#f59e0b",padding:"2px 8px",borderRadius:12,fontWeight:700}}>🟡 Due Soon</span>:<span style={{fontSize:9.5,background:"rgba(16,185,129,.1)",color:"#10b981",padding:"2px 8px",borderRadius:12,fontWeight:700}}>✅ OK</span>}</td>
+                </tr>
+              ))}</tbody>
+            </table></div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  /* ── TARGETS ── */
+  const Targets = () => {
+    const [tForm, setTForm] = useState({});
+    const [tSaving, setTSaving] = useState(false);
+    const months = [{v:"01",l:"January"},{v:"02",l:"February"},{v:"03",l:"March"},{v:"04",l:"April"},{v:"05",l:"May"},{v:"06",l:"June"},{v:"07",l:"July"},{v:"08",l:"August"},{v:"09",l:"September"},{v:"10",l:"October"},{v:"11",l:"November"},{v:"12",l:"December"}];
+    const SALES_PERSONS = [...new Set(C.map(c=>c.assigned_to).filter(Boolean))];
+    const curMonth = String(new Date().getMonth()+1).padStart(2,"0");
+    const curYear = new Date().getFullYear();
+
+    const getAchievement = (name, month, year) => {
+      return ORDERS.filter(o=>o.created_by===name && new Date(o.order_date).getMonth()===Number(month)-1 && new Date(o.order_date).getFullYear()===year).reduce((s,o)=>s+(Number(o.total_amount)||0),0);
+    };
+
+    const saveTarget = async() => {
+      if(!tForm.user_name||!tForm.month||!tForm.year||!tForm.target_amount) return toast$("Sab fields bharo",true);
+      setTSaving(true);
+      try {
+        const ex = TARGETS.find(t=>t.user_name===tForm.user_name&&t.month===tForm.month&&t.year===Number(tForm.year));
+        if(ex) {
+          await sbPatch("crm_targets",ex.id,{target_amount:Number(tForm.target_amount)});
+          setTARGETS(p=>p.map(x=>x.id===ex.id?{...x,target_amount:Number(tForm.target_amount)}:x));
+        } else {
+          const r = await sbInsert("crm_targets",{...tForm,year:Number(tForm.year),target_amount:Number(tForm.target_amount)});
+          setTARGETS(p=>[r[0],...p]);
+        }
+        toast$("Target set ✓"); setTForm({});
+      } catch(e){ toast$(e.message,true); }
+      setTSaving(false);
+    };
+
+    return (
+      <div>
+        <div className="sh"><div><div className="sh-t">Target vs Achievement</div><div className="sh-s">Monthly targets set karo</div></div></div>
+
+        {/* Set Target Form */}
+        <div className="card" style={{marginBottom:18}}>
+          <div style={{fontSize:11,fontWeight:800,color:"var(--mut)",textTransform:"uppercase",letterSpacing:".08em",marginBottom:14}}>🎯 New Target Set Karo</div>
+          <div className="fr" style={{gridTemplateColumns:"1fr 1fr 1fr 1fr auto",gap:10}}>
+            <div><label className="lbl">Salesperson</label>
+              <select className="inp" value={tForm.user_name||""} onChange={e=>setTForm(p=>({...p,user_name:e.target.value}))}>
+                <option value="">-- Select --</option>
+                {SALES_PERSONS.map(s=><option key={s} value={s}>{s}</option>)}
+              </select>
+            </div>
+            <div><label className="lbl">Month</label>
+              <select className="inp" value={tForm.month||""} onChange={e=>setTForm(p=>({...p,month:e.target.value}))}>
+                <option value="">-- Month --</option>
+                {months.map(m=><option key={m.v} value={m.v}>{m.l}</option>)}
+              </select>
+            </div>
+            <div><label className="lbl">Year</label>
+              <select className="inp" value={tForm.year||curYear} onChange={e=>setTForm(p=>({...p,year:e.target.value}))}>
+                {[2025,2026,2027].map(y=><option key={y} value={y}>{y}</option>)}
+              </select>
+            </div>
+            <div><label className="lbl">Target (₹)</label>
+              <input type="number" className="inp" placeholder="500000" value={tForm.target_amount||""} onChange={e=>setTForm(p=>({...p,target_amount:e.target.value}))}/>
+            </div>
+            <div style={{display:"flex",alignItems:"flex-end"}}>
+              <button className="btn btn-p" disabled={tSaving} onClick={saveTarget}>{tSaving?<Spin/>:"Set"}</button>
+            </div>
+          </div>
+        </div>
+
+        {/* Current Month Overview */}
+        <div style={{marginBottom:18}}>
+          <div style={{fontSize:11,fontWeight:800,color:"var(--mut)",textTransform:"uppercase",letterSpacing:".08em",marginBottom:12}}>This Month — {months.find(m=>m.v===curMonth)?.l} {curYear}</div>
+          <div style={{display:"flex",flexDirection:"column",gap:10}}>
+            {SALES_PERSONS.map(sp=>{
+              const tgt = TARGETS.find(t=>t.user_name===sp&&t.month===curMonth&&t.year===curYear);
+              const ach = getAchievement(sp,curMonth,curYear);
+              const tgtAmt = Number(tgt?.target_amount||0);
+              const pct = tgtAmt>0 ? Math.min((ach/tgtAmt)*100,100) : 0;
+              const gap = tgtAmt - ach;
+              return (
+                <div key={sp} className="card" style={{padding:"14px 18px"}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+                    <div style={{display:"flex",gap:10,alignItems:"center"}}>
+                      <Av name={sp} size={36}/>
+                      <div>
+                        <div style={{fontWeight:700,fontSize:13.5}}>{sp}</div>
+                        <div style={{fontSize:10.5,color:"var(--mut)"}}>Target: {tgtAmt>0?fr(tgtAmt):"Not set"}</div>
+                      </div>
+                    </div>
+                    <div style={{textAlign:"right"}}>
+                      <div style={{fontSize:20,fontWeight:800,color:"#10b981",fontFamily:"'Sora',sans-serif"}}>{fr(ach)}</div>
+                      <div style={{fontSize:10.5,color:"var(--mut)"}}>Achieved</div>
+                    </div>
+                  </div>
+                  {tgtAmt>0 && <>
+                    <div style={{height:10,background:"var(--card2)",borderRadius:5,overflow:"hidden",marginBottom:6}}>
+                      <div style={{height:"100%",width:pct+"%",background:pct>=100?"#10b981":pct>=70?"#f59e0b":"#ef4444",borderRadius:5,transition:"width .5s"}}/>
+                    </div>
+                    <div style={{display:"flex",justifyContent:"space-between",fontSize:11}}>
+                      <span style={{color:"var(--mut)"}}>{pct.toFixed(1)}% achieved</span>
+                      <span style={{color:gap>0?"#ef4444":"#10b981",fontWeight:700}}>{gap>0?`₹${Number(gap).toLocaleString("en-IN")} remaining`:"🎉 Target achieved!"}</span>
+                    </div>
+                  </>}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* All Targets Table */}
+        {TARGETS.length>0 && (
+          <div className="card" style={{padding:0}}>
+            <div style={{padding:"12px 16px",borderBottom:"1px solid var(--bdr)",fontSize:11,fontWeight:800,color:"var(--mut)",textTransform:"uppercase",letterSpacing:".08em"}}>All Targets History</div>
+            <div className="tw"><table>
+              <thead><tr><th>Salesperson</th><th>Month</th><th>Year</th><th>Target</th><th>Achieved</th><th>%</th></tr></thead>
+              <tbody>{TARGETS.map(t=>{
+                const ach = getAchievement(t.user_name,t.month,t.year);
+                const pct = t.target_amount>0?(ach/t.target_amount*100).toFixed(1):0;
+                return (
+                  <tr key={t.id}>
+                    <td style={{fontWeight:700}}>{t.user_name}</td>
+                    <td>{months.find(m=>m.v===t.month)?.l||t.month}</td>
+                    <td>{t.year}</td>
+                    <td style={{fontWeight:700}}>{fr(t.target_amount)}</td>
+                    <td style={{color:"#10b981",fontWeight:700}}>{fr(ach)}</td>
+                    <td><span style={{fontWeight:800,color:pct>=100?"#10b981":pct>=70?"#f59e0b":"#ef4444"}}>{pct}%</span></td>
+                  </tr>
+                );
+              })}</tbody>
+            </table></div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  /* ── TAX INVOICE ── */
+  const Invoice = () => {
+    const [invOrders, setInvOrders] = useState(ORDERS.filter(o=>o.is_invoice));
+    const [selInv, setSelInv] = useState(null);
+    const [invItems, setInvItems] = useState([]);
+
+    const openInv = async(order) => {
+      try {
+        const [items, custArr] = await Promise.all([
+          sbGetOrderItems(order.id),
+          order.customer_id ? sbFetch(`crm_customers?id=eq.${order.customer_id}&select=phone,address,gst_no`) : Promise.resolve([])
+        ]);
+        setSelInv({...order, items:items||[], customerData:custArr?.[0]||{}});
+      } catch(e){ toast$(e.message,true); }
+    };
+
+    const genInvoiceNo = () => {
+      const d = new Date();
+      const yr = String(d.getFullYear()).slice(2) + String(d.getFullYear()+1).slice(2);
+      const count = ORDERS.filter(o=>o.is_invoice).length + 1;
+      return `SPI/${yr}/${String(count).padStart(4,"0")}`;
+    };
+
+    const convertToInvoice = async(order) => {
+      const invNo = genInvoiceNo();
+      const invDate = new Date().toISOString().split("T")[0];
+      try {
+        await sbPatch("crm_orders",order.id,{is_invoice:true,invoice_no:invNo,invoice_date:invDate});
+        setORDERS(p=>p.map(x=>x.id===order.id?{...x,is_invoice:true,invoice_no:invNo,invoice_date:invDate}:x));
+        toast$("Invoice generated: "+invNo+" ✓");
+      } catch(e){ toast$(e.message,true); }
+    };
+
+    const printInvoice = (inv) => {
+      if(!inv) return;
+      const subtotal = inv.items?.reduce((s,i)=>s+(Number(i.amount)||0),0)||0;
+      const epr = inv.epr_applied ? Math.round(subtotal*0.01) : 0;
+      const gst = inv.gst_type==="including" ? 0 : Math.round(subtotal*0.18);
+      const win = window.open("","_blank");
+      win.document.write(`<html><head><title>Invoice ${inv.invoice_no}</title>
+      <style>
+        body{font-family:Arial,sans-serif;padding:24px;color:#000;font-size:12px;}
+        .hdr{text-align:center;border-bottom:2px solid #f59e0b;padding-bottom:12px;margin-bottom:16px;}
+        h2{margin:0;color:#000;font-size:18px;}
+        .sub{color:#555;font-size:11px;}
+        .info{display:flex;justify-content:space-between;margin-bottom:16px;}
+        .box{border:1px solid #ddd;padding:10px;border-radius:4px;min-width:200px;}
+        table{width:100%;border-collapse:collapse;font-size:11px;}
+        th{background:#f59e0b;padding:7px;text-align:left;border:1px solid #ddd;}
+        td{padding:6px 7px;border:1px solid #ddd;}
+        .total{text-align:right;margin-top:12px;}
+        .total table{width:260px;margin-left:auto;}
+        .total td{border:none;padding:4px 6px;}
+        .footer{margin-top:30px;border-top:1px solid #ddd;padding-top:10px;font-size:10px;color:#888;display:flex;justify-content:space-between;}
+        .sig{margin-top:40px;text-align:right;font-size:11px;}
+      </style></head><body>
+      <div class="hdr">
+        <h2>Shreeja Packaging Industries Pvt. Ltd.</h2>
+        <div class="sub">Mayur Food Packaging Products | Delhi | GSTIN: [Your GST No]</div>
+        <div style="font-size:14px;font-weight:bold;margin-top:6px;color:#f59e0b;">TAX INVOICE</div>
+      </div>
+      <div class="info">
+        <div class="box">
+          <div style="font-size:10px;color:#888;margin-bottom:4px;">BILL TO</div>
+          <div style="font-weight:bold;font-size:13px;">${inv.company||""}</div>
+          <div>${inv.customer_name||""}</div>
+          ${inv.customerData?.address?`<div>📍 ${inv.customerData.address}</div>`:""}
+          ${inv.customerData?.phone?`<div>📞 ${inv.customerData.phone}</div>`:""}
+          ${inv.customerData?.gst_no?`<div><b>GSTIN: ${inv.customerData.gst_no}</b></div>`:""}
+        </div>
+        <div class="box" style="text-align:right;">
+          <div><b>Invoice No:</b> ${inv.invoice_no||""}</div>
+          <div><b>Invoice Date:</b> ${inv.invoice_date||""}</div>
+          <div><b>Order Date:</b> ${inv.order_date||""}</div>
+          <div><b>Payment:</b> ${inv.payment_mode?.replace("_"," ")||""}</div>
+        </div>
+      </div>
+      <table>
+        <thead><tr><th>#</th><th>SKU</th><th>Product</th><th>HSN</th><th>Packing</th><th>Cases</th><th>Price/Pcs</th><th>Taxable Amt</th><th>GST%</th><th>GST Amt</th><th>Total</th></tr></thead>
+        <tbody>
+          ${(inv.items||[]).map((item,idx)=>{
+            const taxable = Number(item.amount||0);
+            const gstAmt = inv.gst_type==="including"?0:Math.round(taxable*0.18);
+            return `<tr>
+              <td>${idx+1}</td>
+              <td>${item.sku_code||""}</td>
+              <td>${item.product_name||""}</td>
+              <td>3923</td>
+              <td>${item.packing||""}</td>
+              <td>${item.qty_cases||""}</td>
+              <td>₹${item.price_per_pcs||""}</td>
+              <td>₹${taxable.toLocaleString("en-IN")}</td>
+              <td>${inv.gst_type==="including"?"Incl.":"18%"}</td>
+              <td>₹${gstAmt.toLocaleString("en-IN")}</td>
+              <td><b>₹${(taxable+gstAmt).toLocaleString("en-IN")}</b></td>
+            </tr>`;
+          }).join("")}
+        </tbody>
+      </table>
+      <div class="total">
+        <table>
+          <tr><td>Subtotal</td><td><b>₹${subtotal.toLocaleString("en-IN")}</b></td></tr>
+          ${epr>0?`<tr><td>EPR @1%</td><td>₹${epr.toLocaleString("en-IN")}</td></tr>`:""}
+          ${gst>0?`<tr><td>GST @18%</td><td>₹${gst.toLocaleString("en-IN")}</td></tr>`:""}
+          <tr style="border-top:2px solid #000;"><td><b>Grand Total</b></td><td><b style="font-size:15px;">₹${(subtotal+epr+gst).toLocaleString("en-IN")}</b></td></tr>
+        </table>
+      </div>
+      <div class="sig">For Shreeja Packaging Industries Pvt. Ltd.<br/><br/><br/>Authorised Signatory</div>
+      <div class="footer">
+        <div>HSN Code: 3923 | Plastic articles for conveyance or packing of goods</div>
+        <div>This is a computer generated invoice.</div>
+      </div>
+      </body></html>`);
+      win.document.close(); win.print();
+    };
+
+    const pendingOrders = ORDERS.filter(o=>!o.is_invoice&&o.status!=="cancelled"&&o.status!=="draft");
+    const invoices = ORDERS.filter(o=>o.is_invoice).sort((a,b)=>new Date(b.invoice_date)-new Date(a.invoice_date));
+
+    return (
+      <div>
+        <div className="sh"><div><div className="sh-t">Tax Invoice</div><div className="sh-s">{invoices.length} invoices generated</div></div></div>
+
+        {/* Pending Orders - Convert to Invoice */}
+        {pendingOrders.length>0 && (
+          <div style={{marginBottom:18}}>
+            <div style={{fontSize:11,fontWeight:800,color:"var(--mut)",textTransform:"uppercase",letterSpacing:".08em",marginBottom:10}}>⚡ Convert to Tax Invoice</div>
+            <div className="card" style={{padding:0}}>
+              <div className="tw"><table>
+                <thead><tr><th>Party</th><th>Order Date</th><th>Amount</th><th>Status</th><th>Action</th></tr></thead>
+                <tbody>{pendingOrders.map(o=>(
+                  <tr key={o.id}>
+                    <td><div style={{fontWeight:700,fontSize:12.5}}>{o.company}</div><div style={{fontSize:10,color:"var(--mut)"}}>{o.customer_name}</div></td>
+                    <td style={{fontSize:11.5}}>{fd(o.order_date)}</td>
+                    <td style={{fontWeight:800,color:"#10b981"}}>{fr(o.total_amount)}</td>
+                    <td><Bdg s={o.status}/></td>
+                    <td><button className="btn btn-p btn-sm" onClick={()=>convertToInvoice(o)}>🧾 Generate Invoice</button></td>
+                  </tr>
+                ))}</tbody>
+              </table></div>
+            </div>
+          </div>
+        )}
+
+        {/* Invoices List */}
+        <div>
+          <div style={{fontSize:11,fontWeight:800,color:"var(--mut)",textTransform:"uppercase",letterSpacing:".08em",marginBottom:10}}>📋 All Tax Invoices</div>
+          {invoices.length===0 ? <div className="card empty"><p>Koi invoice nahi abhi</p></div>
+            : <div className="card" style={{padding:0}}>
+                <div className="tw"><table>
+                  <thead><tr><th>Invoice No</th><th>Party</th><th>Invoice Date</th><th>Amount</th><th>Payment</th><th>Actions</th></tr></thead>
+                  <tbody>{invoices.map(o=>(
+                    <tr key={o.id}>
+                      <td><span style={{fontSize:11,background:"rgba(245,158,11,.1)",color:"var(--acc)",padding:"3px 8px",borderRadius:6,fontWeight:800}}>{o.invoice_no}</span></td>
+                      <td><div style={{fontWeight:700,fontSize:12.5}}>{o.company}</div><div style={{fontSize:10,color:"var(--mut)"}}>{o.customer_name}</div></td>
+                      <td style={{fontSize:11.5}}>{fd(o.invoice_date)}</td>
+                      <td style={{fontWeight:800,color:"#10b981"}}>{fr(o.total_amount)}</td>
+                      <td><span style={{fontSize:10,padding:"2px 8px",borderRadius:12,background:"rgba(59,130,246,.1)",color:"#60a5fa",fontWeight:700,textTransform:"capitalize"}}>{o.payment_mode?.replace("_"," ")}</span></td>
+                      <td>
+                        <div style={{display:"flex",gap:6}}>
+                          <button className="btn btn-o btn-sm" onClick={async()=>{ await openInv(o); }}>👁 View</button>
+                          <button className="btn btn-p btn-sm" onClick={async()=>{ await openInv(o); }}>🖨 Print</button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}</tbody>
+                </table></div>
+              </div>}
+        </div>
+
+        {/* Invoice Modal */}
+        {selInv && (
+          <div className="ov" onClick={()=>setSelInv(null)}>
+            <div className="mod mod-lg" onClick={e=>e.stopPropagation()}>
+              <div className="mod-ttl">
+                <span>🧾 {selInv.invoice_no}</span>
+                <div style={{display:"flex",gap:8}}>
+                  <button className="btn btn-p btn-sm" onClick={()=>printInvoice(selInv)}><Printer size={12}/> Print</button>
+                  <button className="btn btn-o btn-sm" onClick={()=>setSelInv(null)}><X size={13}/></button>
+                </div>
+              </div>
+              {/* same layout as proforma but with invoice details */}
+              <div style={{textAlign:"center",marginBottom:14,paddingBottom:12,borderBottom:"1px solid var(--bdr)"}}>
+                <div style={{fontFamily:"'Sora',sans-serif",fontSize:17,fontWeight:700,color:"var(--acc)"}}>Shreeja Packaging Industries Pvt. Ltd.</div>
+                <div style={{fontSize:10,color:"var(--mut)"}}>Mayur Food Packaging Products | Delhi</div>
+                <div style={{fontSize:13,fontWeight:800,marginTop:4,color:"var(--txt)"}}>TAX INVOICE</div>
+              </div>
+              <div style={{display:"flex",justifyContent:"space-between",marginBottom:14}}>
+                <div className="card2" style={{flex:1,marginRight:10}}>
+                  <div style={{fontSize:9.5,color:"var(--mut)",marginBottom:4}}>BILL TO</div>
+                  <div style={{fontSize:14,fontWeight:700}}>{selInv.company}</div>
+                  <div style={{fontSize:12,color:"var(--mut)"}}>{selInv.customer_name}</div>
+                  {selInv.customerData?.phone && <div style={{fontSize:11,marginTop:2}}>📞 {selInv.customerData.phone}</div>}
+                  {selInv.customerData?.address && <div style={{fontSize:11,marginTop:1}}>📍 {selInv.customerData.address}</div>}
+                  {selInv.customerData?.gst_no && <div style={{fontSize:11,marginTop:2,fontWeight:700,color:"var(--acc)"}}>GSTIN: {selInv.customerData.gst_no}</div>}
+                </div>
+                <div className="card2" style={{minWidth:180}}>
+                  <div style={{fontSize:9.5,color:"var(--mut)"}}>INVOICE NO</div>
+                  <div style={{fontSize:13,fontWeight:800,color:"var(--acc)",marginBottom:6}}>{selInv.invoice_no}</div>
+                  <div style={{fontSize:9.5,color:"var(--mut)"}}>DATE</div>
+                  <div style={{fontSize:12,fontWeight:600,marginBottom:6}}>{fd(selInv.invoice_date)}</div>
+                  <div style={{fontSize:9.5,color:"var(--mut)"}}>PAYMENT</div>
+                  <div style={{fontSize:12,textTransform:"capitalize"}}>{selInv.payment_mode?.replace("_"," ")}</div>
+                </div>
+              </div>
+              <div className="tw" style={{marginBottom:12}}>
+                <table>
+                  <thead><tr><th>#</th><th>SKU</th><th>Product</th><th>Packing</th><th>Cases</th><th>Price/Pcs</th><th>CTN Price</th><th>Amount</th></tr></thead>
+                  <tbody>{(selInv.items||[]).map((item,idx)=>(
+                    <tr key={idx}>
+                      <td>{idx+1}</td>
+                      <td><span style={{fontSize:9.5,background:"rgba(245,158,11,.1)",color:"var(--acc)",padding:"2px 6px",borderRadius:4,fontWeight:700}}>{item.sku_code}</span></td>
+                      <td style={{fontWeight:600,fontSize:12}}>{item.product_name}</td>
+                      <td style={{textAlign:"center",fontSize:11}}>{item.packing}</td>
+                      <td style={{textAlign:"center",fontWeight:700}}>{item.qty_cases}</td>
+                      <td style={{fontSize:11}}>₹{item.price_per_pcs}</td>
+                      <td style={{fontSize:11}}>₹{item.ctn_price}</td>
+                      <td style={{fontWeight:800,color:"#10b981"}}>₹{Number(item.amount||0).toLocaleString("en-IN")}</td>
+                    </tr>
+                  ))}</tbody>
+                </table>
+              </div>
+              <div style={{display:"flex",justifyContent:"flex-end"}}>
+                <div style={{width:240}}>
+                  {(() => {
+                    const sub = selInv.items?.reduce((s,i)=>s+(Number(i.amount)||0),0)||0;
+                    const ep = selInv.epr_applied?Math.round(sub*0.01):0;
+                    const gs = selInv.gst_type==="including"?0:Math.round(sub*0.18);
+                    return <>
+                      <div style={{display:"flex",justifyContent:"space-between",padding:"5px 0",fontSize:12,borderBottom:"1px solid var(--bdr)"}}><span style={{color:"var(--mut)"}}>Subtotal</span><span style={{fontWeight:600}}>₹{sub.toLocaleString("en-IN")}</span></div>
+                      {ep>0&&<div style={{display:"flex",justifyContent:"space-between",padding:"5px 0",fontSize:12,borderBottom:"1px solid var(--bdr)"}}><span style={{color:"var(--mut)"}}>EPR @1%</span><span style={{fontWeight:600}}>₹{ep.toLocaleString("en-IN")}</span></div>}
+                      {gs>0&&<div style={{display:"flex",justifyContent:"space-between",padding:"5px 0",fontSize:12,borderBottom:"1px solid var(--bdr)"}}><span style={{color:"var(--mut)"}}>GST @18%</span><span style={{fontWeight:600}}>₹{gs.toLocaleString("en-IN")}</span></div>}
+                      <div style={{display:"flex",justifyContent:"space-between",padding:"8px 0",fontSize:15}}><span style={{fontWeight:700}}>Total</span><span style={{fontWeight:800,color:"#10b981",fontFamily:"'Sora',sans-serif"}}>₹{(sub+ep+gs).toLocaleString("en-IN")}</span></div>
+                    </>;
+                  })()}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
   /* ── ALL MODALS ── */
   const renderModal = () => {
     if(!modal) return null;
@@ -1401,6 +2016,9 @@ export default function CRM({ currentUser, onLogout }) {
     {id:"payments",lbl:"Payments",ic:"💳",badge:P.filter(p=>p.overdue>0).length||null},
     {id:"products",lbl:"Products",ic:"📦"},
     {id:"orders",lbl:"Orders",ic:"🧾",badge:ORDERS.filter(o=>o.status==="draft").length||null,bc:"info"},
+    {id:"reports",lbl:"Reports",ic:"📊"},
+    {id:"targets",lbl:"Targets",ic:"🎯"},
+    {id:"invoice",lbl:"Tax Invoice",ic:"🧾"},
   ];
 
   return (
@@ -1439,6 +2057,9 @@ export default function CRM({ currentUser, onLogout }) {
           {view==="payments"&&<Payments/>}
           {view==="products"&&<Products/>}
           {view==="orders"&&<Orders/>}
+          {view==="reports"&&<Reports/>}
+          {view==="targets"&&<Targets/>}
+          {view==="invoice"&&<Invoice/>}
         </div>
       </div>
       {renderModal()}
