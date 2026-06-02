@@ -1792,7 +1792,7 @@ export default function CRM({ currentUser, onLogout }) {
             if(!form.name||!form.company) return toast$("Name aur Company required!",true);
             setSv(true);
             try {
-              const r = await sbInsert("crm_customers",{...form, status:form.status||"prospect"});
+            const r = await sbInsert("crm_customers",{name:form.name,company:form.company,phone:form.phone,city:form.city,gst_no:form.gst_no,address:form.address,type:form.type||"nbd",assigned_to:form.assigned_to,status:"prospect"});
               const newCust = r[0];
               setC(p=>[newCust,...p]);
               setForm(prev=>({...prev, customer_id:newCust.id, name:undefined, phone:undefined, city:undefined, type:undefined, assigned_to:undefined}));
