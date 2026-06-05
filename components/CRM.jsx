@@ -616,18 +616,26 @@ export default function CRM({ currentUser, onLogout }) {
       const ords=ORDERS.filter(o=>{const d=new Date(o.order_date);return d.getFullYear()===rYear&&d.getMonth()===mi;});
       return{month:months[mi],orders:ords.length,revenue:ords.reduce((s,o)=>s+(Number(o.total_amount)||0),0)};
     });
+    // Month filter helper - matches selected month+year, or all if rMonth==0
+    const inPeriod=(dateStr)=>{
+      if(!dateStr) return false;
+      const d=new Date(dateStr);
+      if(rMonth===0) return d.getFullYear()===rYear; // whole year
+      return d.getFullYear()===rYear && d.getMonth()===rMonth-1;
+    };
+    const periodOrders=ORDERS.filter(o=>inPeriod(o.order_date));
     const partyWise=C.map(c=>{
-      const ords=ORDERS.filter(o=>o.customer_id===c.id||o.company===c.company);
+      const ords=periodOrders.filter(o=>o.customer_id===c.id||o.company===c.company);
       const rev=ords.reduce((s,o)=>s+(Number(o.total_amount)||0),0);
       return{...c,orderCount:ords.length,revenue:rev,lastOrder:ords[0]?.order_date};
     }).filter(c=>c.orderCount>0).sort((a,b)=>b.revenue-a.revenue);
     const topCust=partyWise.slice(0,10);
     const nbdTotal=C.filter(c=>c.type==="nbd").length;
     const nbdConverted=C.filter(c=>c.type==="crm").length;
-    const nbdWithOrder=ORDERS.map(o=>o.company).filter((v,i,a)=>a.indexOf(v)===i).length;
+    const nbdWithOrder=periodOrders.map(o=>o.company).filter((v,i,a)=>a.indexOf(v)===i).length;
     const spPerf=SALES_PERSONS.map(sp=>{
       const myCust=C.filter(c=>c.assigned_to===sp);
-      const myOrd=ORDERS.filter(o=>o.created_by===sp);
+      const myOrd=periodOrders.filter(o=>o.created_by===sp);
       const myRev=myOrd.reduce((s,o)=>s+(Number(o.total_amount)||0),0);
       const myInter=I.filter(i=>i.done_by===sp).length;
       const tgt=TARGETS.find(t=>t.user_name===sp&&t.month===String(rMonth).padStart(2,"0")&&t.year===rYear);
@@ -646,6 +654,7 @@ export default function CRM({ currentUser, onLogout }) {
           <div><div className="sh-t">Reports & Analytics</div></div>
           <div style={{display:"flex",gap:8,alignItems:"center"}}>
             <select className="inp" style={{width:"auto",padding:"5px 10px",fontSize:11}} value={rMonth} onChange={e=>setRMonth(Number(e.target.value))}>
+              <option value={0}>Full Year</option>
               {months.map((m,i)=><option key={i} value={i+1}>{m}</option>)}
             </select>
             <select className="inp" style={{width:"auto",padding:"5px 10px",fontSize:11}} value={rYear} onChange={e=>setRYear(Number(e.target.value))}>
@@ -815,19 +824,17 @@ export default function CRM({ currentUser, onLogout }) {
     const getAch=(name,month,year)=>ORDERS.filter(o=>o.created_by===name&&new Date(o.order_date).getMonth()===Number(month)-1&&new Date(o.order_date).getFullYear()===year).reduce((s,o)=>s+(Number(o.total_amount)||0),0);
     const getAchCases=(name,month,year)=>ORDERS.filter(o=>o.created_by===name&&new Date(o.order_date).getMonth()===Number(month)-1&&new Date(o.order_date).getFullYear()===year).reduce((s,o)=>s+(Number(o.total_cases)||0),0);
     const saveTarget=async()=>{
-      const yr = tForm.year || curYear;
-      if(!tForm.user_name) return toast$("Salesperson select karo",true);
-      if(!tForm.month) return toast$("Month select karo",true);
+      if(!tForm.user_name||!tForm.month||!tForm.year) return toast$("Salesperson, Month, Year bharo",true);
       if(!tForm.target_amount&&!tForm.target_cases) return toast$("Amount ya Cases target bharo",true);
       setTSaving(true);
       try {
-        const ex=TARGETS.find(t=>t.user_name===tForm.user_name&&t.month===tForm.month&&t.year===Number(yr));
+        const ex=TARGETS.find(t=>t.user_name===tForm.user_name&&t.month===tForm.month&&t.year===Number(tForm.year));
         const payload={target_amount:Number(tForm.target_amount||0),target_cases:Number(tForm.target_cases||0)};
         if(ex){
           await sbPatch("crm_targets",ex.id,payload);
           setTARGETS(p=>p.map(x=>x.id===ex.id?{...x,...payload}:x));
         } else {
-          const r=await sbInsert("crm_targets",{user_name:tForm.user_name,month:tForm.month,year:Number(yr),...payload});
+          const r=await sbInsert("crm_targets",{user_name:tForm.user_name,month:tForm.month,year:Number(tForm.year),...payload});
           setTARGETS(p=>[r[0],...p]);
         }
         toast$("Target set ✓"); setTForm({});
