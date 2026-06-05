@@ -815,7 +815,7 @@ export default function CRM({ currentUser, onLogout }) {
     const getAch=(name,month,year)=>ORDERS.filter(o=>o.created_by===name&&new Date(o.order_date).getMonth()===Number(month)-1&&new Date(o.order_date).getFullYear()===year).reduce((s,o)=>s+(Number(o.total_amount)||0),0);
     const getAchCases=(name,month,year)=>ORDERS.filter(o=>o.created_by===name&&new Date(o.order_date).getMonth()===Number(month)-1&&new Date(o.order_date).getFullYear()===year).reduce((s,o)=>s+(Number(o.total_cases)||0),0);
     const saveTarget=async()=>{
-      if(!tForm.user_name||!tForm.month||!tForm.year) return toast$("Salesperson, Month, Year bharo",true);
+     if(!tForm.user_name){return toast$("Salesperson select karo",true);} if(!tForm.month){return toast$("Month select karo",true);} if(!tForm.year){tForm.year=new Date().getFullYear();}
       if(!tForm.target_amount&&!tForm.target_cases) return toast$("Amount ya Cases target bharo",true);
       setTSaving(true);
       try {
