@@ -1,7 +1,7 @@
 "use client";
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { Plus, Search, X, Eye, CheckCircle, Loader, Printer, Trash2, Edit } from "lucide-react";
-import { sbFetch, sbGet, sbGetPay, sbGetProducts, sbGetOrders, sbGetOrderItems, sbGetTargets, sbInsert, sbPatch, sbDelete } from "../lib/supabase";
+import { sbFetch, sbGet, sbGetPay, sbGetProducts, sbGetOrders, sbGetAllOrders, sbGetOrderItems, sbGetTargets, sbInsert, sbPatch, sbDelete } from "../lib/supabase";
 
 /* ─── HELPERS ─────────────────────────────────────── */
 const fd  = s => s ? new Date(s).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"}) : "—";
@@ -32,7 +32,6 @@ const TI  = {visit:"🏠",call:"📞",whatsapp:"💬",email:"📧",meeting:"🤝
 const TC  = {visit:"#10b981",call:"#60a5fa",whatsapp:"#34d399",email:"#a78bfa",meeting:"#f59e0b"};
 const Spin= () => <Loader size={14} className="spin"/>;
 
-/* ─── MAIN ─────────────────────────────────────────── */
 export default function CRM({ currentUser, onLogout }) {
   const [view,setView]   = useState("dashboard");
   const [C,setC]         = useState([]);
@@ -43,6 +42,7 @@ export default function CRM({ currentUser, onLogout }) {
   const [PRODS,setPRODS] = useState([]);
   const [ORDERS,setORDERS] = useState([]);
   const [TARGETS,setTARGETS] = useState([]);
+  const [allOrdersLoaded,setAllOrdersLoaded] = useState(false);
   const [loading,setLd]  = useState(true);
   const [saving,setSv]   = useState(false);
   const [toast,setToast] = useState(null);
@@ -79,22 +79,35 @@ export default function CRM({ currentUser, onLogout }) {
         sbGet("crm_customers"), sbGet("crm_enquiries"), sbGet("crm_interactions"),
         sbGet("crm_samples"), sbGetPay(), sbGetProducts(), sbGetOrders(), sbGetTargets()
       ]);
-      setC(c||[]); setE(e||[]); setI(i||[]); setS(s||[]); setP(p||[]); setPRODS(pr||[]); setORDERS(o||[]); setTARGETS(t||[]);
+      setC(c||[]); setE(e||[]); setI(i||[]); setS(s||[]); setP(p||[]);
+      setPRODS(pr||[]); setORDERS(o||[]); setTARGETS(t||[]);
     } catch(err){ toast$("Load failed: "+err.message,true); }
     setLd(false);
   },[]);
 
   useEffect(()=>{ load(); },[load]);
 
+  const loadAllOrders = async() => {
+    if(allOrdersLoaded) return;
+    try { const all=await sbGetAllOrders(); setORDERS(all||[]); setAllOrdersLoaded(true); }
+    catch(e){ toast$("Orders load failed",true); }
+  };
+
   const closeM = () => { setModal(null); setForm({}); setOrderItems([]); setEditProd(null); };
   const openC  = id => { setSelId(id); setModal("detail"); };
 
-  /* ── CUSTOMER SAVES ── */
+  /* ── SAVES ── */
   const saveCust = async() => {
     if(!form.name||!form.company) return toast$("Name aur Company required!",true);
     setSv(true);
-    try { const r=await sbInsert("crm_customers",{...form,type:form.type||"nbd",status:form.status||"prospect"}); setC(p=>[r[0],...p]); toast$("Customer add ✓"); closeM(); }
-    catch(e){ toast$(e.message,true); }
+    try {
+      const r=await sbInsert("crm_customers",{
+        name:form.name,company:form.company,phone:form.phone,email:form.email,
+        city:form.city,type:form.type||"nbd",status:form.status||"prospect",
+        segment:form.segment,assigned_to:form.assigned_to,gst_no:form.gst_no,address:form.address
+      });
+      setC(p=>[r[0],...p]); toast$("Customer add ✓"); closeM();
+    } catch(e){ toast$(e.message,true); }
     setSv(false);
   };
   const saveEnq = async() => {
@@ -146,60 +159,39 @@ export default function CRM({ currentUser, onLogout }) {
     catch(e){ toast$(e.message,true); }
   };
 
-  /* ── PRODUCT SAVE ── */
+  /* ── PRODUCT ── */
   const saveProd = async() => {
     if(!form.name||!form.category) return toast$("Name aur Category required!",true);
     setSv(true);
     try {
-      if(editProd) {
-        await sbPatch("crm_products",editProd.id,form);
-        setPRODS(p=>p.map(x=>x.id===editProd.id?{...x,...form}:x));
-        toast$("Product updated ✓");
-      } else {
-        const r=await sbInsert("crm_products",form);
-        setPRODS(p=>[...p,r[0]]);
-        toast$("Product add ✓");
-      }
+      if(editProd){ await sbPatch("crm_products",editProd.id,form); setPRODS(p=>p.map(x=>x.id===editProd.id?{...x,...form}:x)); toast$("Product updated ✓"); }
+      else { const r=await sbInsert("crm_products",form); setPRODS(p=>[...p,r[0]]); toast$("Product add ✓"); }
       closeM();
     } catch(e){ toast$(e.message,true); }
     setSv(false);
   };
 
-  /* ── ORDER / PROFORMA ── */
+  /* ── ORDER ── */
   const addOrderItem = (prod) => {
     const exists = orderItems.find(i=>i.product_id===prod.id);
     if(exists) return toast$("Yeh item already add hai",true);
-    setOrderItems(p=>[...p, {
-      product_id: prod.id,
-      sku_code: prod.sku_code,
-      product_name: prod.name,
-      packing: prod.packing,
-      qty_cases: 1,
-      price_per_pcs: prod.price_per_pcs||0,
-      ctn_price: prod.ctn_price||0,
-      discount: 0,
-      amount: prod.ctn_price||0,
-    }]);
+    setOrderItems(p=>[...p,{product_id:prod.id,sku_code:prod.sku_code,product_name:prod.name,packing:prod.packing,qty_cases:1,price_per_pcs:prod.price_per_pcs||0,ctn_price:prod.ctn_price||0,discount:0,amount:prod.ctn_price||0}]);
   };
-  const updOrderItem = (pid, k, v) => {
+  const updOrderItem = (pid,k,v) => {
     setOrderItems(p=>p.map(i=>{
-      if(i.product_id!==pid && i.id!==pid) return i;
-      const updated = {...i,[k]:v};
-      // auto calculate price_per_pcs when ctn_price changes
-      if(k==="ctn_price" && updated.packing) {
-        updated.price_per_pcs = +(Number(v) / Number(updated.packing)).toFixed(2);
-      }
-      const base = (Number(updated.qty_cases)||0) * (Number(updated.ctn_price)||0);
-      const disc = Number(updated.discount)||0;
-      updated.amount = base - disc;
-      return updated;
+      if(i.product_id!==pid&&i.id!==pid) return i;
+      const u={...i,[k]:v};
+      if(k==="ctn_price"&&u.packing) u.price_per_pcs=+(Number(v)/Number(u.packing)).toFixed(2);
+      const base=(Number(u.qty_cases)||0)*(Number(u.ctn_price)||0);
+      u.amount=base-(Number(u.discount)||0);
+      return u;
     }));
   };
   const removeOrderItem = (pid) => setOrderItems(p=>p.filter(i=>i.product_id!==pid));
 
   const orderTotal = useMemo(()=>orderItems.reduce((s,i)=>s+(Number(i.amount)||0),0),[orderItems]);
-  const eprAmount  = useMemo(()=>form.epr ? Math.round(orderTotal*0.01) : 0,[orderTotal, form.epr]);
-  const gstAmount  = useMemo(()=>form.gst==="including" ? 0 : Math.round(orderTotal*0.18),[orderTotal, form.gst]);
+  const eprAmount  = useMemo(()=>form.epr?Math.round(orderTotal*0.01):0,[orderTotal,form.epr]);
+  const gstAmount  = useMemo(()=>form.gst==="including"?0:Math.round(orderTotal*0.18),[orderTotal,form.gst]);
 
   const saveOrder = async() => {
     if(!form.customer_id) return toast$("Customer select karo",true);
@@ -207,27 +199,16 @@ export default function CRM({ currentUser, onLogout }) {
     const c=gc(form.customer_id);
     setSv(true);
     try {
-      const orderData = {
-        customer_id: form.customer_id,
-        customer_name: c?.name,
-        company: c?.company,
-        order_date: form.order_date || new Date().toISOString().split("T")[0],
-        status: "draft",
-        total_amount: orderTotal + eprAmount + (form.gst==="including" ? 0 : gstAmount),
-        payment_mode: form.payment_mode||"cash",
-        epr_applied: !!form.epr,
-        gst_type: form.gst||"excluding",
-        notes: form.notes||"",
-        created_by: currentUser?.name||"",
-      };
-      const orderRes = await sbInsert("crm_orders", orderData);
-      const orderId = orderRes[0].id;
-      const items = orderItems.map(i=>({...i, order_id: orderId}));
-      await sbInsert("crm_order_items", items);
-      setORDERS(p=>[{...orderData, id:orderId},...p]);
-      toast$("Order/Proforma save ho gaya ✓");
-      const custData = gc(form.customer_id)||{};
-      setSelOrder({...orderData, id:orderId, items, customerData:{phone:custData.phone,address:custData.address,gst_no:custData.gst_no}});
+      const totalCases=orderItems.reduce((s,i)=>s+(Number(i.qty_cases)||0),0);
+      const orderData={customer_id:form.customer_id,customer_name:c?.name,company:c?.company,order_date:form.order_date||new Date().toISOString().split("T")[0],status:"draft",total_amount:orderTotal+eprAmount+(form.gst==="including"?0:gstAmount),total_cases:totalCases,payment_mode:form.payment_mode||"cash",epr_applied:!!form.epr,gst_type:form.gst||"excluding",notes:form.notes||"",created_by:currentUser?.name||""};
+      const orderRes=await sbInsert("crm_orders",orderData);
+      const orderId=orderRes[0].id;
+      const items=orderItems.map(i=>({...i,order_id:orderId}));
+      await sbInsert("crm_order_items",items);
+      setORDERS(p=>[{...orderData,id:orderId},...p]);
+      toast$("Order save ho gaya ✓");
+      const custData=gc(form.customer_id)||{};
+      setSelOrder({...orderData,id:orderId,items,customerData:{phone:custData.phone,address:custData.address,gst_no:custData.gst_no}});
       setModal("proforma");
     } catch(e){ toast$(e.message,true); }
     setSv(false);
@@ -235,93 +216,52 @@ export default function CRM({ currentUser, onLogout }) {
 
   const openOrder = async(order) => {
     try {
-      const [items, custArr] = await Promise.all([
-        sbGetOrderItems(order.id),
-        order.customer_id ? sbFetch(`crm_customers?id=eq.${order.customer_id}&select=phone,address,gst_no`) : Promise.resolve([])
-      ]);
-      setSelOrder({...order, items: items||[], customerData: custArr?.[0]||{}});
+      const [items,custArr]=await Promise.all([sbGetOrderItems(order.id),order.customer_id?sbFetch(`crm_customers?id=eq.${order.customer_id}&select=phone,address,gst_no`):Promise.resolve([])]);
+      setSelOrder({...order,items:items||[],customerData:custArr?.[0]||{}});
       setModal("proforma");
     } catch(e){ toast$(e.message,true); }
   };
 
-  const advanceOrder = async(order, nextStatus) => {
-    const now = new Date().toISOString();
-    const patch = { status: nextStatus };
-    if(nextStatus==="confirmed")  { patch.confirmed_at  = now; patch.confirmed_by  = currentUser?.name||""; }
-    if(nextStatus==="dispatched") { patch.dispatched_at = now; patch.dispatched_by = currentUser?.name||""; }
-    if(nextStatus==="delivered")  { patch.delivered_at  = now; patch.delivered_by  = currentUser?.name||""; }
+  const advanceOrder = async(order,nextStatus) => {
+    const now=new Date().toISOString();
+    const patch={status:nextStatus};
+    if(nextStatus==="confirmed"){patch.confirmed_at=now;patch.confirmed_by=currentUser?.name||"";}
+    if(nextStatus==="dispatched"){patch.dispatched_at=now;patch.dispatched_by=currentUser?.name||"";}
+    if(nextStatus==="delivered"){patch.delivered_at=now;patch.delivered_by=currentUser?.name||"";}
     try {
-      await sbPatch("crm_orders", order.id, patch);
+      await sbPatch("crm_orders",order.id,patch);
       setORDERS(p=>p.map(x=>x.id===order.id?{...x,...patch}:x));
-      const msgs = {confirmed:"✅ Order Confirmed!",dispatched:"🚚 Dispatched!",delivered:"🎉 Delivered!"};
+      const msgs={confirmed:"✅ Confirmed!",dispatched:"🚚 Dispatched!",delivered:"🎉 Delivered!"};
       toast$(msgs[nextStatus]||"Updated ✓");
     } catch(e){ toast$(e.message,true); }
   };
 
   const updOrderStatus = async(id,st) => {
-    try {
-      const patch = {status:st};
-      await sbPatch("crm_orders",id,patch);
-      setORDERS(p=>p.map(x=>x.id===id?{...x,...patch}:x));
-      toast$("Status updated ✓");
-    }
+    try { await sbPatch("crm_orders",id,{status:st}); setORDERS(p=>p.map(x=>x.id===id?{...x,status:st}:x)); toast$("Updated ✓"); }
     catch(e){ toast$(e.message,true); }
   };
 
   const printProforma = () => {
-    const win = window.open("","_blank");
-    win.document.write(`
-      <html><head><title>Proforma - ${selOrder?.company}</title>
-      <style>
-        body{font-family:Arial,sans-serif;padding:24px;color:#000;}
-        h2{text-align:center;margin-bottom:4px;}
-        .sub{text-align:center;font-size:12px;margin-bottom:20px;color:#555;}
-        .info{display:flex;justify-content:space-between;margin-bottom:16px;font-size:13px;}
-        table{width:100%;border-collapse:collapse;font-size:12px;}
-        th{background:#f59e0b;padding:8px;text-align:left;border:1px solid #ddd;}
-        td{padding:7px 8px;border:1px solid #ddd;}
-        .total{text-align:right;margin-top:12px;font-size:14px;}
-        .total b{font-size:16px;}
-        .footer{margin-top:30px;font-size:11px;color:#888;border-top:1px solid #ddd;padding-top:10px;}
-      </style></head><body>
-      <h2>Shreeja Packaging Industries Pvt. Ltd.</h2>
-      <div class="sub">Mayur Food Packaging Products | Delhi<br/>PROFORMA INVOICE</div>
-      <div class="info">
-        <div>
-          <b>To:</b> ${selOrder?.company||""}<br/>
-          ${selOrder?.customer_name||""}
-          ${selOrder?.customerData?.phone ? `<br/>📞 ${selOrder.customerData.phone}` : ""}
-          ${selOrder?.customerData?.address ? `<br/>📍 ${selOrder.customerData.address}` : ""}
-          ${selOrder?.customerData?.gst_no ? `<br/>GST: <b>${selOrder.customerData.gst_no}</b>` : ""}
-        </div>
-        <div style="text-align:right"><b>Date:</b> ${fd(selOrder?.order_date)}<br/><b>Status:</b> ${selOrder?.status||"draft"}</div>
-      </div>
-      <table>
-        <thead><tr><th>#</th><th>SKU</th><th>Product</th><th>Packing</th><th>Cases</th><th>Price/Pcs (₹)</th><th>CTN Price (₹)</th><th>Amount (₹)</th></tr></thead>
-        <tbody>
-          ${(selOrder?.items||[]).map((item,idx)=>`
-            <tr>
-              <td>${idx+1}</td>
-              <td>${item.sku_code||""}</td>
-              <td>${item.product_name||""}</td>
-              <td>${item.packing||""}</td>
-              <td>${item.qty_cases||""}</td>
-              <td>${item.price_per_pcs||""}</td>
-              <td>${item.ctn_price||""}</td>
-              <td><b>₹${Number(item.amount||0).toLocaleString("en-IN")}</b></td>
-            </tr>`).join("")}
-        </tbody>
-      </table>
-      <div class="total">
-        Subtotal: ₹${Number(selOrder?.items?.reduce((s,i)=>s+(Number(i.amount)||0),0)||0).toLocaleString("en-IN")}<br/>
-        ${selOrder?.epr_applied ? `EPR @1%: ₹${Math.round((selOrder?.items?.reduce((s,i)=>s+(Number(i.amount)||0),0)||0)*0.01).toLocaleString("en-IN")}<br/>` : ""}
-        <b>Total: ₹${Number(selOrder?.total_amount||0).toLocaleString("en-IN")}</b>
-      </div>
-      ${selOrder?.notes?`<div style="margin-top:12px;font-size:12px;"><b>Notes:</b> ${selOrder.notes}</div>`:""}
-      <div class="footer">Payment Terms: As agreed | This is a computer generated proforma invoice.</div>
-      </body></html>`);
-    win.document.close();
-    win.print();
+    const win=window.open("","_blank");
+    const subtotal=selOrder?.items?.reduce((s,i)=>s+(Number(i.amount)||0),0)||0;
+    const epr=selOrder?.epr_applied?Math.round(subtotal*0.01):0;
+    const gst=selOrder?.gst_type==="including"?0:Math.round(subtotal*0.18);
+    win.document.write(`<html><head><title>Proforma - ${selOrder?.company}</title>
+    <style>body{font-family:Arial,sans-serif;padding:24px;color:#000;}h2{text-align:center;margin-bottom:4px;}.sub{text-align:center;font-size:12px;margin-bottom:20px;color:#555;}.info{display:flex;justify-content:space-between;margin-bottom:16px;font-size:13px;}table{width:100%;border-collapse:collapse;font-size:12px;}th{background:#f59e0b;padding:8px;text-align:left;border:1px solid #ddd;}td{padding:7px 8px;border:1px solid #ddd;}.total{text-align:right;margin-top:12px;font-size:14px;}.footer{margin-top:30px;font-size:11px;color:#888;border-top:1px solid #ddd;padding-top:10px;}</style></head><body>
+    <h2>Shreeja Packaging Industries Pvt. Ltd.</h2>
+    <div class="sub">Mayur Food Packaging Products | Delhi<br/>PROFORMA INVOICE</div>
+    <div class="info">
+      <div><b>To:</b> ${selOrder?.company||""}<br/>${selOrder?.customer_name||""}${selOrder?.customerData?.phone?`<br/>📞 ${selOrder.customerData.phone}`:""}${selOrder?.customerData?.address?`<br/>📍 ${selOrder.customerData.address}`:""}${selOrder?.customerData?.gst_no?`<br/>GST: <b>${selOrder.customerData.gst_no}</b>`:""}</div>
+      <div style="text-align:right"><b>Date:</b> ${fd(selOrder?.order_date)}<br/><b>Payment:</b> ${selOrder?.payment_mode?.replace("_"," ")||""}</div>
+    </div>
+    <table><thead><tr><th>#</th><th>SKU</th><th>Product</th><th>Packing</th><th>Cases</th><th>Price/Pcs (₹)</th><th>CTN Price (₹)</th><th>Amount (₹)</th></tr></thead>
+    <tbody>${(selOrder?.items||[]).map((item,idx)=>`<tr><td>${idx+1}</td><td>${item.sku_code||""}</td><td>${item.product_name||""}</td><td>${item.packing||""}</td><td>${item.qty_cases||""}</td><td>${item.price_per_pcs||""}</td><td>${item.ctn_price||""}</td><td><b>₹${Number(item.amount||0).toLocaleString("en-IN")}</b></td></tr>`).join("")}</tbody></table>
+    <div class="total">Subtotal: ₹${subtotal.toLocaleString("en-IN")}<br/>${epr>0?`EPR @1%: ₹${epr.toLocaleString("en-IN")}<br/>`:""}${gst>0?`GST @18%: ₹${gst.toLocaleString("en-IN")}<br/>`:""}
+    <b>Total: ₹${(subtotal+epr+gst).toLocaleString("en-IN")}</b></div>
+    ${selOrder?.notes?`<div style="margin-top:12px;font-size:12px;"><b>Notes:</b> ${selOrder.notes}</div>`:""}
+    <div class="footer">Payment Terms: As agreed | Computer generated proforma invoice.</div>
+    </body></html>`);
+    win.document.close(); win.print();
   };
 
   if(loading) return (
@@ -354,24 +294,24 @@ export default function CRM({ currentUser, onLogout }) {
         <div className="card">
           <div className="sh"><div><div className="sh-t">⚡ Urgent Follow-ups</div><div className="sh-s">Overdue + Today</div></div><button className="btn btn-o btn-sm" onClick={()=>setView("followups")}>All →</button></div>
           {[...odFU,...tdFU].length===0
-            ? <div className="empty"><CheckCircle size={28} color="var(--ok)"/><p>Koi urgent nahi!</p></div>
-            : [...odFU,...tdFU].slice(0,4).map(i=>(
-                <div key={i.id} style={{display:"flex",gap:10,padding:"9px 0",borderBottom:"1px solid var(--bdr)"}}>
-                  <Av name={i.customer_name} size={34}/>
-                  <div style={{flex:1,minWidth:0}}>
-                    <div style={{display:"flex",justifyContent:"space-between"}}>
-                      <div style={{fontWeight:700,fontSize:12.5}}>{i.customer_name}</div>
-                      <span style={{fontSize:9.5,color:isOD(i.next_follow_up)?"#ef4444":"#f59e0b",fontWeight:800}}>{isOD(i.next_follow_up)?"🔴 OVERDUE":"🟡 TODAY"}</span>
-                    </div>
-                    <div style={{fontSize:10.5,color:"var(--mut)"}}>{i.company}</div>
-                    <div style={{fontSize:11,marginTop:3}}>{i.follow_up_note||i.note?.slice(0,55)+"..."}</div>
-                    <button className="btn btn-g btn-sm" style={{marginTop:5}} onClick={()=>markDone(i.id)}>✓ Done</button>
+            ?<div className="empty"><CheckCircle size={28} color="var(--ok)"/><p>Koi urgent nahi!</p></div>
+            :[...odFU,...tdFU].slice(0,4).map(i=>(
+              <div key={i.id} style={{display:"flex",gap:10,padding:"9px 0",borderBottom:"1px solid var(--bdr)"}}>
+                <Av name={i.customer_name} size={34}/>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{display:"flex",justifyContent:"space-between"}}>
+                    <div style={{fontWeight:700,fontSize:12.5}}>{i.customer_name}</div>
+                    <span style={{fontSize:9.5,color:isOD(i.next_follow_up)?"#ef4444":"#f59e0b",fontWeight:800}}>{isOD(i.next_follow_up)?"🔴 OVERDUE":"🟡 TODAY"}</span>
                   </div>
+                  <div style={{fontSize:10.5,color:"var(--mut)"}}>{i.company}</div>
+                  <div style={{fontSize:11,marginTop:3}}>{i.follow_up_note||i.note?.slice(0,55)+"..."}</div>
+                  <button className="btn btn-g btn-sm" style={{marginTop:5}} onClick={()=>markDone(i.id)}>✓ Done</button>
                 </div>
-              ))}
+              </div>
+            ))}
         </div>
         <div className="card">
-          <div className="sh"><div><div className="sh-t">📋 Recent Orders</div></div><button className="btn btn-o btn-sm" onClick={()=>setView("orders")}>All →</button></div>
+          <div className="sh"><div><div className="sh-t">📋 Recent Orders</div><div className="sh-s">Latest 20</div></div><button className="btn btn-o btn-sm" onClick={()=>{loadAllOrders();setView("orders");}}>All →</button></div>
           {ORDERS.length===0?<div className="empty"><p>Koi order nahi</p></div>
             :[...ORDERS].sort((a,b)=>new Date(b.order_date)-new Date(a.order_date)).slice(0,5).map(o=>(
               <div key={o.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 0",borderBottom:"1px solid var(--bdr)"}}>
@@ -412,21 +352,14 @@ export default function CRM({ currentUser, onLogout }) {
     </div>
   );
 
-  /* ── PRODUCTS MODULE ── */
+  /* ── PRODUCTS ── */
   const Products = () => {
     const list = PRODS.filter(p=>pCat==="all"||p.category===pCat).filter(p=>!q||[p.name,p.sku_code,p.category].some(v=>v?.toLowerCase().includes(q.toLowerCase())));
     return (
       <div>
-        <div className="sh">
-          <div><div className="sh-t">Product / SKU List</div><div className="sh-s">{PRODS.length} total SKUs</div></div>
-          <button className="btn btn-p" onClick={()=>{setForm({});setEditProd(null);setModal("aprod");}}><Plus size={13}/> Add SKU</button>
-        </div>
+        <div className="sh"><div><div className="sh-t">Product / SKU List</div><div className="sh-s">{PRODS.length} total SKUs</div></div><button className="btn btn-p" onClick={()=>{setForm({});setEditProd(null);setModal("aprod");}}><Plus size={13}/> Add SKU</button></div>
         <div className="tabs" style={{flexWrap:"wrap"}}>
-          {prodCats.map(t=>(
-            <div key={t} className={`tab ${pCat===t?"a":""}`} onClick={()=>setPCat(t)} style={{textTransform:"capitalize",fontSize:10.5}}>
-              {t} ({t==="all"?PRODS.length:PRODS.filter(p=>p.category===t).length})
-            </div>
-          ))}
+          {prodCats.map(t=><div key={t} className={`tab ${pCat===t?"a":""}`} onClick={()=>setPCat(t)} style={{textTransform:"capitalize",fontSize:10.5}}>{t} ({t==="all"?PRODS.length:PRODS.filter(p=>p.category===t).length})</div>)}
         </div>
         <div className="sr"><Search size={13} className="sr-ic"/><input className="inp" placeholder="Search SKU, product..." value={q} onChange={e=>setQ(e.target.value)}/></div>
         {list.length===0?<div className="card empty"><p>Koi product nahi</p></div>
@@ -440,11 +373,7 @@ export default function CRM({ currentUser, onLogout }) {
                 <td style={{fontSize:12,textAlign:"center"}}>{p.packing||"—"}</td>
                 <td style={{fontSize:13,fontWeight:700,color:"#10b981"}}>₹{p.price_per_pcs||0}</td>
                 <td style={{fontSize:13,fontWeight:700,color:"#60a5fa"}}>₹{p.ctn_price||0}</td>
-                <td>
-                  <button className="btn btn-o btn-sm" onClick={()=>{setEditProd(p);setForm({...p});setModal("aprod");}}>
-                    <Edit size={11}/>
-                  </button>
-                </td>
+                <td><button className="btn btn-o btn-sm" onClick={()=>{setEditProd(p);setForm({...p});setModal("aprod");}}><Edit size={11}/></button></td>
               </tr>
             ))}</tbody>
           </table></div></div>}
@@ -452,23 +381,21 @@ export default function CRM({ currentUser, onLogout }) {
     );
   };
 
-  /* ── ORDERS / PROFORMA ── */
+  /* ── ORDERS ── */
   const Orders = () => {
     const list = ORDERS.filter(o=>!q||[o.customer_name,o.company].some(v=>v?.toLowerCase().includes(q.toLowerCase())));
-    const ts = (dt) => dt ? new Date(dt).toLocaleString("en-IN",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"}) : null;
+    const ts = dt => dt?new Date(dt).toLocaleString("en-IN",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"}):null;
 
-    const PipelineStep = ({done, label, by, at, col}) => (
+    const PipelineStep = ({done,label,by,at,col}) => (
       <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2,minWidth:70}}>
-        <div style={{width:22,height:22,borderRadius:"50%",background:done?col:"var(--bdr)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,color:done?"#fff":"var(--mut)",fontWeight:700,flexShrink:0}}>
-          {done?"✓":""}
-        </div>
+        <div style={{width:22,height:22,borderRadius:"50%",background:done?col:"var(--bdr)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,color:done?"#fff":"var(--mut)",fontWeight:700,flexShrink:0}}>{done?"✓":""}</div>
         <div style={{fontSize:9,fontWeight:700,color:done?col:"var(--mut)",textTransform:"uppercase",letterSpacing:".05em"}}>{label}</div>
-        {done && by && <div style={{fontSize:8.5,color:"var(--mut)",textAlign:"center"}}>{by}</div>}
-        {done && at && <div style={{fontSize:8,color:"var(--mut)",textAlign:"center"}}>{ts(at)}</div>}
+        {done&&by&&<div style={{fontSize:8.5,color:"var(--mut)",textAlign:"center"}}>{by}</div>}
+        {done&&at&&<div style={{fontSize:8,color:"var(--mut)",textAlign:"center"}}>{ts(at)}</div>}
       </div>
     );
 
-    const nextStep = (status) => {
+    const nextStep = status => {
       if(status==="draft") return {label:"Confirm",next:"confirmed",col:"#10b981"};
       if(status==="confirmed") return {label:"Dispatch",next:"dispatched",col:"#f59e0b"};
       if(status==="dispatched") return {label:"Delivered",next:"delivered",col:"#3b82f6"};
@@ -478,36 +405,31 @@ export default function CRM({ currentUser, onLogout }) {
     return (
       <div>
         <div className="sh">
-          <div><div className="sh-t">Orders & Proforma</div><div className="sh-s">{ORDERS.length} total</div></div>
-          <button className="btn btn-p" onClick={()=>{setForm({order_date:new Date().toISOString().split("T")[0], epr:false});setOrderItems([]);setModal("aorder");}}><Plus size={13}/> New Order</button>
+          <div>
+            <div className="sh-t">Orders & Proforma</div>
+            <div className="sh-s">{allOrdersLoaded?ORDERS.length:"20 recent"}  orders {!allOrdersLoaded&&<button className="btn btn-o btn-sm" style={{marginLeft:6}} onClick={loadAllOrders}>Load All</button>}</div>
+          </div>
+          <button className="btn btn-p" onClick={()=>{setForm({order_date:new Date().toISOString().split("T")[0],epr:false});setOrderItems([]);setModal("aorder");}}><Plus size={13}/> New Order</button>
         </div>
         <div className="sr"><Search size={13} className="sr-ic"/><input className="inp" placeholder="Search customer..." value={q} onChange={e=>setQ(e.target.value)}/></div>
-        {list.length===0
-          ?<div className="card empty"><p>Koi order nahi</p></div>
+        {list.length===0?<div className="card empty"><p>Koi order nahi</p></div>
           :<div style={{display:"flex",flexDirection:"column",gap:10}}>
             {list.map(o=>{
-              const ns = nextStep(o.status);
+              const ns=nextStep(o.status);
               return (
                 <div key={o.id} className="card" style={{padding:"14px 16px",borderLeft:`3px solid ${o.status==="delivered"?"#10b981":o.status==="dispatched"?"#f59e0b":o.status==="confirmed"?"#a78bfa":"var(--bdr)"}`}}>
-                  {/* Header */}
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:12}}>
                     <div>
                       <div style={{fontWeight:700,fontSize:13.5}}>{o.company}</div>
                       <div style={{fontSize:10.5,color:"var(--mut)",marginTop:2}}>{fd(o.order_date)} · {o.created_by} · {o.payment_mode?.replace("_"," ")}</div>
-                    {o.items_summary && <div style={{fontSize:11,color:"var(--txt)",marginTop:4,padding:"4px 8px",background:"var(--card2)",borderRadius:6,display:"inline-block"}}>{o.items_summary}</div>}
+                      {o.items_summary&&<div style={{fontSize:11,color:"var(--txt)",marginTop:4,padding:"4px 8px",background:"var(--card2)",borderRadius:6,display:"inline-block"}}>{o.items_summary}</div>}
                     </div>
                     <div style={{display:"flex",gap:6,alignItems:"center"}}>
                       <div style={{fontSize:15,fontWeight:800,color:"#10b981"}}>{fr(o.total_amount)}</div>
-                      <button className="btn btn-o btn-sm" onClick={async()=>{
-                        setForm({...o, epr: !!o.epr_applied});
-                        try { const items = await sbGetOrderItems(o.id); setOrderItems(items||[]); } catch(e){ setOrderItems([]); }
-                        setModal("editorder");
-                      }}>✏️</button>
+                      <button className="btn btn-o btn-sm" onClick={async()=>{setForm({...o,epr:!!o.epr_applied});try{const items=await sbGetOrderItems(o.id);setOrderItems(items||[]);}catch(e){setOrderItems([]);}setModal("editorder");}}>✏️</button>
                       <button className="btn btn-o btn-sm" onClick={()=>openOrder(o)}><Printer size={11}/></button>
                     </div>
                   </div>
-
-                  {/* Pipeline */}
                   <div style={{display:"flex",alignItems:"flex-start",gap:0,marginBottom:12}}>
                     <PipelineStep done={true} label="Draft" by={o.created_by} at={o.order_date} col="#60a5fa"/>
                     <div style={{flex:1,height:2,background:["confirmed","dispatched","delivered"].includes(o.status)?"#a78bfa":"var(--bdr)",marginTop:10,alignSelf:"flex-start"}}/>
@@ -517,19 +439,11 @@ export default function CRM({ currentUser, onLogout }) {
                     <div style={{flex:1,height:2,background:o.status==="delivered"?"#10b981":"var(--bdr)",marginTop:10,alignSelf:"flex-start"}}/>
                     <PipelineStep done={o.status==="delivered"} label="Delivered" by={o.delivered_by||""} at={o.delivered_at} col="#10b981"/>
                   </div>
-
-                  {/* Next action button */}
                   <div style={{display:"flex",gap:8,alignItems:"center"}}>
-                    {ns && o.status!=="cancelled" && (
-                      <button className="btn btn-sm" style={{background:`${ns.col}20`,border:`1px solid ${ns.col}40`,color:ns.col,fontWeight:700}} onClick={()=>advanceOrder(o,ns.next)}>
-                        → {ns.label}
-                      </button>
-                    )}
-                    {o.status==="delivered" && <span style={{fontSize:11,color:"var(--ok)",fontWeight:700}}>🎉 Order Complete</span>}
-                    {o.status!=="cancelled"&&o.status!=="delivered" && (
-                      <button className="btn btn-sm" style={{background:"rgba(239,68,68,.08)",border:"1px solid rgba(239,68,68,.2)",color:"var(--err)",fontSize:10}} onClick={()=>updOrderStatus(o.id,"cancelled")}>✕ Cancel</button>
-                    )}
-                    {o.notes && <span style={{fontSize:10.5,color:"var(--mut)",marginLeft:"auto",maxWidth:200,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",display:"inline-block"}} title={o.notes}>📝 {o.notes.slice(0,40)}{o.notes.length>40?"...":""}</span>}
+                    {ns&&o.status!=="cancelled"&&<button className="btn btn-sm" style={{background:`${ns.col}20`,border:`1px solid ${ns.col}40`,color:ns.col,fontWeight:700}} onClick={()=>advanceOrder(o,ns.next)}>→ {ns.label}</button>}
+                    {o.status==="delivered"&&<span style={{fontSize:11,color:"var(--ok)",fontWeight:700}}>🎉 Order Complete</span>}
+                    {o.status!=="cancelled"&&o.status!=="delivered"&&<button className="btn btn-sm" style={{background:"rgba(239,68,68,.08)",border:"1px solid rgba(239,68,68,.2)",color:"var(--err)",fontSize:10}} onClick={()=>updOrderStatus(o.id,"cancelled")}>✕ Cancel</button>}
+                    {o.notes&&<span style={{fontSize:10.5,color:"var(--mut)",marginLeft:"auto",maxWidth:200,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",display:"inline-block"}} title={o.notes}>📝 {o.notes.slice(0,40)}{o.notes.length>40?"...":""}</span>}
                   </div>
                 </div>
               );
@@ -553,8 +467,7 @@ export default function CRM({ currentUser, onLogout }) {
         </div>
         <div className="tabs">{[["all","All"],["crm","CRM"],["nbd","NBD"]].map(([id,l])=><div key={id} className={`tab ${cTab===id?"a":""}`} onClick={()=>setCTab(id)}>{l}</div>)}</div>
         <div className="sr"><Search size={13} className="sr-ic"/><input className="inp" placeholder="Search..." value={q} onChange={e=>setQ(e.target.value)}/></div>
-        {list.length===0
-          ?<div className="card empty"><p>Koi customer nahi</p></div>
+        {list.length===0?<div className="card empty"><p>Koi customer nahi</p></div>
           :<div className="card" style={{padding:0}}><div className="tw"><table>
             <thead><tr><th>Customer</th><th>Type</th><th>Segment</th><th>Assigned</th><th>Last Interaction</th><th>Last Word</th><th>Follow-up</th><th>Status</th><th></th></tr></thead>
             <tbody>{list.map(c=>{
@@ -603,7 +516,7 @@ export default function CRM({ currentUser, onLogout }) {
   /* ── FOLLOW-UPS ── */
   const Followups = () => {
     const FuCard = ({i}) => {
-      const od=isOD(i.next_follow_up), td=isTD(i.next_follow_up);
+      const od=isOD(i.next_follow_up),td=isTD(i.next_follow_up);
       return (
         <div className={`fuc ${od?"od":td?"td":"up"}`}>
           <div style={{display:"flex",gap:10,alignItems:"flex-start"}}>
@@ -624,8 +537,8 @@ export default function CRM({ currentUser, onLogout }) {
         </div>
       );
     };
-    const all = I.filter(i=>i.next_follow_up).sort((a,b)=>new Date(a.next_follow_up)-new Date(b.next_follow_up));
-    const flt = fn => all.filter(i=>fn(i.next_follow_up)&&(!q||i.customer_name?.toLowerCase().includes(q.toLowerCase())));
+    const all=I.filter(i=>i.next_follow_up).sort((a,b)=>new Date(a.next_follow_up)-new Date(b.next_follow_up));
+    const flt=fn=>all.filter(i=>fn(i.next_follow_up)&&(!q||i.customer_name?.toLowerCase().includes(q.toLowerCase())));
     return (
       <div>
         <div className="sh"><div><div className="sh-t">Follow-up Tracker</div><div className="sh-s">{urgN} urgent</div></div><button className="btn btn-p" onClick={()=>{setForm({});setModal("ainter");}}><Plus size={13}/> Add</button></div>
@@ -640,7 +553,7 @@ export default function CRM({ currentUser, onLogout }) {
 
   /* ── SAMPLES ── */
   const Samples = () => {
-    const list = S.filter(s=>sTab==="all"||s.status===sTab).filter(s=>!q||[s.customer_name,s.company,s.product].some(v=>v?.toLowerCase().includes(q.toLowerCase())));
+    const list=S.filter(s=>sTab==="all"||s.status===sTab).filter(s=>!q||[s.customer_name,s.company,s.product].some(v=>v?.toLowerCase().includes(q.toLowerCase())));
     return (
       <div>
         <div className="sh"><div><div className="sh-t">Sample Tracker</div><div className="sh-s">{S.filter(s=>["pending","sent"].includes(s.status)).length} pending</div></div><button className="btn btn-p" onClick={()=>{setForm({});setModal("asamp");}}><Plus size={13}/> Add</button></div>
@@ -663,9 +576,9 @@ export default function CRM({ currentUser, onLogout }) {
 
   /* ── PAYMENTS ── */
   const Payments = () => {
-    const list = P.filter(p=>!q||[p.customer_name,p.company].some(v=>v?.toLowerCase().includes(q.toLowerCase())));
-    const totO = P.reduce((s,p)=>s+(Number(p.outstanding)||0),0);
-    const totOD= P.reduce((s,p)=>s+(Number(p.overdue)||0),0);
+    const list=P.filter(p=>!q||[p.customer_name,p.company].some(v=>v?.toLowerCase().includes(q.toLowerCase())));
+    const totO=P.reduce((s,p)=>s+(Number(p.outstanding)||0),0);
+    const totOD=P.reduce((s,p)=>s+(Number(p.overdue)||0),0);
     return (
       <div>
         <div className="sh"><div><div className="sh-t">Payment Structure</div></div><button className="btn btn-p" onClick={()=>{setForm({});setModal("apay");}}><Plus size={13}/> Add/Update</button></div>
@@ -692,6 +605,289 @@ export default function CRM({ currentUser, onLogout }) {
     );
   };
 
+  /* ── REPORTS ── */
+  const Reports = () => {
+    const [rTab,setRTab]=useState("sales");
+    const [rMonth,setRMonth]=useState(new Date().getMonth()+1);
+    const [rYear,setRYear]=useState(new Date().getFullYear());
+    const months=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+    const SALES_PERSONS=[...new Set(C.map(c=>c.assigned_to).filter(Boolean))];
+    const monthlyData=Array.from({length:12},(_,mi)=>{
+      const ords=ORDERS.filter(o=>{const d=new Date(o.order_date);return d.getFullYear()===rYear&&d.getMonth()===mi;});
+      return{month:months[mi],orders:ords.length,revenue:ords.reduce((s,o)=>s+(Number(o.total_amount)||0),0)};
+    });
+    const partyWise=C.map(c=>{
+      const ords=ORDERS.filter(o=>o.customer_id===c.id||o.company===c.company);
+      const rev=ords.reduce((s,o)=>s+(Number(o.total_amount)||0),0);
+      return{...c,orderCount:ords.length,revenue:rev,lastOrder:ords[0]?.order_date};
+    }).filter(c=>c.orderCount>0).sort((a,b)=>b.revenue-a.revenue);
+    const topCust=partyWise.slice(0,10);
+    const nbdTotal=C.filter(c=>c.type==="nbd").length;
+    const nbdConverted=C.filter(c=>c.type==="crm").length;
+    const nbdWithOrder=ORDERS.map(o=>o.company).filter((v,i,a)=>a.indexOf(v)===i).length;
+    const spPerf=SALES_PERSONS.map(sp=>{
+      const myCust=C.filter(c=>c.assigned_to===sp);
+      const myOrd=ORDERS.filter(o=>o.created_by===sp);
+      const myRev=myOrd.reduce((s,o)=>s+(Number(o.total_amount)||0),0);
+      const myInter=I.filter(i=>i.done_by===sp).length;
+      const tgt=TARGETS.find(t=>t.user_name===sp&&t.month===String(rMonth).padStart(2,"0")&&t.year===rYear);
+      return{name:sp,customers:myCust.length,orders:myOrd.length,revenue:myRev,interactions:myInter,target:Number(tgt?.target_amount||0)};
+    });
+    const visitFreq=C.map(c=>{
+      const visits=I.filter(i=>i.customer_id===c.id);
+      const lastVisit=visits[0]?.created_at;
+      const daysSince=lastVisit?Math.floor((new Date()-new Date(lastVisit))/(1000*60*60*24)):999;
+      return{...c,visits:visits.length,lastVisit,daysSince};
+    }).sort((a,b)=>b.daysSince-a.daysSince);
+
+    return (
+      <div>
+        <div className="sh">
+          <div><div className="sh-t">Reports & Analytics</div></div>
+          <div style={{display:"flex",gap:8,alignItems:"center"}}>
+            <select className="inp" style={{width:"auto",padding:"5px 10px",fontSize:11}} value={rMonth} onChange={e=>setRMonth(Number(e.target.value))}>
+              {months.map((m,i)=><option key={i} value={i+1}>{m}</option>)}
+            </select>
+            <select className="inp" style={{width:"auto",padding:"5px 10px",fontSize:11}} value={rYear} onChange={e=>setRYear(Number(e.target.value))}>
+              {[2025,2026,2027].map(y=><option key={y} value={y}>{y}</option>)}
+            </select>
+            {!allOrdersLoaded&&<button className="btn btn-o btn-sm" onClick={loadAllOrders}>Load All Orders</button>}
+          </div>
+        </div>
+        <div className="tabs">
+          {[["sales","📈 Sales"],["party","🏢 Party-wise"],["top","🏆 Top 10"],["nbd","🎯 NBD"],["sp","👤 Salesperson"],["visit","📍 Visit Freq"]].map(([id,lbl])=>(
+            <div key={id} className={`tab ${rTab===id?"a":""}`} onClick={()=>setRTab(id)}>{lbl}</div>
+          ))}
+        </div>
+
+        {rTab==="sales"&&(
+          <div>
+            <div className="g3" style={{marginBottom:18}}>
+              {[
+                {lbl:"Total Revenue "+rYear,val:fr(ORDERS.filter(o=>new Date(o.order_date).getFullYear()===rYear).reduce((s,o)=>s+(Number(o.total_amount)||0),0)),col:"#10b981"},
+                {lbl:"Total Orders "+rYear,val:ORDERS.filter(o=>new Date(o.order_date).getFullYear()===rYear).length+" orders",col:"#60a5fa"},
+                {lbl:"Delivered Orders",val:ORDERS.filter(o=>o.status==="delivered").length+" orders",col:"#a78bfa"},
+              ].map(c=><div key={c.lbl} className="card" style={{borderLeft:`3px solid ${c.col}`}}><div style={{fontSize:10.5,color:"var(--mut)",marginBottom:4}}>{c.lbl}</div><div style={{fontSize:20,fontWeight:800,fontFamily:"'Sora',sans-serif",color:c.col}}>{c.val}</div></div>)}
+            </div>
+            <div className="card">
+              <div style={{fontSize:11,fontWeight:800,color:"var(--mut)",textTransform:"uppercase",letterSpacing:".08em",marginBottom:14}}>Monthly Sales {rYear}</div>
+              {monthlyData.map((m,i)=>{
+                const maxRev=Math.max(...monthlyData.map(x=>x.revenue),1);
+                const pct=(m.revenue/maxRev)*100;
+                return (
+                  <div key={i} style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
+                    <div style={{width:30,fontSize:10.5,color:"var(--mut)",fontWeight:700}}>{m.month}</div>
+                    <div style={{flex:1,height:20,background:"var(--card2)",borderRadius:4,overflow:"hidden"}}>
+                      <div style={{height:"100%",width:pct+"%",background:"linear-gradient(90deg,#10b981,#34d399)",borderRadius:4,minWidth:m.revenue>0?4:0}}/>
+                    </div>
+                    <div style={{width:80,fontSize:11,fontWeight:700,textAlign:"right",color:m.revenue>0?"#10b981":"var(--mut)"}}>{fr(m.revenue)}</div>
+                    <div style={{width:50,fontSize:10,color:"var(--mut)",textAlign:"right"}}>{m.orders} ord</div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {rTab==="party"&&(
+          <div className="card" style={{padding:0}}><div className="tw"><table>
+            <thead><tr><th>Party</th><th>Type</th><th>City</th><th>Assigned</th><th>Orders</th><th>Revenue</th><th>Last Order</th></tr></thead>
+            <tbody>{partyWise.map(c=>(
+              <tr key={c.id} onClick={()=>openC(c.id)} style={{cursor:"pointer"}}>
+                <td><div style={{fontWeight:700,fontSize:12.5}}>{c.company}</div><div style={{fontSize:10.5,color:"var(--mut)"}}>{c.name}</div></td>
+                <td><span style={{fontSize:9.5,fontWeight:800,padding:"2px 8px",borderRadius:12,background:c.type==="crm"?"rgba(16,185,129,.1)":"rgba(59,130,246,.1)",color:c.type==="crm"?"#10b981":"#60a5fa"}}>{c.type?.toUpperCase()}</span></td>
+                <td style={{fontSize:11,color:"var(--mut)"}}>{c.city||"—"}</td>
+                <td style={{fontSize:11.5}}>{c.assigned_to||"—"}</td>
+                <td style={{textAlign:"center",fontWeight:700}}>{c.orderCount}</td>
+                <td style={{fontWeight:800,color:"#10b981",fontSize:13}}>{fr(c.revenue)}</td>
+                <td style={{fontSize:11,color:"var(--mut)"}}>{fd(c.lastOrder)}</td>
+              </tr>
+            ))}</tbody>
+          </table></div></div>
+        )}
+
+        {rTab==="top"&&(
+          <div>
+            {topCust.map((c,i)=>{
+              const maxRev=topCust[0]?.revenue||1;
+              const pct=(c.revenue/maxRev)*100;
+              return (
+                <div key={c.id} className="card" style={{marginBottom:8,padding:"12px 16px",cursor:"pointer"}} onClick={()=>openC(c.id)}>
+                  <div style={{display:"flex",alignItems:"center",gap:12}}>
+                    <div style={{width:28,height:28,borderRadius:"50%",background:i<3?"#f59e0b":"var(--bdr)",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:800,fontSize:12,color:i<3?"#000":"var(--mut)",flexShrink:0}}>#{i+1}</div>
+                    <div style={{flex:1}}>
+                      <div style={{display:"flex",justifyContent:"space-between",marginBottom:5}}>
+                        <div><div style={{fontWeight:700,fontSize:13}}>{c.company}</div><div style={{fontSize:10.5,color:"var(--mut)"}}>{c.city} · {c.orderCount} orders · {c.assigned_to}</div></div>
+                        <div style={{fontWeight:800,fontSize:16,color:"#10b981",fontFamily:"'Sora',sans-serif"}}>{fr(c.revenue)}</div>
+                      </div>
+                      <div style={{height:6,background:"var(--card2)",borderRadius:3,overflow:"hidden"}}>
+                        <div style={{height:"100%",width:pct+"%",background:"linear-gradient(90deg,#10b981,#34d399)",borderRadius:3}}/>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {rTab==="nbd"&&(
+          <div>
+            <div className="g3" style={{marginBottom:18}}>
+              {[{lbl:"Total NBD Prospects",val:nbdTotal,col:"#60a5fa",ic:"🎯"},{lbl:"Converted to CRM",val:nbdConverted,col:"#10b981",ic:"✅"},{lbl:"Parties with Orders",val:nbdWithOrder,col:"#a78bfa",ic:"🧾"}].map(c=>(
+                <div key={c.lbl} className="card" style={{borderLeft:`3px solid ${c.col}`,textAlign:"center"}}>
+                  <div style={{fontSize:24,marginBottom:4}}>{c.ic}</div>
+                  <div style={{fontSize:28,fontWeight:800,color:c.col,fontFamily:"'Sora',sans-serif"}}>{c.val}</div>
+                  <div style={{fontSize:10.5,color:"var(--mut)"}}>{c.lbl}</div>
+                </div>
+              ))}
+            </div>
+            <div className="card">
+              <div style={{fontSize:11,fontWeight:800,color:"var(--mut)",textTransform:"uppercase",letterSpacing:".08em",marginBottom:12}}>Conversion Funnel</div>
+              {[
+                {lbl:"Total Prospects Contacted",val:C.filter(c=>c.type==="nbd").length,col:"#60a5fa",tot:C.length},
+                {lbl:"Had Interactions",val:[...new Set(I.map(i=>i.customer_id))].length,col:"#a78bfa",tot:C.length},
+                {lbl:"Gave Enquiry",val:E.length,col:"#f59e0b",tot:C.length},
+                {lbl:"Placed Order",val:nbdWithOrder,col:"#10b981",tot:C.length},
+              ].map(s=>(
+                <div key={s.lbl} style={{marginBottom:12}}>
+                  <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
+                    <span style={{fontSize:12}}>{s.lbl}</span>
+                    <span style={{fontSize:12,fontWeight:700,color:s.col}}>{s.val}</span>
+                  </div>
+                  <div style={{height:8,background:"var(--card2)",borderRadius:4,overflow:"hidden"}}>
+                    <div style={{height:"100%",width:Math.min((s.val/Math.max(s.tot,1))*100,100)+"%",background:s.col,borderRadius:4}}/>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {rTab==="sp"&&(
+          <div className="card" style={{padding:0}}><div className="tw"><table>
+            <thead><tr><th>Salesperson</th><th>Customers</th><th>Interactions</th><th>Orders</th><th>Revenue</th><th>Target</th><th>Achievement</th></tr></thead>
+            <tbody>{spPerf.map(sp=>{
+              const achNum=sp.target>0?(sp.revenue/sp.target)*100:0;
+              return (
+                <tr key={sp.name}>
+                  <td><div style={{display:"flex",gap:8,alignItems:"center"}}><Av name={sp.name} size={28}/><div style={{fontWeight:700,fontSize:12.5}}>{sp.name}</div></div></td>
+                  <td style={{textAlign:"center",fontWeight:700}}>{sp.customers}</td>
+                  <td style={{textAlign:"center",fontWeight:700}}>{sp.interactions}</td>
+                  <td style={{textAlign:"center",fontWeight:700}}>{sp.orders}</td>
+                  <td style={{fontWeight:800,color:"#10b981"}}>{fr(sp.revenue)}</td>
+                  <td style={{color:"var(--mut)"}}>{sp.target>0?fr(sp.target):"—"}</td>
+                  <td>{sp.target>0?(<div><div style={{fontSize:12,fontWeight:800,color:achNum>=100?"#10b981":achNum>=70?"#f59e0b":"#ef4444"}}>{achNum.toFixed(1)}%</div><div style={{height:4,background:"var(--card2)",borderRadius:2,marginTop:3,width:80,overflow:"hidden"}}><div style={{height:"100%",width:Math.min(achNum,100)+"%",background:achNum>=100?"#10b981":achNum>=70?"#f59e0b":"#ef4444",borderRadius:2}}/></div></div>):<span style={{color:"var(--mut)",fontSize:11}}>No target</span>}</td>
+                </tr>
+              );
+            })}</tbody>
+          </table></div></div>
+        )}
+
+        {rTab==="visit"&&(
+          <div className="card" style={{padding:0}}><div className="tw"><table>
+            <thead><tr><th>Party</th><th>City</th><th>Assigned</th><th>Visits</th><th>Last Visit</th><th>Days Since</th><th>Alert</th></tr></thead>
+            <tbody>{visitFreq.map(c=>(
+              <tr key={c.id} onClick={()=>openC(c.id)} style={{cursor:"pointer"}}>
+                <td><div style={{fontWeight:700,fontSize:12.5}}>{c.company}</div><div style={{fontSize:10.5,color:"var(--mut)"}}>{c.name}</div></td>
+                <td style={{fontSize:11,color:"var(--mut)"}}>{c.city||"—"}</td>
+                <td style={{fontSize:11.5}}>{c.assigned_to||"—"}</td>
+                <td style={{textAlign:"center",fontWeight:700}}>{c.visits}</td>
+                <td style={{fontSize:11}}>{fd(c.lastVisit)}</td>
+                <td style={{fontSize:12,fontWeight:700,color:c.daysSince>30?"#ef4444":c.daysSince>14?"#f59e0b":"#10b981"}}>{c.daysSince<999?c.daysSince+" days":"Never"}</td>
+                <td>{c.daysSince>30?<span style={{fontSize:9.5,background:"rgba(239,68,68,.1)",color:"#ef4444",padding:"2px 8px",borderRadius:12,fontWeight:700}}>🔴 Overdue</span>:c.daysSince>14?<span style={{fontSize:9.5,background:"rgba(245,158,11,.1)",color:"#f59e0b",padding:"2px 8px",borderRadius:12,fontWeight:700}}>🟡 Due Soon</span>:<span style={{fontSize:9.5,background:"rgba(16,185,129,.1)",color:"#10b981",padding:"2px 8px",borderRadius:12,fontWeight:700}}>✅ OK</span>}</td>
+              </tr>
+            ))}</tbody>
+          </table></div></div>
+        )}
+      </div>
+    );
+  };
+
+  /* ── TARGETS ── */
+  const Targets = () => {
+    const [tForm,setTForm]=useState({});
+    const [tSaving,setTSaving]=useState(false);
+    const months=[{v:"01",l:"January"},{v:"02",l:"February"},{v:"03",l:"March"},{v:"04",l:"April"},{v:"05",l:"May"},{v:"06",l:"June"},{v:"07",l:"July"},{v:"08",l:"August"},{v:"09",l:"September"},{v:"10",l:"October"},{v:"11",l:"November"},{v:"12",l:"December"}];
+    const SALES_PERSONS=[...new Set(C.map(c=>c.assigned_to).filter(Boolean))];
+    const curMonth=String(new Date().getMonth()+1).padStart(2,"0");
+    const curYear=new Date().getFullYear();
+    const getAch=(name,month,year)=>ORDERS.filter(o=>o.created_by===name&&new Date(o.order_date).getMonth()===Number(month)-1&&new Date(o.order_date).getFullYear()===year).reduce((s,o)=>s+(Number(o.total_amount)||0),0);
+    const getAchCases=(name,month,year)=>ORDERS.filter(o=>o.created_by===name&&new Date(o.order_date).getMonth()===Number(month)-1&&new Date(o.order_date).getFullYear()===year).reduce((s,o)=>s+(Number(o.total_cases)||0),0);
+    const saveTarget=async()=>{
+      if(!tForm.user_name||!tForm.month||!tForm.year) return toast$("Salesperson, Month, Year bharo",true);
+      if(!tForm.target_amount&&!tForm.target_cases) return toast$("Amount ya Cases target bharo",true);
+      setTSaving(true);
+      try {
+        const ex=TARGETS.find(t=>t.user_name===tForm.user_name&&t.month===tForm.month&&t.year===Number(tForm.year));
+        const payload={target_amount:Number(tForm.target_amount||0),target_cases:Number(tForm.target_cases||0)};
+        if(ex){
+          await sbPatch("crm_targets",ex.id,payload);
+          setTARGETS(p=>p.map(x=>x.id===ex.id?{...x,...payload}:x));
+        } else {
+          const r=await sbInsert("crm_targets",{user_name:tForm.user_name,month:tForm.month,year:Number(tForm.year),...payload});
+          setTARGETS(p=>[r[0],...p]);
+        }
+        toast$("Target set ✓"); setTForm({});
+      } catch(e){toast$("Error: "+e.message,true);}
+      setTSaving(false);
+    };
+    return (
+      <div>
+        <div className="sh"><div><div className="sh-t">Target vs Achievement</div></div></div>
+        <div className="card" style={{marginBottom:18}}>
+          <div style={{fontSize:11,fontWeight:800,color:"var(--mut)",textTransform:"uppercase",letterSpacing:".08em",marginBottom:14}}>🎯 New Target Set Karo</div>
+          <div style={{display:"grid",gridTemplateColumns:"1.3fr 1fr .8fr 1fr 1fr auto",gap:10}}>
+            <div><label className="lbl">Salesperson</label><select className="inp" value={tForm.user_name||""} onChange={e=>setTForm(p=>({...p,user_name:e.target.value}))}><option value="">-- Select --</option>{SALES_PERSONS.map(s=><option key={s} value={s}>{s}</option>)}</select></div>
+            <div><label className="lbl">Month</label><select className="inp" value={tForm.month||""} onChange={e=>setTForm(p=>({...p,month:e.target.value}))}><option value="">-- Month --</option>{months.map(m=><option key={m.v} value={m.v}>{m.l}</option>)}</select></div>
+            <div><label className="lbl">Year</label><select className="inp" value={tForm.year||curYear} onChange={e=>setTForm(p=>({...p,year:e.target.value}))}>{[2025,2026,2027].map(y=><option key={y} value={y}>{y}</option>)}</select></div>
+            <div><label className="lbl">Target (₹)</label><input type="number" className="inp" placeholder="500000" value={tForm.target_amount||""} onChange={e=>setTForm(p=>({...p,target_amount:e.target.value}))}/></div>
+            <div><label className="lbl">Target Cases</label><input type="number" className="inp" placeholder="100" value={tForm.target_cases||""} onChange={e=>setTForm(p=>({...p,target_cases:e.target.value}))}/></div>
+            <div style={{display:"flex",alignItems:"flex-end"}}><button className="btn btn-p" disabled={tSaving} onClick={saveTarget}>{tSaving?<Spin/>:"Set"}</button></div>
+          </div>
+        </div>
+        <div style={{marginBottom:18}}>
+          <div style={{fontSize:11,fontWeight:800,color:"var(--mut)",textTransform:"uppercase",letterSpacing:".08em",marginBottom:12}}>This Month — {months.find(m=>m.v===curMonth)?.l} {curYear}</div>
+          <div style={{display:"flex",flexDirection:"column",gap:10}}>
+            {SALES_PERSONS.map(sp=>{
+              const tgt=TARGETS.find(t=>t.user_name===sp&&t.month===curMonth&&t.year===curYear);
+              const ach=getAch(sp,curMonth,curYear);
+              const achCases=getAchCases(sp,curMonth,curYear);
+              const tgtAmt=Number(tgt?.target_amount||0);
+              const tgtCases=Number(tgt?.target_cases||0);
+              const pct=tgtAmt>0?Math.min((ach/tgtAmt)*100,100):0;
+              const pctCases=tgtCases>0?Math.min((achCases/tgtCases)*100,100):0;
+              const gap=tgtAmt-ach;
+              const gapCases=tgtCases-achCases;
+              return (
+                <div key={sp} className="card" style={{padding:"14px 18px"}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+                    <div style={{display:"flex",gap:10,alignItems:"center"}}><Av name={sp} size={36}/><div><div style={{fontWeight:700,fontSize:13.5}}>{sp}</div><div style={{fontSize:10.5,color:"var(--mut)"}}>Target: {tgtAmt>0?fr(tgtAmt):"—"}{tgtCases>0?` · ${tgtCases} cases`:""}</div></div></div>
+                    <div style={{textAlign:"right"}}><div style={{fontSize:20,fontWeight:800,color:"#10b981",fontFamily:"'Sora',sans-serif"}}>{fr(ach)}</div><div style={{fontSize:10.5,color:"var(--mut)"}}>{achCases>0?`${achCases} cases`:"Achieved"}</div></div>
+                  </div>
+                  {tgtAmt>0&&<div style={{marginBottom:tgtCases>0?10:0}}><div style={{fontSize:10,color:"var(--mut)",marginBottom:3}}>💰 Revenue Target</div><div style={{height:10,background:"var(--card2)",borderRadius:5,overflow:"hidden",marginBottom:4}}><div style={{height:"100%",width:pct+"%",background:pct>=100?"#10b981":pct>=70?"#f59e0b":"#ef4444",borderRadius:5}}/></div><div style={{display:"flex",justifyContent:"space-between",fontSize:11}}><span style={{color:"var(--mut)"}}>{pct.toFixed(1)}%</span><span style={{color:gap>0?"#ef4444":"#10b981",fontWeight:700}}>{gap>0?`₹${Number(gap).toLocaleString("en-IN")} remaining`:"🎉 Achieved!"}</span></div></div>}
+                  {tgtCases>0&&<div><div style={{fontSize:10,color:"var(--mut)",marginBottom:3}}>📦 Cases Target</div><div style={{height:10,background:"var(--card2)",borderRadius:5,overflow:"hidden",marginBottom:4}}><div style={{height:"100%",width:pctCases+"%",background:pctCases>=100?"#10b981":pctCases>=70?"#f59e0b":"#ef4444",borderRadius:5}}/></div><div style={{display:"flex",justifyContent:"space-between",fontSize:11}}><span style={{color:"var(--mut)"}}>{pctCases.toFixed(1)}%</span><span style={{color:gapCases>0?"#ef4444":"#10b981",fontWeight:700}}>{gapCases>0?`${gapCases} cases remaining`:"🎉 Achieved!"}</span></div></div>}
+                  {tgtAmt===0&&tgtCases===0&&<div style={{fontSize:11,color:"var(--mut)",textAlign:"center",padding:"8px"}}>No target set for this month</div>}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+        {TARGETS.length>0&&<div className="card" style={{padding:0}}>
+          <div style={{padding:"12px 16px",borderBottom:"1px solid var(--bdr)",fontSize:11,fontWeight:800,color:"var(--mut)",textTransform:"uppercase",letterSpacing:".08em"}}>All Targets</div>
+          <div className="tw"><table>
+            <thead><tr><th>Salesperson</th><th>Month</th><th>Year</th><th>Target</th><th>Achieved</th><th>%</th></tr></thead>
+            <tbody>{TARGETS.map(t=>{
+              const ach=getAch(t.user_name,t.month,t.year);
+              const pct=t.target_amount>0?(ach/t.target_amount*100).toFixed(1):0;
+              return <tr key={t.id}><td style={{fontWeight:700}}>{t.user_name}</td><td>{months.find(m=>m.v===t.month)?.l||t.month}</td><td>{t.year}</td><td style={{fontWeight:700}}>{fr(t.target_amount)}</td><td style={{color:"#10b981",fontWeight:700}}>{fr(ach)}</td><td><span style={{fontWeight:800,color:pct>=100?"#10b981":pct>=70?"#f59e0b":"#ef4444"}}>{pct}%</span></td></tr>;
+            })}</tbody>
+          </table></div>
+        </div>}
+      </div>
+    );
+  };
+
   /* ── CUSTOMER DETAIL ── */
   const Detail = () => {
     const c=gc(selId); if(!c) return null;
@@ -714,7 +910,7 @@ export default function CRM({ currentUser, onLogout }) {
                   </div>
                 </div>
                 <div style={{display:"flex",gap:6}}>
-                  <button className="btn btn-o btn-sm" onClick={()=>{ setForm({...c}); setModal("editcust"); }}>✏️ Edit</button>
+                  <button className="btn btn-o btn-sm" onClick={()=>{setForm({...c});setModal("editcust");}}>✏️ Edit</button>
                   <button className="btn btn-o btn-sm" onClick={closeM}><X size={13}/></button>
                 </div>
               </div>
@@ -725,38 +921,23 @@ export default function CRM({ currentUser, onLogout }) {
               <div key={x.l} className="card2"><div style={{fontSize:9.5,color:"var(--mut)",marginBottom:3}}>{x.l}</div><div style={{fontSize:12.5,fontWeight:500}}>{x.v}</div></div>
             ))}
           </div>
-          {(c.gst_no||c.address) && <div className="g2" style={{marginBottom:14}}>
-            {c.gst_no && <div className="card2"><div style={{fontSize:9.5,color:"var(--mut)",marginBottom:3}}>🏷️ GST No</div><div style={{fontSize:12.5,fontWeight:600,letterSpacing:".05em"}}>{c.gst_no}</div></div>}
-            {c.address && <div className="card2"><div style={{fontSize:9.5,color:"var(--mut)",marginBottom:3}}>📍 Address</div><div style={{fontSize:12,fontWeight:500}}>{c.address}</div></div>}
+          {(c.gst_no||c.address)&&<div className="g2" style={{marginBottom:14}}>
+            {c.gst_no&&<div className="card2"><div style={{fontSize:9.5,color:"var(--mut)",marginBottom:3}}>🏷️ GST No</div><div style={{fontSize:12.5,fontWeight:600,letterSpacing:".05em"}}>{c.gst_no}</div></div>}
+            {c.address&&<div className="card2"><div style={{fontSize:9.5,color:"var(--mut)",marginBottom:3}}>📍 Address</div><div style={{fontSize:12,fontWeight:500}}>{c.address}</div></div>}
           </div>}
-          {li&&(
-            <div className="lw">
-              <div className="lw-lbl">💬 Last Word · {TI[li.type]} {li.type} · {fd(li.created_at)} · {li.done_by}</div>
-              <div className="lw-note">"{li.note}"</div>
-              {li.next_follow_up&&<div style={{marginTop:8,fontSize:11,color:isOD(li.next_follow_up)?"#ef4444":isTD(li.next_follow_up)?"#f59e0b":"#10b981",fontWeight:700}}>📌 {li.follow_up_note} · {fd(li.next_follow_up)}</div>}
-            </div>
-          )}
-          {pay&&(
-            <div className="card2" style={{marginBottom:14}}>
-              <div style={{fontSize:10,fontWeight:800,color:"var(--mut)",textTransform:"uppercase",letterSpacing:".08em",marginBottom:10}}>💳 Payment</div>
-              <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10}}>
-                {[{l:"Mode",v:pay.payment_mode?.replace("_"," ")},{l:"Credit Days",v:`${pay.credit_days||"—"} days`},{l:"Outstanding",v:fr(pay.outstanding)},{l:"Overdue",v:fr(pay.overdue),col:pay.overdue>0?"#ef4444":undefined}].map(p=>(
-                  <div key={p.l} style={{textAlign:"center"}}><div style={{fontSize:9.5,color:"var(--mut)"}}>{p.l}</div><div style={{fontSize:13,fontWeight:700,color:p.col||"var(--txt)",marginTop:2,textTransform:"capitalize"}}>{p.v}</div></div>
-                ))}
-              </div>
-            </div>
-          )}
-          {smpl.length>0&&(
-            <div style={{marginBottom:14}}>
-              <div style={{fontSize:10,fontWeight:800,color:"var(--mut)",textTransform:"uppercase",letterSpacing:".08em",marginBottom:8}}>🧪 Samples</div>
-              {smpl.map(s=>(
-                <div key={s.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 12px",background:"var(--card2)",borderRadius:8,marginBottom:6,border:"1px solid var(--bdr)"}}>
-                  <div><div style={{fontSize:12,fontWeight:600}}>{s.product}</div><div style={{fontSize:10,color:"var(--mut)"}}>{s.qty} · {fd(s.sent_date)}</div></div>
-                  <Bdg s={s.status}/>
-                </div>
+          {li&&<div className="lw"><div className="lw-lbl">💬 Last Word · {TI[li.type]} {li.type} · {fd(li.created_at)} · {li.done_by}</div><div className="lw-note">"{li.note}"</div>{li.next_follow_up&&<div style={{marginTop:8,fontSize:11,color:isOD(li.next_follow_up)?"#ef4444":isTD(li.next_follow_up)?"#f59e0b":"#10b981",fontWeight:700}}>📌 {li.follow_up_note} · {fd(li.next_follow_up)}</div>}</div>}
+          {pay&&<div className="card2" style={{marginBottom:14}}>
+            <div style={{fontSize:10,fontWeight:800,color:"var(--mut)",textTransform:"uppercase",letterSpacing:".08em",marginBottom:10}}>💳 Payment</div>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10}}>
+              {[{l:"Mode",v:pay.payment_mode?.replace("_"," ")},{l:"Credit Days",v:`${pay.credit_days||"—"} days`},{l:"Outstanding",v:fr(pay.outstanding)},{l:"Overdue",v:fr(pay.overdue),col:pay.overdue>0?"#ef4444":undefined}].map(p=>(
+                <div key={p.l} style={{textAlign:"center"}}><div style={{fontSize:9.5,color:"var(--mut)"}}>{p.l}</div><div style={{fontSize:13,fontWeight:700,color:p.col||"var(--txt)",marginTop:2,textTransform:"capitalize"}}>{p.v}</div></div>
               ))}
             </div>
-          )}
+          </div>}
+          {smpl.length>0&&<div style={{marginBottom:14}}>
+            <div style={{fontSize:10,fontWeight:800,color:"var(--mut)",textTransform:"uppercase",letterSpacing:".08em",marginBottom:8}}>🧪 Samples</div>
+            {smpl.map(s=><div key={s.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 12px",background:"var(--card2)",borderRadius:8,marginBottom:6,border:"1px solid var(--bdr)"}}><div><div style={{fontSize:12,fontWeight:600}}>{s.product}</div><div style={{fontSize:10,color:"var(--mut)"}}>{s.qty} · {fd(s.sent_date)}</div></div><Bdg s={s.status}/></div>)}
+          </div>}
           <div>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
               <div style={{fontSize:10,fontWeight:800,color:"var(--mut)",textTransform:"uppercase",letterSpacing:".08em"}}>📁 Interactions ({ilist.length})</div>
@@ -787,12 +968,12 @@ export default function CRM({ currentUser, onLogout }) {
     );
   };
 
-  /* ── CUSTOMER SEARCH DROPDOWN ── */
-  const CustomerSearch = ({ value, onChange, allowNew=true }) => {
-    const [q, setQ] = useState("");
-    const [open, setOpen] = useState(false);
-    const sel = C.find(c=>c.id===value);
-    const filtered = C.filter(c=>!q||[c.name,c.company,c.city].some(v=>v?.toLowerCase().includes(q.toLowerCase()))).slice(0,50);
+  /* ── CUSTOMER SEARCH ── */
+  const CustomerSearch = ({value,onChange,allowNew=true}) => {
+    const [sq,setSq]=useState("");
+    const [open,setOpen]=useState(false);
+    const sel=C.find(c=>c.id===value);
+    const filtered=C.filter(c=>!sq||[c.name,c.company,c.city].some(v=>v?.toLowerCase().includes(sq.toLowerCase()))).slice(0,50);
     return (
       <div style={{position:"relative"}}>
         <div className="inp" style={{display:"flex",alignItems:"center",gap:6,cursor:"pointer",padding:"7px 12px"}} onClick={()=>setOpen(o=>!o)}>
@@ -800,179 +981,119 @@ export default function CRM({ currentUser, onLogout }) {
           <span style={{flex:1,fontSize:12.5,color:sel?"var(--txt)":"var(--mut)"}}>{sel?`${sel.name} / ${sel.company}`:"-- Customer Search Karo --"}</span>
           <span style={{fontSize:10,color:"var(--mut)"}}>▾</span>
         </div>
-        {open && (
+        {open&&(
           <div style={{position:"absolute",top:"calc(100% + 4px)",left:0,right:0,background:"var(--card)",border:"1px solid var(--bdr)",borderRadius:10,zIndex:200,boxShadow:"0 8px 32px rgba(0,0,0,.4)"}}>
             <div style={{padding:"8px 10px",borderBottom:"1px solid var(--bdr)"}}>
-              <input autoFocus className="inp" style={{padding:"6px 10px",fontSize:12}} placeholder="Type karo..." value={q} onChange={e=>setQ(e.target.value)}/>
+              <input autoFocus className="inp" style={{padding:"6px 10px",fontSize:12}} placeholder="Type karo..." value={sq} onChange={e=>setSq(e.target.value)}/>
             </div>
             <div style={{maxHeight:220,overflowY:"auto"}}>
-              {allowNew && (
-                <div style={{padding:"9px 12px",borderBottom:"1px solid var(--bdr)",cursor:"pointer",color:"var(--acc)",fontWeight:600,fontSize:12}} onClick={()=>{setOpen(false);setModal("acust_quick");}}>
-                  ➕ New Customer Add Karo
-                </div>
-              )}
-              {filtered.length===0
-                ? <div style={{padding:"12px",color:"var(--mut)",fontSize:12,textAlign:"center"}}>Koi customer nahi mila</div>
-                : filtered.map(c=>(
-                    <div key={c.id} style={{padding:"9px 12px",borderBottom:"1px solid rgba(28,45,71,.3)",cursor:"pointer",fontSize:12}} onClick={()=>{onChange(c.id);setOpen(false);setQ("");}}>
-                      <div style={{fontWeight:600}}>{c.name}</div>
-                      <div style={{fontSize:10,color:"var(--mut)"}}>{c.company} · {c.city}</div>
-                    </div>
-                  ))}
+              {allowNew&&<div style={{padding:"9px 12px",borderBottom:"1px solid var(--bdr)",cursor:"pointer",color:"var(--acc)",fontWeight:600,fontSize:12}} onClick={()=>{setOpen(false);setModal("acust_quick");}}>➕ New Customer Add Karo</div>}
+              {filtered.length===0?<div style={{padding:"12px",color:"var(--mut)",fontSize:12,textAlign:"center"}}>Koi customer nahi mila</div>
+                :filtered.map(c=>(
+                  <div key={c.id} style={{padding:"9px 12px",borderBottom:"1px solid rgba(28,45,71,.3)",cursor:"pointer",fontSize:12}} onClick={()=>{onChange(c.id);setOpen(false);setSq("");}}>
+                    <div style={{fontWeight:600}}>{c.name}</div>
+                    <div style={{fontSize:10,color:"var(--mut)"}}>{c.company} · {c.city}</div>
+                  </div>
+                ))}
             </div>
           </div>
         )}
-        {open && <div style={{position:"fixed",inset:0,zIndex:199}} onClick={()=>setOpen(false)}/>}
+        {open&&<div style={{position:"fixed",inset:0,zIndex:199}} onClick={()=>setOpen(false)}/>}
       </div>
     );
   };
 
-  /* ── NUM INPUT — types freely, updates on blur ── */
-  const NumInput = ({ value, onChange, style }) => {
-    const [local, setLocal] = useState(String(value ?? ""));
-    useEffect(() => { setLocal(String(value ?? "")); }, [value]);
-    return (
-      <input
-        type="text"
-        inputMode="numeric"
-        className="inp"
-        style={style}
-        value={local}
-        onClick={e => e.target.select()}
-        onChange={e => setLocal(e.target.value)}
-        onBlur={() => {
-          const n = parseFloat(local.replace(/[^0-9.]/g, ""));
-          onChange(isNaN(n) ? 0 : n);
-        }}
-      />
-    );
+  /* ── NUM INPUT ── */
+  const NumInput = ({value,onChange,style}) => {
+    const [local,setLocal]=useState(String(value??""));
+    useEffect(()=>{setLocal(String(value??""));},[value]);
+    return <input type="text" inputMode="numeric" className="inp" style={style} value={local} onClick={e=>e.target.select()} onChange={e=>setLocal(e.target.value)} onBlur={()=>{const n=parseFloat(local.replace(/[^0-9.]/g,""));onChange(isNaN(n)?0:n);}}/>;
   };
 
-  /* ── ORDER CREATE MODAL ── */
+  /* ── ORDER MODAL ── */
   const OrderModal = () => {
-    const [prodQ,setProdQ] = useState("");
-    const filtProd = PRODS.filter(p=>!prodQ||[p.name,p.sku_code,p.category].some(v=>v?.toLowerCase().includes(prodQ.toLowerCase())));
+    const [prodQ,setProdQ]=useState("");
+    const filtProd=PRODS.filter(p=>!prodQ||[p.name,p.sku_code,p.category].some(v=>v?.toLowerCase().includes(prodQ.toLowerCase())));
     return (
       <div className="ov" onClick={closeM}>
         <div className="mod" style={{width:860,maxWidth:"96vw"}} onClick={e=>e.stopPropagation()}>
           <div className="mod-ttl">New Order / Proforma <button className="btn btn-o btn-sm" onClick={closeM}><X size={13}/></button></div>
           <div className="fr fr2" style={{marginBottom:16}}>
-            <div><label className="lbl">Customer *</label>
-              <CustomerSearch value={form.customer_id||""} onChange={v=>sf("customer_id",v)}/>
-            </div>
-            <div><label className="lbl">Order Date</label>
-              <input type="date" className="inp" value={form.order_date||""} onChange={e=>sf("order_date",e.target.value)}/>
-            </div>
+            <div><label className="lbl">Customer *</label><CustomerSearch value={form.customer_id||""} onChange={v=>sf("customer_id",v)}/></div>
+            <div><label className="lbl">Order Date</label><input type="date" className="inp" value={form.order_date||""} onChange={e=>sf("order_date",e.target.value)}/></div>
           </div>
-
           <div className="g2" style={{gap:14}}>
-            {/* LEFT: product picker */}
             <div>
               <label className="lbl">Products Add Karo</label>
-              <input className="inp" placeholder="SKU ya product search karo..." value={prodQ} onChange={e=>setProdQ(e.target.value)} style={{marginBottom:8}}/>
+              <input className="inp" placeholder="SKU ya product search..." value={prodQ} onChange={e=>setProdQ(e.target.value)} style={{marginBottom:8}}/>
               <div style={{maxHeight:260,overflowY:"auto",border:"1px solid var(--bdr)",borderRadius:8}}>
                 {filtProd.map(p=>(
                   <div key={p.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 10px",borderBottom:"1px solid var(--bdr)",fontSize:11.5}}>
-                    <div>
-                      <div style={{fontWeight:600}}>{p.name}</div>
-                      <div style={{fontSize:10,color:"var(--mut)"}}>{p.sku_code} · ₹{p.ctn_price}/ctn</div>
-                    </div>
+                    <div><div style={{fontWeight:600}}>{p.name}</div><div style={{fontSize:10,color:"var(--mut)"}}>{p.sku_code} · ₹{p.ctn_price}/ctn</div></div>
                     <button className="btn btn-g btn-sm" onClick={()=>addOrderItem(p)}>+ Add</button>
                   </div>
                 ))}
               </div>
             </div>
-
-            {/* RIGHT: order items */}
             <div>
               <label className="lbl">Order Items ({orderItems.length})</label>
-              {orderItems.length===0
-                ?<div className="empty" style={{padding:20,border:"1px solid var(--bdr)",borderRadius:8}}><p>Koi item nahi</p></div>
+              {orderItems.length===0?<div className="empty" style={{padding:20,border:"1px solid var(--bdr)",borderRadius:8}}><p>Koi item nahi</p></div>
                 :<div style={{border:"1px solid var(--bdr)",borderRadius:8,overflow:"hidden"}}>
                   {orderItems.map(item=>(
-                    <div key={item.product_id} style={{padding:"8px 10px",borderBottom:"1px solid var(--bdr)",fontSize:11.5}}>
+                    <div key={item.product_id} style={{padding:"8px 10px",borderBottom:"1px solid var(--bdr)"}}>
                       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}>
                         <div style={{fontWeight:600,fontSize:12}}>{item.product_name}</div>
                         <button style={{background:"none",border:"none",color:"var(--err)",cursor:"pointer"}} onClick={()=>removeOrderItem(item.product_id)}><Trash2 size={12}/></button>
                       </div>
                       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:6}}>
-                        <div><div style={{fontSize:9,color:"var(--mut)",marginBottom:2}}>CASES</div>
-                          <NumInput style={{padding:"4px 8px",fontSize:12}} value={item.qty_cases} onChange={v=>updOrderItem(item.product_id,"qty_cases",v)}/>
-                        </div>
-                        <div><div style={{fontSize:9,color:"var(--mut)",marginBottom:2}}>CTN PRICE (₹)</div>
-                          <NumInput style={{padding:"4px 8px",fontSize:12}} value={item.ctn_price} onChange={v=>updOrderItem(item.product_id,"ctn_price",v)}/>
-                        </div>
-                        <div><div style={{fontSize:9,color:"var(--mut)",marginBottom:2}}>DISCOUNT (₹)</div>
-                          <NumInput style={{padding:"4px 8px",fontSize:12}} value={item.discount||0} onChange={v=>updOrderItem(item.product_id,"discount",v)}/>
-                        </div>
-                        <div><div style={{fontSize:9,color:"var(--mut)",marginBottom:2}}>AMOUNT</div>
-                          <div style={{fontSize:13,fontWeight:800,color:"#10b981",paddingTop:6}}>₹{Number(item.amount||0).toLocaleString("en-IN")}</div>
-                        </div>
+                        <div><div style={{fontSize:9,color:"var(--mut)",marginBottom:2}}>CASES</div><NumInput style={{padding:"4px 8px",fontSize:12}} value={item.qty_cases} onChange={v=>updOrderItem(item.product_id,"qty_cases",v)}/></div>
+                        <div><div style={{fontSize:9,color:"var(--mut)",marginBottom:2}}>CTN PRICE (₹)</div><NumInput style={{padding:"4px 8px",fontSize:12}} value={item.ctn_price} onChange={v=>updOrderItem(item.product_id,"ctn_price",v)}/></div>
+                        <div><div style={{fontSize:9,color:"var(--mut)",marginBottom:2}}>DISCOUNT (₹)</div><NumInput style={{padding:"4px 8px",fontSize:12}} value={item.discount||0} onChange={v=>updOrderItem(item.product_id,"discount",v)}/></div>
+                        <div><div style={{fontSize:9,color:"var(--mut)",marginBottom:2}}>AMOUNT</div><div style={{fontSize:13,fontWeight:800,color:"#10b981",paddingTop:6}}>₹{Number(item.amount||0).toLocaleString("en-IN")}</div></div>
                       </div>
                     </div>
                   ))}
-                  {/* Totals */}
                   <div style={{padding:"10px 12px",background:"var(--card2)"}}>
                     <div style={{display:"flex",justifyContent:"space-between",fontSize:12,marginBottom:4}}><span style={{color:"var(--mut)"}}>Subtotal</span><span style={{fontWeight:600}}>₹{orderTotal.toLocaleString("en-IN")}</span></div>
                     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",fontSize:12,marginBottom:6,gap:12}}>
                       <label style={{display:"flex",alignItems:"center",gap:5,cursor:"pointer",color:"var(--mut)"}}>
-                        <input type="checkbox" checked={!!form.epr} onChange={e=>sf("epr",e.target.checked)} style={{accentColor:"var(--acc)",width:14,height:14}}/>
-                        EPR @1%
+                        <input type="checkbox" checked={!!form.epr} onChange={e=>sf("epr",e.target.checked)} style={{accentColor:"var(--acc)",width:14,height:14}}/>EPR @1%
                       </label>
                       <span style={{fontWeight:600,color:form.epr?"var(--txt)":"var(--mut)"}}>₹{eprAmount.toLocaleString("en-IN")}</span>
                     </div>
                     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",fontSize:12,marginBottom:6}}>
                       <div style={{display:"flex",alignItems:"center",gap:8}}>
                         <span style={{color:"var(--mut)"}}>GST @18%:</span>
-                        <label style={{display:"flex",alignItems:"center",gap:4,cursor:"pointer"}}>
-                          <input type="radio" name="gst" value="excluding" checked={form.gst!=="including"} onChange={()=>sf("gst","excluding")} style={{accentColor:"var(--acc)",width:14,height:14}}/>
-                          <span style={{fontSize:11}}>Excluding</span>
-                        </label>
-                        <label style={{display:"flex",alignItems:"center",gap:4,cursor:"pointer"}}>
-                          <input type="radio" name="gst" value="including" checked={form.gst==="including"} onChange={()=>sf("gst","including")} style={{accentColor:"var(--acc)",width:14,height:14}}/>
-                          <span style={{fontSize:11}}>Including</span>
-                        </label>
+                        <label style={{display:"flex",alignItems:"center",gap:4,cursor:"pointer"}}><input type="radio" name="gst" value="excluding" checked={form.gst!=="including"} onChange={()=>sf("gst","excluding")} style={{accentColor:"var(--acc)",width:14,height:14}}/><span style={{fontSize:11}}>Excluding</span></label>
+                        <label style={{display:"flex",alignItems:"center",gap:4,cursor:"pointer"}}><input type="radio" name="gst" value="including" checked={form.gst==="including"} onChange={()=>sf("gst","including")} style={{accentColor:"var(--acc)",width:14,height:14}}/><span style={{fontSize:11}}>Including</span></label>
                       </div>
-                      <span style={{fontWeight:600,color:form.gst!=="including"?"var(--txt)":"var(--mut)"}}>
-                        {form.gst==="including"?"(included)":"₹"+gstAmount.toLocaleString("en-IN")}
-                      </span>
+                      <span style={{fontWeight:600,color:form.gst!=="including"?"var(--txt)":"var(--mut)"}}>{form.gst==="including"?"(included)":"₹"+gstAmount.toLocaleString("en-IN")}</span>
                     </div>
                     <div style={{display:"flex",justifyContent:"space-between",fontSize:14,borderTop:"1px solid var(--bdr)",paddingTop:6}}><span style={{fontWeight:700}}>Total</span><span style={{fontWeight:800,color:"#10b981"}}>₹{(orderTotal+eprAmount+(form.gst==="including"?0:gstAmount)).toLocaleString("en-IN")}</span></div>
                   </div>
                 </div>}
             </div>
           </div>
-
           <div className="fr fr2" style={{marginTop:12}}>
-            <div>
-              <label className="lbl">Payment Mode</label>
+            <div><label className="lbl">Payment Mode</label>
               <select className="inp" value={form.payment_mode||"cash"} onChange={e=>sf("payment_mode",e.target.value)}>
-                <option value="cash">💵 Cash</option>
-                <option value="credit">🏦 Credit</option>
-                <option value="bank_transfer">↗ Bank Transfer</option>
-                <option value="cheque">📝 Cheque</option>
+                <option value="cash">💵 Cash</option><option value="credit">🏦 Credit</option><option value="bank_transfer">↗ Bank Transfer</option><option value="cheque">📝 Cheque</option>
               </select>
             </div>
-            <div>
-              <label className="lbl">Notes</label>
-              <textarea className="inp" placeholder="Delivery notes..." defaultValue={form.notes||""} onBlur={e=>sf("notes",e.target.value)} style={{minHeight:38,resize:"none"}}/>
-            </div>
+            <div><label className="lbl">Notes</label><textarea className="inp" placeholder="Delivery notes..." defaultValue={form.notes||""} onBlur={e=>sf("notes",e.target.value)} style={{minHeight:38,resize:"none"}}/></div>
           </div>
-
-          <button className="btn btn-p" style={{width:"100%",justifyContent:"center",marginTop:8,fontSize:13}} disabled={saving} onClick={saveOrder}>
-            {saving?<Spin/>:"💾 Save & View Proforma"}
-          </button>
+          <button className="btn btn-p" style={{width:"100%",justifyContent:"center",marginTop:8,fontSize:13}} disabled={saving} onClick={saveOrder}>{saving?<Spin/>:"💾 Save & View Proforma"}</button>
         </div>
       </div>
     );
   };
 
-  /* ── PROFORMA VIEW ── */
+  /* ── PROFORMA ── */
   const ProformaModal = () => {
     if(!selOrder) return null;
-    const subtotal = selOrder.items?.reduce((s,i)=>s+(Number(i.amount)||0),0)||0;
-    const epr = selOrder.epr_applied ? Math.round(subtotal*0.01) : 0;
-    const gst = selOrder.gst_type==="including" ? 0 : Math.round(subtotal*0.18);
+    const subtotal=selOrder.items?.reduce((s,i)=>s+(Number(i.amount)||0),0)||0;
+    const epr=selOrder.epr_applied?Math.round(subtotal*0.01):0;
+    const gst=selOrder.gst_type==="including"?0:Math.round(subtotal*0.18);
     return (
       <div className="ov" onClick={closeM}>
         <div className="mod mod-lg" onClick={e=>e.stopPropagation()}>
@@ -983,697 +1104,66 @@ export default function CRM({ currentUser, onLogout }) {
               <button className="btn btn-o btn-sm" onClick={closeM}><X size={13}/></button>
             </div>
           </div>
-
-          {/* Header */}
           <div style={{textAlign:"center",marginBottom:18,paddingBottom:14,borderBottom:"1px solid var(--bdr)"}}>
             <div style={{fontFamily:"'Sora',sans-serif",fontSize:18,fontWeight:700,color:"var(--acc)"}}>Shreeja Packaging Industries Pvt. Ltd.</div>
             <div style={{fontSize:11,color:"var(--mut)",marginTop:4}}>Mayur Food Packaging Products | Delhi</div>
           </div>
-
-          {/* Party + Date */}
           <div style={{display:"flex",justifyContent:"space-between",marginBottom:16}}>
             <div className="card2" style={{flex:1,marginRight:12}}>
               <div style={{fontSize:9.5,color:"var(--mut)",marginBottom:4}}>BILL TO</div>
               <div style={{fontSize:14,fontWeight:700}}>{selOrder.company}</div>
               <div style={{fontSize:12,color:"var(--mut)"}}>{selOrder.customer_name}</div>
-              {selOrder.customerData?.phone && <div style={{fontSize:11,marginTop:3}}>📞 {selOrder.customerData.phone}</div>}
-              {selOrder.customerData?.address && <div style={{fontSize:11,marginTop:2}}>📍 {selOrder.customerData.address}</div>}
-              {selOrder.customerData?.gst_no && <div style={{fontSize:11,marginTop:2,fontWeight:700,color:"var(--acc)"}}>GST: {selOrder.customerData.gst_no}</div>}
+              {selOrder.customerData?.phone&&<div style={{fontSize:11,marginTop:3}}>📞 {selOrder.customerData.phone}</div>}
+              {selOrder.customerData?.address&&<div style={{fontSize:11,marginTop:2}}>📍 {selOrder.customerData.address}</div>}
+              {selOrder.customerData?.gst_no&&<div style={{fontSize:11,marginTop:2,fontWeight:700,color:"var(--acc)"}}>GST: {selOrder.customerData.gst_no}</div>}
             </div>
             <div className="card2" style={{minWidth:200}}>
               <div style={{fontSize:9.5,color:"var(--mut)",marginBottom:4}}>ORDER DATE</div>
               <div style={{fontSize:14,fontWeight:700,marginBottom:6}}>{fd(selOrder.order_date)}</div>
               <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
                 <Bdg s={selOrder.status}/>
-                {selOrder.payment_mode && <span style={{fontSize:9.5,fontWeight:700,padding:"2px 8px",borderRadius:12,background:"rgba(59,130,246,.1)",color:"#60a5fa",textTransform:"capitalize"}}>{selOrder.payment_mode?.replace("_"," ")}</span>}
+                {selOrder.payment_mode&&<span style={{fontSize:9.5,fontWeight:700,padding:"2px 8px",borderRadius:12,background:"rgba(59,130,246,.1)",color:"#60a5fa",textTransform:"capitalize"}}>{selOrder.payment_mode?.replace("_"," ")}</span>}
               </div>
-              {selOrder.status==="delivered"&&selOrder.delivered_at&&(
-                <div style={{fontSize:10,color:"var(--ok)",marginTop:6,fontWeight:600}}>
-                  ✅ Delivered: {new Date(selOrder.delivered_at).toLocaleString("en-IN",{day:"2-digit",month:"short",year:"2-digit",hour:"2-digit",minute:"2-digit"})}
-                </div>
-              )}
             </div>
           </div>
-
-          {/* Items Table */}
           <div className="tw" style={{marginBottom:14}}>
             <table>
-              <thead><tr><th>#</th><th>SKU</th><th>Product</th><th>Packing</th><th>Cases</th><th>Price/Pcs</th><th>CTN Price</th><th>Disc%</th><th>Amount</th></tr></thead>
-              <tbody>
-                {(selOrder.items||[]).map((item,idx)=>(
-                  <tr key={idx}>
-                    <td style={{fontSize:11}}>{idx+1}</td>
-                    <td><span style={{fontSize:9.5,background:"rgba(245,158,11,.1)",color:"var(--acc)",padding:"2px 6px",borderRadius:4,fontWeight:700}}>{item.sku_code}</span></td>
-                    <td style={{fontWeight:600,fontSize:12}}>{item.product_name}</td>
-                    <td style={{textAlign:"center",fontSize:11}}>{item.packing}</td>
-                    <td style={{textAlign:"center",fontWeight:700}}>{item.qty_cases}</td>
-                    <td style={{fontSize:11}}>₹{item.price_per_pcs}</td>
-                    <td style={{fontSize:11}}>₹{item.ctn_price}</td>
-                    <td style={{fontSize:11,textAlign:"center"}}>{item.discount||0}%</td>
-                    <td style={{fontWeight:800,color:"#10b981"}}>₹{Number(item.amount||0).toLocaleString("en-IN")}</td>
-                  </tr>
-                ))}
-              </tbody>
+              <thead><tr><th>#</th><th>SKU</th><th>Product</th><th>Packing</th><th>Cases</th><th>Price/Pcs</th><th>CTN Price</th><th>Disc(₹)</th><th>Amount</th></tr></thead>
+              <tbody>{(selOrder.items||[]).map((item,idx)=>(
+                <tr key={idx}>
+                  <td style={{fontSize:11}}>{idx+1}</td>
+                  <td><span style={{fontSize:9.5,background:"rgba(245,158,11,.1)",color:"var(--acc)",padding:"2px 6px",borderRadius:4,fontWeight:700}}>{item.sku_code}</span></td>
+                  <td style={{fontWeight:600,fontSize:12}}>{item.product_name}</td>
+                  <td style={{textAlign:"center",fontSize:11}}>{item.packing}</td>
+                  <td style={{textAlign:"center",fontWeight:700}}>{item.qty_cases}</td>
+                  <td style={{fontSize:11}}>₹{item.price_per_pcs}</td>
+                  <td style={{fontSize:11}}>₹{item.ctn_price}</td>
+                  <td style={{fontSize:11,textAlign:"center"}}>{item.discount||0}</td>
+                  <td style={{fontWeight:800,color:"#10b981"}}>₹{Number(item.amount||0).toLocaleString("en-IN")}</td>
+                </tr>
+              ))}</tbody>
             </table>
           </div>
-
-          {/* Totals */}
           <div style={{display:"flex",justifyContent:"flex-end"}}>
             <div style={{width:240}}>
               <div style={{display:"flex",justifyContent:"space-between",padding:"5px 0",fontSize:12,borderBottom:"1px solid var(--bdr)"}}><span style={{color:"var(--mut)"}}>Subtotal</span><span style={{fontWeight:600}}>₹{subtotal.toLocaleString("en-IN")}</span></div>
-              {selOrder.epr_applied && <div style={{display:"flex",justifyContent:"space-between",padding:"5px 0",fontSize:12,borderBottom:"1px solid var(--bdr)"}}><span style={{color:"var(--mut)"}}>EPR @1%</span><span style={{fontWeight:600}}>₹{epr.toLocaleString("en-IN")}</span></div>}
+              {epr>0&&<div style={{display:"flex",justifyContent:"space-between",padding:"5px 0",fontSize:12,borderBottom:"1px solid var(--bdr)"}}><span style={{color:"var(--mut)"}}>EPR @1%</span><span style={{fontWeight:600}}>₹{epr.toLocaleString("en-IN")}</span></div>}
               <div style={{display:"flex",justifyContent:"space-between",padding:"5px 0",fontSize:12,borderBottom:"1px solid var(--bdr)"}}><span style={{color:"var(--mut)"}}>GST @18% ({selOrder.gst_type==="including"?"Incl.":"Excl."})</span><span style={{fontWeight:600}}>{selOrder.gst_type==="including"?"Included":"₹"+gst.toLocaleString("en-IN")}</span></div>
               <div style={{display:"flex",justifyContent:"space-between",padding:"8px 0",fontSize:15}}><span style={{fontWeight:700}}>Total</span><span style={{fontWeight:800,color:"#10b981",fontFamily:"'Sora',sans-serif"}}>₹{(subtotal+epr+gst).toLocaleString("en-IN")}</span></div>
-              {selOrder.payment_mode && <div style={{fontSize:11,color:"var(--mut)",marginTop:4}}>Payment: <span style={{color:"var(--txt)",fontWeight:600,textTransform:"capitalize"}}>{selOrder.payment_mode?.replace("_"," ")}</span></div>}
-              <div style={{fontSize:11,color:"var(--mut)",marginTop:2}}>GST: <span style={{color:"var(--txt)",fontWeight:600,textTransform:"capitalize"}}>{selOrder.gst_type||"Excluding"}</span></div>
+              {selOrder.payment_mode&&<div style={{fontSize:11,color:"var(--mut)",marginTop:4}}>Payment: <span style={{color:"var(--txt)",fontWeight:600,textTransform:"capitalize"}}>{selOrder.payment_mode?.replace("_"," ")}</span></div>}
             </div>
           </div>
-
           {selOrder.notes&&<div style={{marginTop:10,padding:"8px 12px",background:"var(--card2)",borderRadius:8,fontSize:12}}><span style={{color:"var(--mut)"}}>Notes: </span>{selOrder.notes}</div>}
         </div>
       </div>
     );
   };
 
-
-  /* ── REPORTS ── */
-  const Reports = () => {
-    const [rTab, setRTab] = useState("sales");
-    const [rMonth, setRMonth] = useState(new Date().getMonth()+1);
-    const [rYear, setRYear] = useState(new Date().getFullYear());
-
-    const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-    const SALES_PERSONS = [...new Set(C.map(c=>c.assigned_to).filter(Boolean))];
-
-    // Monthly sales data
-    const monthlyData = Array.from({length:12},(_,mi)=>{
-      const ords = ORDERS.filter(o=>{
-        const d = new Date(o.order_date);
-        return d.getFullYear()===rYear && d.getMonth()===mi;
-      });
-      return { month:months[mi], orders:ords.length, revenue:ords.reduce((s,o)=>s+(Number(o.total_amount)||0),0) };
-    });
-
-    // Party-wise order history
-    const partyWise = C.map(c=>{
-      const ords = ORDERS.filter(o=>o.customer_id===c.id||o.company===c.company);
-      const rev = ords.reduce((s,o)=>s+(Number(o.total_amount)||0),0);
-      return { ...c, orderCount:ords.length, revenue:rev, lastOrder:ords[0]?.order_date };
-    }).filter(c=>c.orderCount>0).sort((a,b)=>b.revenue-a.revenue);
-
-    // Top customers
-    const topCust = partyWise.slice(0,10);
-
-    // NBD conversion
-    const nbdTotal = C.filter(c=>c.type==="nbd").length;
-    const nbdConverted = C.filter(c=>c.type==="crm").length;
-    const nbdWithOrder = ORDERS.map(o=>o.company).filter((v,i,a)=>a.indexOf(v)===i).length;
-
-    // Salesperson performance
-    const spPerf = SALES_PERSONS.map(sp=>{
-      const myCust = C.filter(c=>c.assigned_to===sp);
-      const myOrd = ORDERS.filter(o=>o.created_by===sp);
-      const myRev = myOrd.reduce((s,o)=>s+(Number(o.total_amount)||0),0);
-      const myInter = I.filter(i=>i.done_by===sp).length;
-      const tgt = TARGETS.find(t=>t.user_name===sp && t.month==String(rMonth).padStart(2,"0") && t.year===rYear);
-      return { name:sp, customers:myCust.length, orders:myOrd.length, revenue:myRev, interactions:myInter, target:Number(tgt?.target_amount||0) };
-    });
-
-    // Visit frequency
-    const visitFreq = C.map(c=>{
-      const visits = I.filter(i=>i.customer_id===c.id);
-      const lastVisit = visits[0]?.created_at;
-      const daysSince = lastVisit ? Math.floor((new Date()-new Date(lastVisit))/(1000*60*60*24)) : 999;
-      return { ...c, visits:visits.length, lastVisit, daysSince };
-    }).sort((a,b)=>b.daysSince-a.daysSince);
-
-    return (
-      <div>
-        <div className="sh"><div><div className="sh-t">Reports & Analytics</div><div className="sh-s">Data-driven insights</div></div>
-          <div style={{display:"flex",gap:8,alignItems:"center"}}>
-            <select className="inp" style={{width:"auto",padding:"5px 10px",fontSize:11}} value={rMonth} onChange={e=>setRMonth(Number(e.target.value))}>
-              {months.map((m,i)=><option key={i} value={i+1}>{m}</option>)}
-            </select>
-            <select className="inp" style={{width:"auto",padding:"5px 10px",fontSize:11}} value={rYear} onChange={e=>setRYear(Number(e.target.value))}>
-              {[2025,2026,2027].map(y=><option key={y} value={y}>{y}</option>)}
-            </select>
-          </div>
-        </div>
-        <div className="tabs">
-          {[["sales","📈 Sales"],["party","🏢 Party-wise"],["top","🏆 Top Customers"],["nbd","🎯 NBD Conversion"],["sp","👤 Salesperson"],["visit","📍 Visit Frequency"]].map(([id,lbl])=>(
-            <div key={id} className={`tab ${rTab===id?"a":""}`} onClick={()=>setRTab(id)}>{lbl}</div>
-          ))}
-        </div>
-
-        {/* SALES SUMMARY */}
-        {rTab==="sales" && (
-          <div>
-            <div className="g3" style={{marginBottom:18}}>
-              {[
-                {lbl:"Total Revenue "+rYear,val:fr(ORDERS.filter(o=>new Date(o.order_date).getFullYear()===rYear).reduce((s,o)=>s+(Number(o.total_amount)||0),0)),col:"#10b981"},
-                {lbl:"Total Orders "+rYear,val:ORDERS.filter(o=>new Date(o.order_date).getFullYear()===rYear).length+" orders",col:"#60a5fa"},
-                {lbl:"Delivered Orders",val:ORDERS.filter(o=>o.status==="delivered").length+" orders",col:"#a78bfa"},
-              ].map(c=><div key={c.lbl} className="card" style={{borderLeft:`3px solid ${c.col}`}}><div style={{fontSize:10.5,color:"var(--mut)",marginBottom:4}}>{c.lbl}</div><div style={{fontSize:20,fontWeight:800,fontFamily:"'Sora',sans-serif",color:c.col}}>{c.val}</div></div>)}
-            </div>
-            <div className="card" style={{padding:"16px 20px"}}>
-              <div style={{fontSize:11,fontWeight:800,color:"var(--mut)",textTransform:"uppercase",letterSpacing:".08em",marginBottom:14}}>Monthly Sales {rYear}</div>
-              <div style={{display:"flex",flexDirection:"column",gap:8}}>
-                {monthlyData.map((m,i)=>{
-                  const maxRev = Math.max(...monthlyData.map(x=>x.revenue),1);
-                  const pct = (m.revenue/maxRev)*100;
-                  return (
-                    <div key={i} style={{display:"flex",alignItems:"center",gap:10}}>
-                      <div style={{width:30,fontSize:10.5,color:"var(--mut)",fontWeight:700}}>{m.month}</div>
-                      <div style={{flex:1,height:20,background:"var(--card2)",borderRadius:4,overflow:"hidden"}}>
-                        <div style={{height:"100%",width:pct+"%",background:"linear-gradient(90deg,#10b981,#34d399)",borderRadius:4,minWidth:m.revenue>0?4:0,transition:"width .3s"}}/>
-                      </div>
-                      <div style={{width:80,fontSize:11,fontWeight:700,textAlign:"right",color:m.revenue>0?"#10b981":"var(--mut)"}}>{fr(m.revenue)}</div>
-                      <div style={{width:50,fontSize:10,color:"var(--mut)",textAlign:"right"}}>{m.orders} ord</div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* PARTY-WISE */}
-        {rTab==="party" && (
-          <div className="card" style={{padding:0}}>
-            <div className="tw"><table>
-              <thead><tr><th>Party</th><th>Type</th><th>City</th><th>Assigned</th><th>Total Orders</th><th>Total Revenue</th><th>Last Order</th></tr></thead>
-              <tbody>{partyWise.map(c=>(
-                <tr key={c.id} onClick={()=>openC(c.id)} style={{cursor:"pointer"}}>
-                  <td><div style={{fontWeight:700,fontSize:12.5}}>{c.company}</div><div style={{fontSize:10.5,color:"var(--mut)"}}>{c.name}</div></td>
-                  <td><span style={{fontSize:9.5,fontWeight:800,padding:"2px 8px",borderRadius:12,background:c.type==="crm"?"rgba(16,185,129,.1)":"rgba(59,130,246,.1)",color:c.type==="crm"?"#10b981":"#60a5fa"}}>{c.type?.toUpperCase()}</span></td>
-                  <td style={{fontSize:11,color:"var(--mut)"}}>{c.city||"—"}</td>
-                  <td style={{fontSize:11.5}}>{c.assigned_to||"—"}</td>
-                  <td style={{textAlign:"center",fontWeight:700}}>{c.orderCount}</td>
-                  <td style={{fontWeight:800,color:"#10b981",fontSize:13}}>{fr(c.revenue)}</td>
-                  <td style={{fontSize:11,color:"var(--mut)"}}>{fd(c.lastOrder)}</td>
-                </tr>
-              ))}</tbody>
-            </table></div>
-          </div>
-        )}
-
-        {/* TOP CUSTOMERS */}
-        {rTab==="top" && (
-          <div>
-            {topCust.map((c,i)=>{
-              const maxRev = topCust[0]?.revenue||1;
-              const pct = (c.revenue/maxRev)*100;
-              return (
-                <div key={c.id} className="card" style={{marginBottom:8,padding:"12px 16px",cursor:"pointer"}} onClick={()=>openC(c.id)}>
-                  <div style={{display:"flex",alignItems:"center",gap:12}}>
-                    <div style={{width:28,height:28,borderRadius:"50%",background:i<3?"#f59e0b":"var(--bdr)",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:800,fontSize:12,color:i<3?"#000":"var(--mut)",flexShrink:0}}>#{i+1}</div>
-                    <div style={{flex:1}}>
-                      <div style={{display:"flex",justifyContent:"space-between",marginBottom:5}}>
-                        <div><div style={{fontWeight:700,fontSize:13}}>{c.company}</div><div style={{fontSize:10.5,color:"var(--mut)"}}>{c.city} · {c.orderCount} orders · {c.assigned_to}</div></div>
-                        <div style={{fontWeight:800,fontSize:16,color:"#10b981",fontFamily:"'Sora',sans-serif"}}>{fr(c.revenue)}</div>
-                      </div>
-                      <div style={{height:6,background:"var(--card2)",borderRadius:3,overflow:"hidden"}}>
-                        <div style={{height:"100%",width:pct+"%",background:"linear-gradient(90deg,#10b981,#34d399)",borderRadius:3}}/>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-
-        {/* NBD CONVERSION */}
-        {rTab==="nbd" && (
-          <div>
-            <div className="g3" style={{marginBottom:18}}>
-              {[
-                {lbl:"Total NBD Prospects",val:nbdTotal,col:"#60a5fa",ic:"🎯"},
-                {lbl:"Converted to CRM",val:nbdConverted,col:"#10b981",ic:"✅"},
-                {lbl:"Parties with Orders",val:nbdWithOrder,col:"#a78bfa",ic:"🧾"},
-              ].map(c=><div key={c.lbl} className="card" style={{borderLeft:`3px solid ${c.col}`,textAlign:"center"}}>
-                <div style={{fontSize:24,marginBottom:4}}>{c.ic}</div>
-                <div style={{fontSize:28,fontWeight:800,color:c.col,fontFamily:"'Sora',sans-serif"}}>{c.val}</div>
-                <div style={{fontSize:10.5,color:"var(--mut)"}}>{c.lbl}</div>
-              </div>)}
-            </div>
-            <div className="card">
-              <div style={{fontSize:11,fontWeight:800,color:"var(--mut)",textTransform:"uppercase",letterSpacing:".08em",marginBottom:12}}>Conversion Funnel</div>
-              {[
-                {lbl:"Total Prospects Contacted",val:C.filter(c=>c.type==="nbd").length,col:"#60a5fa",tot:C.length},
-                {lbl:"Had Interactions",val:[...new Set(I.map(i=>i.customer_id))].length,col:"#a78bfa",tot:C.length},
-                {lbl:"Gave Enquiry",val:E.length,col:"#f59e0b",tot:C.length},
-                {lbl:"Placed Order",val:nbdWithOrder,col:"#10b981",tot:C.length},
-              ].map(s=>(
-                <div key={s.lbl} style={{marginBottom:12}}>
-                  <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
-                    <span style={{fontSize:12}}>{s.lbl}</span>
-                    <span style={{fontSize:12,fontWeight:700,color:s.col}}>{s.val}</span>
-                  </div>
-                  <div style={{height:8,background:"var(--card2)",borderRadius:4,overflow:"hidden"}}>
-                    <div style={{height:"100%",width:Math.min((s.val/Math.max(s.tot,1))*100,100)+"%",background:s.col,borderRadius:4}}/>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* SALESPERSON */}
-        {rTab==="sp" && (
-          <div className="card" style={{padding:0}}>
-            <div className="tw"><table>
-              <thead><tr><th>Salesperson</th><th>Customers</th><th>Interactions</th><th>Orders</th><th>Revenue</th><th>Target</th><th>Achievement</th></tr></thead>
-              <tbody>{spPerf.map(sp=>{
-                const ach = sp.target>0 ? ((sp.revenue/sp.target)*100).toFixed(1) : "—";
-                const achNum = sp.target>0 ? (sp.revenue/sp.target)*100 : 0;
-                return (
-                  <tr key={sp.name}>
-                    <td><div style={{display:"flex",gap:8,alignItems:"center"}}><Av name={sp.name} size={28}/><div style={{fontWeight:700,fontSize:12.5}}>{sp.name}</div></div></td>
-                    <td style={{textAlign:"center",fontWeight:700}}>{sp.customers}</td>
-                    <td style={{textAlign:"center",fontWeight:700}}>{sp.interactions}</td>
-                    <td style={{textAlign:"center",fontWeight:700}}>{sp.orders}</td>
-                    <td style={{fontWeight:800,color:"#10b981"}}>{fr(sp.revenue)}</td>
-                    <td style={{color:"var(--mut)"}}>{sp.target>0?fr(sp.target):"—"}</td>
-                    <td>
-                      {sp.target>0 ? (
-                        <div>
-                          <div style={{fontSize:12,fontWeight:800,color:achNum>=100?"#10b981":achNum>=70?"#f59e0b":"#ef4444"}}>{ach}%</div>
-                          <div style={{height:4,background:"var(--card2)",borderRadius:2,marginTop:3,width:80,overflow:"hidden"}}>
-                            <div style={{height:"100%",width:Math.min(achNum,100)+"%",background:achNum>=100?"#10b981":achNum>=70?"#f59e0b":"#ef4444",borderRadius:2}}/>
-                          </div>
-                        </div>
-                      ) : <span style={{color:"var(--mut)",fontSize:11}}>No target</span>}
-                    </td>
-                  </tr>
-                );
-              })}</tbody>
-            </table></div>
-          </div>
-        )}
-
-        {/* VISIT FREQUENCY */}
-        {rTab==="visit" && (
-          <div className="card" style={{padding:0}}>
-            <div className="tw"><table>
-              <thead><tr><th>Party</th><th>City</th><th>Assigned</th><th>Total Visits</th><th>Last Visit</th><th>Days Since</th><th>Alert</th></tr></thead>
-              <tbody>{visitFreq.map(c=>(
-                <tr key={c.id} onClick={()=>openC(c.id)} style={{cursor:"pointer"}}>
-                  <td><div style={{fontWeight:700,fontSize:12.5}}>{c.company}</div><div style={{fontSize:10.5,color:"var(--mut)"}}>{c.name}</div></td>
-                  <td style={{fontSize:11,color:"var(--mut)"}}>{c.city||"—"}</td>
-                  <td style={{fontSize:11.5}}>{c.assigned_to||"—"}</td>
-                  <td style={{textAlign:"center",fontWeight:700}}>{c.visits}</td>
-                  <td style={{fontSize:11}}>{fd(c.lastVisit)}</td>
-                  <td style={{fontSize:12,fontWeight:700,color:c.daysSince>30?"#ef4444":c.daysSince>14?"#f59e0b":"#10b981"}}>{c.daysSince<999?c.daysSince+" days":"Never"}</td>
-                  <td>{c.daysSince>30?<span style={{fontSize:9.5,background:"rgba(239,68,68,.1)",color:"#ef4444",padding:"2px 8px",borderRadius:12,fontWeight:700}}>🔴 Overdue</span>:c.daysSince>14?<span style={{fontSize:9.5,background:"rgba(245,158,11,.1)",color:"#f59e0b",padding:"2px 8px",borderRadius:12,fontWeight:700}}>🟡 Due Soon</span>:<span style={{fontSize:9.5,background:"rgba(16,185,129,.1)",color:"#10b981",padding:"2px 8px",borderRadius:12,fontWeight:700}}>✅ OK</span>}</td>
-                </tr>
-              ))}</tbody>
-            </table></div>
-          </div>
-        )}
-      </div>
-    );
-  };
-
-  /* ── TARGETS ── */
-  const Targets = () => {
-    const [tForm, setTForm] = useState({});
-    const [tSaving, setTSaving] = useState(false);
-    const months = [{v:"01",l:"January"},{v:"02",l:"February"},{v:"03",l:"March"},{v:"04",l:"April"},{v:"05",l:"May"},{v:"06",l:"June"},{v:"07",l:"July"},{v:"08",l:"August"},{v:"09",l:"September"},{v:"10",l:"October"},{v:"11",l:"November"},{v:"12",l:"December"}];
-    const SALES_PERSONS = [...new Set(C.map(c=>c.assigned_to).filter(Boolean))];
-    const curMonth = String(new Date().getMonth()+1).padStart(2,"0");
-    const curYear = new Date().getFullYear();
-
-    const getAchievement = (name, month, year) => {
-      return ORDERS.filter(o=>o.created_by===name && new Date(o.order_date).getMonth()===Number(month)-1 && new Date(o.order_date).getFullYear()===year).reduce((s,o)=>s+(Number(o.total_amount)||0),0);
-    };
-
-    const saveTarget = async() => {
-      if(!tForm.user_name||!tForm.month||!tForm.year||!tForm.target_amount) return toast$("Sab fields bharo",true);
-      setTSaving(true);
-      try {
-        const ex = TARGETS.find(t=>t.user_name===tForm.user_name&&t.month===tForm.month&&t.year===Number(tForm.year));
-        if(ex) {
-          await sbPatch("crm_targets",ex.id,{target_amount:Number(tForm.target_amount)});
-          setTARGETS(p=>p.map(x=>x.id===ex.id?{...x,target_amount:Number(tForm.target_amount)}:x));
-        } else {
-          const r = await sbInsert("crm_targets",{...tForm,year:Number(tForm.year),target_amount:Number(tForm.target_amount)});
-          setTARGETS(p=>[r[0],...p]);
-        }
-        toast$("Target set ✓"); setTForm({});
-      } catch(e){ toast$(e.message,true); }
-      setTSaving(false);
-    };
-
-    return (
-      <div>
-        <div className="sh"><div><div className="sh-t">Target vs Achievement</div><div className="sh-s">Monthly targets set karo</div></div></div>
-
-        {/* Set Target Form */}
-        <div className="card" style={{marginBottom:18}}>
-          <div style={{fontSize:11,fontWeight:800,color:"var(--mut)",textTransform:"uppercase",letterSpacing:".08em",marginBottom:14}}>🎯 New Target Set Karo</div>
-          <div className="fr" style={{gridTemplateColumns:"1fr 1fr 1fr 1fr auto",gap:10}}>
-            <div><label className="lbl">Salesperson</label>
-              <select className="inp" value={tForm.user_name||""} onChange={e=>setTForm(p=>({...p,user_name:e.target.value}))}>
-                <option value="">-- Select --</option>
-                {SALES_PERSONS.map(s=><option key={s} value={s}>{s}</option>)}
-              </select>
-            </div>
-            <div><label className="lbl">Month</label>
-              <select className="inp" value={tForm.month||""} onChange={e=>setTForm(p=>({...p,month:e.target.value}))}>
-                <option value="">-- Month --</option>
-                {months.map(m=><option key={m.v} value={m.v}>{m.l}</option>)}
-              </select>
-            </div>
-            <div><label className="lbl">Year</label>
-              <select className="inp" value={tForm.year||curYear} onChange={e=>setTForm(p=>({...p,year:e.target.value}))}>
-                {[2025,2026,2027].map(y=><option key={y} value={y}>{y}</option>)}
-              </select>
-            </div>
-            <div><label className="lbl">Target (₹)</label>
-              <input type="number" className="inp" placeholder="500000" value={tForm.target_amount||""} onChange={e=>setTForm(p=>({...p,target_amount:e.target.value}))}/>
-            </div>
-            <div style={{display:"flex",alignItems:"flex-end"}}>
-              <button className="btn btn-p" disabled={tSaving} onClick={saveTarget}>{tSaving?<Spin/>:"Set"}</button>
-            </div>
-          </div>
-        </div>
-
-        {/* Current Month Overview */}
-        <div style={{marginBottom:18}}>
-          <div style={{fontSize:11,fontWeight:800,color:"var(--mut)",textTransform:"uppercase",letterSpacing:".08em",marginBottom:12}}>This Month — {months.find(m=>m.v===curMonth)?.l} {curYear}</div>
-          <div style={{display:"flex",flexDirection:"column",gap:10}}>
-            {SALES_PERSONS.map(sp=>{
-              const tgt = TARGETS.find(t=>t.user_name===sp&&t.month===curMonth&&t.year===curYear);
-              const ach = getAchievement(sp,curMonth,curYear);
-              const tgtAmt = Number(tgt?.target_amount||0);
-              const pct = tgtAmt>0 ? Math.min((ach/tgtAmt)*100,100) : 0;
-              const gap = tgtAmt - ach;
-              return (
-                <div key={sp} className="card" style={{padding:"14px 18px"}}>
-                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
-                    <div style={{display:"flex",gap:10,alignItems:"center"}}>
-                      <Av name={sp} size={36}/>
-                      <div>
-                        <div style={{fontWeight:700,fontSize:13.5}}>{sp}</div>
-                        <div style={{fontSize:10.5,color:"var(--mut)"}}>Target: {tgtAmt>0?fr(tgtAmt):"Not set"}</div>
-                      </div>
-                    </div>
-                    <div style={{textAlign:"right"}}>
-                      <div style={{fontSize:20,fontWeight:800,color:"#10b981",fontFamily:"'Sora',sans-serif"}}>{fr(ach)}</div>
-                      <div style={{fontSize:10.5,color:"var(--mut)"}}>Achieved</div>
-                    </div>
-                  </div>
-                  {tgtAmt>0 && <>
-                    <div style={{height:10,background:"var(--card2)",borderRadius:5,overflow:"hidden",marginBottom:6}}>
-                      <div style={{height:"100%",width:pct+"%",background:pct>=100?"#10b981":pct>=70?"#f59e0b":"#ef4444",borderRadius:5,transition:"width .5s"}}/>
-                    </div>
-                    <div style={{display:"flex",justifyContent:"space-between",fontSize:11}}>
-                      <span style={{color:"var(--mut)"}}>{pct.toFixed(1)}% achieved</span>
-                      <span style={{color:gap>0?"#ef4444":"#10b981",fontWeight:700}}>{gap>0?`₹${Number(gap).toLocaleString("en-IN")} remaining`:"🎉 Target achieved!"}</span>
-                    </div>
-                  </>}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* All Targets Table */}
-        {TARGETS.length>0 && (
-          <div className="card" style={{padding:0}}>
-            <div style={{padding:"12px 16px",borderBottom:"1px solid var(--bdr)",fontSize:11,fontWeight:800,color:"var(--mut)",textTransform:"uppercase",letterSpacing:".08em"}}>All Targets History</div>
-            <div className="tw"><table>
-              <thead><tr><th>Salesperson</th><th>Month</th><th>Year</th><th>Target</th><th>Achieved</th><th>%</th></tr></thead>
-              <tbody>{TARGETS.map(t=>{
-                const ach = getAchievement(t.user_name,t.month,t.year);
-                const pct = t.target_amount>0?(ach/t.target_amount*100).toFixed(1):0;
-                return (
-                  <tr key={t.id}>
-                    <td style={{fontWeight:700}}>{t.user_name}</td>
-                    <td>{months.find(m=>m.v===t.month)?.l||t.month}</td>
-                    <td>{t.year}</td>
-                    <td style={{fontWeight:700}}>{fr(t.target_amount)}</td>
-                    <td style={{color:"#10b981",fontWeight:700}}>{fr(ach)}</td>
-                    <td><span style={{fontWeight:800,color:pct>=100?"#10b981":pct>=70?"#f59e0b":"#ef4444"}}>{pct}%</span></td>
-                  </tr>
-                );
-              })}</tbody>
-            </table></div>
-          </div>
-        )}
-      </div>
-    );
-  };
-
-  /* ── TAX INVOICE ── */
-  const Invoice = () => {
-    const [invOrders, setInvOrders] = useState(ORDERS.filter(o=>o.is_invoice));
-    const [selInv, setSelInv] = useState(null);
-    const [invItems, setInvItems] = useState([]);
-
-    const openInv = async(order) => {
-      try {
-        const [items, custArr] = await Promise.all([
-          sbGetOrderItems(order.id),
-          order.customer_id ? sbFetch(`crm_customers?id=eq.${order.customer_id}&select=phone,address,gst_no`) : Promise.resolve([])
-        ]);
-        setSelInv({...order, items:items||[], customerData:custArr?.[0]||{}});
-      } catch(e){ toast$(e.message,true); }
-    };
-
-    const genInvoiceNo = () => {
-      const d = new Date();
-      const yr = String(d.getFullYear()).slice(2) + String(d.getFullYear()+1).slice(2);
-      const count = ORDERS.filter(o=>o.is_invoice).length + 1;
-      return `SPI/${yr}/${String(count).padStart(4,"0")}`;
-    };
-
-    const convertToInvoice = async(order) => {
-      const invNo = genInvoiceNo();
-      const invDate = new Date().toISOString().split("T")[0];
-      try {
-        await sbPatch("crm_orders",order.id,{is_invoice:true,invoice_no:invNo,invoice_date:invDate});
-        setORDERS(p=>p.map(x=>x.id===order.id?{...x,is_invoice:true,invoice_no:invNo,invoice_date:invDate}:x));
-        toast$("Invoice generated: "+invNo+" ✓");
-      } catch(e){ toast$(e.message,true); }
-    };
-
-    const printInvoice = (inv) => {
-      if(!inv) return;
-      const subtotal = inv.items?.reduce((s,i)=>s+(Number(i.amount)||0),0)||0;
-      const epr = inv.epr_applied ? Math.round(subtotal*0.01) : 0;
-      const gst = inv.gst_type==="including" ? 0 : Math.round(subtotal*0.18);
-      const win = window.open("","_blank");
-      win.document.write(`<html><head><title>Invoice ${inv.invoice_no}</title>
-      <style>
-        body{font-family:Arial,sans-serif;padding:24px;color:#000;font-size:12px;}
-        .hdr{text-align:center;border-bottom:2px solid #f59e0b;padding-bottom:12px;margin-bottom:16px;}
-        h2{margin:0;color:#000;font-size:18px;}
-        .sub{color:#555;font-size:11px;}
-        .info{display:flex;justify-content:space-between;margin-bottom:16px;}
-        .box{border:1px solid #ddd;padding:10px;border-radius:4px;min-width:200px;}
-        table{width:100%;border-collapse:collapse;font-size:11px;}
-        th{background:#f59e0b;padding:7px;text-align:left;border:1px solid #ddd;}
-        td{padding:6px 7px;border:1px solid #ddd;}
-        .total{text-align:right;margin-top:12px;}
-        .total table{width:260px;margin-left:auto;}
-        .total td{border:none;padding:4px 6px;}
-        .footer{margin-top:30px;border-top:1px solid #ddd;padding-top:10px;font-size:10px;color:#888;display:flex;justify-content:space-between;}
-        .sig{margin-top:40px;text-align:right;font-size:11px;}
-      </style></head><body>
-      <div class="hdr">
-        <h2>Shreeja Packaging Industries Pvt. Ltd.</h2>
-        <div class="sub">Mayur Food Packaging Products | Delhi | GSTIN: [Your GST No]</div>
-        <div style="font-size:14px;font-weight:bold;margin-top:6px;color:#f59e0b;">TAX INVOICE</div>
-      </div>
-      <div class="info">
-        <div class="box">
-          <div style="font-size:10px;color:#888;margin-bottom:4px;">BILL TO</div>
-          <div style="font-weight:bold;font-size:13px;">${inv.company||""}</div>
-          <div>${inv.customer_name||""}</div>
-          ${inv.customerData?.address?`<div>📍 ${inv.customerData.address}</div>`:""}
-          ${inv.customerData?.phone?`<div>📞 ${inv.customerData.phone}</div>`:""}
-          ${inv.customerData?.gst_no?`<div><b>GSTIN: ${inv.customerData.gst_no}</b></div>`:""}
-        </div>
-        <div class="box" style="text-align:right;">
-          <div><b>Invoice No:</b> ${inv.invoice_no||""}</div>
-          <div><b>Invoice Date:</b> ${inv.invoice_date||""}</div>
-          <div><b>Order Date:</b> ${inv.order_date||""}</div>
-          <div><b>Payment:</b> ${inv.payment_mode?.replace("_"," ")||""}</div>
-        </div>
-      </div>
-      <table>
-        <thead><tr><th>#</th><th>SKU</th><th>Product</th><th>HSN</th><th>Packing</th><th>Cases</th><th>Price/Pcs</th><th>Taxable Amt</th><th>GST%</th><th>GST Amt</th><th>Total</th></tr></thead>
-        <tbody>
-          ${(inv.items||[]).map((item,idx)=>{
-            const taxable = Number(item.amount||0);
-            const gstAmt = inv.gst_type==="including"?0:Math.round(taxable*0.18);
-            return `<tr>
-              <td>${idx+1}</td>
-              <td>${item.sku_code||""}</td>
-              <td>${item.product_name||""}</td>
-              <td>3923</td>
-              <td>${item.packing||""}</td>
-              <td>${item.qty_cases||""}</td>
-              <td>₹${item.price_per_pcs||""}</td>
-              <td>₹${taxable.toLocaleString("en-IN")}</td>
-              <td>${inv.gst_type==="including"?"Incl.":"18%"}</td>
-              <td>₹${gstAmt.toLocaleString("en-IN")}</td>
-              <td><b>₹${(taxable+gstAmt).toLocaleString("en-IN")}</b></td>
-            </tr>`;
-          }).join("")}
-        </tbody>
-      </table>
-      <div class="total">
-        <table>
-          <tr><td>Subtotal</td><td><b>₹${subtotal.toLocaleString("en-IN")}</b></td></tr>
-          ${epr>0?`<tr><td>EPR @1%</td><td>₹${epr.toLocaleString("en-IN")}</td></tr>`:""}
-          ${gst>0?`<tr><td>GST @18%</td><td>₹${gst.toLocaleString("en-IN")}</td></tr>`:""}
-          <tr style="border-top:2px solid #000;"><td><b>Grand Total</b></td><td><b style="font-size:15px;">₹${(subtotal+epr+gst).toLocaleString("en-IN")}</b></td></tr>
-        </table>
-      </div>
-      <div class="sig">For Shreeja Packaging Industries Pvt. Ltd.<br/><br/><br/>Authorised Signatory</div>
-      <div class="footer">
-        <div>HSN Code: 3923 | Plastic articles for conveyance or packing of goods</div>
-        <div>This is a computer generated invoice.</div>
-      </div>
-      </body></html>`);
-      win.document.close(); win.print();
-    };
-
-    const pendingOrders = ORDERS.filter(o=>!o.is_invoice&&o.status!=="cancelled"&&o.status!=="draft");
-    const invoices = ORDERS.filter(o=>o.is_invoice).sort((a,b)=>new Date(b.invoice_date)-new Date(a.invoice_date));
-
-    return (
-      <div>
-        <div className="sh"><div><div className="sh-t">Tax Invoice</div><div className="sh-s">{invoices.length} invoices generated</div></div></div>
-
-        {/* Pending Orders - Convert to Invoice */}
-        {pendingOrders.length>0 && (
-          <div style={{marginBottom:18}}>
-            <div style={{fontSize:11,fontWeight:800,color:"var(--mut)",textTransform:"uppercase",letterSpacing:".08em",marginBottom:10}}>⚡ Convert to Tax Invoice</div>
-            <div className="card" style={{padding:0}}>
-              <div className="tw"><table>
-                <thead><tr><th>Party</th><th>Order Date</th><th>Amount</th><th>Status</th><th>Action</th></tr></thead>
-                <tbody>{pendingOrders.map(o=>(
-                  <tr key={o.id}>
-                    <td><div style={{fontWeight:700,fontSize:12.5}}>{o.company}</div><div style={{fontSize:10,color:"var(--mut)"}}>{o.customer_name}</div></td>
-                    <td style={{fontSize:11.5}}>{fd(o.order_date)}</td>
-                    <td style={{fontWeight:800,color:"#10b981"}}>{fr(o.total_amount)}</td>
-                    <td><Bdg s={o.status}/></td>
-                    <td><button className="btn btn-p btn-sm" onClick={()=>convertToInvoice(o)}>🧾 Generate Invoice</button></td>
-                  </tr>
-                ))}</tbody>
-              </table></div>
-            </div>
-          </div>
-        )}
-
-        {/* Invoices List */}
-        <div>
-          <div style={{fontSize:11,fontWeight:800,color:"var(--mut)",textTransform:"uppercase",letterSpacing:".08em",marginBottom:10}}>📋 All Tax Invoices</div>
-          {invoices.length===0 ? <div className="card empty"><p>Koi invoice nahi abhi</p></div>
-            : <div className="card" style={{padding:0}}>
-                <div className="tw"><table>
-                  <thead><tr><th>Invoice No</th><th>Party</th><th>Invoice Date</th><th>Amount</th><th>Payment</th><th>Actions</th></tr></thead>
-                  <tbody>{invoices.map(o=>(
-                    <tr key={o.id}>
-                      <td><span style={{fontSize:11,background:"rgba(245,158,11,.1)",color:"var(--acc)",padding:"3px 8px",borderRadius:6,fontWeight:800}}>{o.invoice_no}</span></td>
-                      <td><div style={{fontWeight:700,fontSize:12.5}}>{o.company}</div><div style={{fontSize:10,color:"var(--mut)"}}>{o.customer_name}</div></td>
-                      <td style={{fontSize:11.5}}>{fd(o.invoice_date)}</td>
-                      <td style={{fontWeight:800,color:"#10b981"}}>{fr(o.total_amount)}</td>
-                      <td><span style={{fontSize:10,padding:"2px 8px",borderRadius:12,background:"rgba(59,130,246,.1)",color:"#60a5fa",fontWeight:700,textTransform:"capitalize"}}>{o.payment_mode?.replace("_"," ")}</span></td>
-                      <td>
-                        <div style={{display:"flex",gap:6}}>
-                          <button className="btn btn-o btn-sm" onClick={async()=>{ await openInv(o); }}>👁 View</button>
-                          <button className="btn btn-p btn-sm" onClick={async()=>{ await openInv(o); }}>🖨 Print</button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}</tbody>
-                </table></div>
-              </div>}
-        </div>
-
-        {/* Invoice Modal */}
-        {selInv && (
-          <div className="ov" onClick={()=>setSelInv(null)}>
-            <div className="mod mod-lg" onClick={e=>e.stopPropagation()}>
-              <div className="mod-ttl">
-                <span>🧾 {selInv.invoice_no}</span>
-                <div style={{display:"flex",gap:8}}>
-                  <button className="btn btn-p btn-sm" onClick={()=>printInvoice(selInv)}><Printer size={12}/> Print</button>
-                  <button className="btn btn-o btn-sm" onClick={()=>setSelInv(null)}><X size={13}/></button>
-                </div>
-              </div>
-              {/* same layout as proforma but with invoice details */}
-              <div style={{textAlign:"center",marginBottom:14,paddingBottom:12,borderBottom:"1px solid var(--bdr)"}}>
-                <div style={{fontFamily:"'Sora',sans-serif",fontSize:17,fontWeight:700,color:"var(--acc)"}}>Shreeja Packaging Industries Pvt. Ltd.</div>
-                <div style={{fontSize:10,color:"var(--mut)"}}>Mayur Food Packaging Products | Delhi</div>
-                <div style={{fontSize:13,fontWeight:800,marginTop:4,color:"var(--txt)"}}>TAX INVOICE</div>
-              </div>
-              <div style={{display:"flex",justifyContent:"space-between",marginBottom:14}}>
-                <div className="card2" style={{flex:1,marginRight:10}}>
-                  <div style={{fontSize:9.5,color:"var(--mut)",marginBottom:4}}>BILL TO</div>
-                  <div style={{fontSize:14,fontWeight:700}}>{selInv.company}</div>
-                  <div style={{fontSize:12,color:"var(--mut)"}}>{selInv.customer_name}</div>
-                  {selInv.customerData?.phone && <div style={{fontSize:11,marginTop:2}}>📞 {selInv.customerData.phone}</div>}
-                  {selInv.customerData?.address && <div style={{fontSize:11,marginTop:1}}>📍 {selInv.customerData.address}</div>}
-                  {selInv.customerData?.gst_no && <div style={{fontSize:11,marginTop:2,fontWeight:700,color:"var(--acc)"}}>GSTIN: {selInv.customerData.gst_no}</div>}
-                </div>
-                <div className="card2" style={{minWidth:180}}>
-                  <div style={{fontSize:9.5,color:"var(--mut)"}}>INVOICE NO</div>
-                  <div style={{fontSize:13,fontWeight:800,color:"var(--acc)",marginBottom:6}}>{selInv.invoice_no}</div>
-                  <div style={{fontSize:9.5,color:"var(--mut)"}}>DATE</div>
-                  <div style={{fontSize:12,fontWeight:600,marginBottom:6}}>{fd(selInv.invoice_date)}</div>
-                  <div style={{fontSize:9.5,color:"var(--mut)"}}>PAYMENT</div>
-                  <div style={{fontSize:12,textTransform:"capitalize"}}>{selInv.payment_mode?.replace("_"," ")}</div>
-                </div>
-              </div>
-              <div className="tw" style={{marginBottom:12}}>
-                <table>
-                  <thead><tr><th>#</th><th>SKU</th><th>Product</th><th>Packing</th><th>Cases</th><th>Price/Pcs</th><th>CTN Price</th><th>Amount</th></tr></thead>
-                  <tbody>{(selInv.items||[]).map((item,idx)=>(
-                    <tr key={idx}>
-                      <td>{idx+1}</td>
-                      <td><span style={{fontSize:9.5,background:"rgba(245,158,11,.1)",color:"var(--acc)",padding:"2px 6px",borderRadius:4,fontWeight:700}}>{item.sku_code}</span></td>
-                      <td style={{fontWeight:600,fontSize:12}}>{item.product_name}</td>
-                      <td style={{textAlign:"center",fontSize:11}}>{item.packing}</td>
-                      <td style={{textAlign:"center",fontWeight:700}}>{item.qty_cases}</td>
-                      <td style={{fontSize:11}}>₹{item.price_per_pcs}</td>
-                      <td style={{fontSize:11}}>₹{item.ctn_price}</td>
-                      <td style={{fontWeight:800,color:"#10b981"}}>₹{Number(item.amount||0).toLocaleString("en-IN")}</td>
-                    </tr>
-                  ))}</tbody>
-                </table>
-              </div>
-              <div style={{display:"flex",justifyContent:"flex-end"}}>
-                <div style={{width:240}}>
-                  {(() => {
-                    const sub = selInv.items?.reduce((s,i)=>s+(Number(i.amount)||0),0)||0;
-                    const ep = selInv.epr_applied?Math.round(sub*0.01):0;
-                    const gs = selInv.gst_type==="including"?0:Math.round(sub*0.18);
-                    return <>
-                      <div style={{display:"flex",justifyContent:"space-between",padding:"5px 0",fontSize:12,borderBottom:"1px solid var(--bdr)"}}><span style={{color:"var(--mut)"}}>Subtotal</span><span style={{fontWeight:600}}>₹{sub.toLocaleString("en-IN")}</span></div>
-                      {ep>0&&<div style={{display:"flex",justifyContent:"space-between",padding:"5px 0",fontSize:12,borderBottom:"1px solid var(--bdr)"}}><span style={{color:"var(--mut)"}}>EPR @1%</span><span style={{fontWeight:600}}>₹{ep.toLocaleString("en-IN")}</span></div>}
-                      {gs>0&&<div style={{display:"flex",justifyContent:"space-between",padding:"5px 0",fontSize:12,borderBottom:"1px solid var(--bdr)"}}><span style={{color:"var(--mut)"}}>GST @18%</span><span style={{fontWeight:600}}>₹{gs.toLocaleString("en-IN")}</span></div>}
-                      <div style={{display:"flex",justifyContent:"space-between",padding:"8px 0",fontSize:15}}><span style={{fontWeight:700}}>Total</span><span style={{fontWeight:800,color:"#10b981",fontFamily:"'Sora',sans-serif"}}>₹{(sub+ep+gs).toLocaleString("en-IN")}</span></div>
-                    </>;
-                  })()}
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-    );
-  };
   /* ── ALL MODALS ── */
   const renderModal = () => {
     if(!modal) return null;
-    if(modal==="detail")   return <Detail/>;
-    if(modal==="aorder")   return <OrderModal/>;
+    if(modal==="detail") return <Detail/>;
+    if(modal==="aorder") return <OrderModal/>;
     if(modal==="proforma") return <ProformaModal/>;
 
     if(modal==="ainter-d") return (
@@ -1698,7 +1188,7 @@ export default function CRM({ currentUser, onLogout }) {
           <div className="mod-ttl">{editProd?"Edit SKU":"Add SKU"} <button className="btn btn-o btn-sm" onClick={closeM}><X size={13}/></button></div>
           <div className="fr fr2">
             <div><label className="lbl">SKU Code</label><input className="inp" value={form.sku_code||""} onChange={e=>sf("sku_code",e.target.value)}/></div>
-            <div><label className="lbl">Category *</label><input className="inp" placeholder="Round Container..." value={form.category||""} onChange={e=>sf("category",e.target.value)}/></div>
+            <div><label className="lbl">Category *</label><input className="inp" value={form.category||""} onChange={e=>sf("category",e.target.value)}/></div>
           </div>
           <div className="fr"><label className="lbl">Product Name *</label><input className="inp" value={form.name||""} onChange={e=>sf("name",e.target.value)}/></div>
           <div className="fr fr3">
@@ -1715,48 +1205,23 @@ export default function CRM({ currentUser, onLogout }) {
       <div className="ov" onClick={()=>setModal("detail")}>
         <div className="mod" onClick={e=>e.stopPropagation()}>
           <div className="mod-ttl">✏️ Edit Customer <button className="btn btn-o btn-sm" onClick={()=>setModal("detail")}><X size={13}/></button></div>
-          <div className="fr fr2">
-            <div><label className="lbl">Name *</label><input className="inp" value={form.name||""} onChange={e=>sf("name",e.target.value)}/></div>
-            <div><label className="lbl">Company *</label><input className="inp" value={form.company||""} onChange={e=>sf("company",e.target.value)}/></div>
-          </div>
-          <div className="fr fr2">
-            <div><label className="lbl">Phone</label><input className="inp" value={form.phone||""} onChange={e=>sf("phone",e.target.value)}/></div>
-            <div><label className="lbl">Email</label><input className="inp" value={form.email||""} onChange={e=>sf("email",e.target.value)}/></div>
-          </div>
+          <div className="fr fr2"><div><label className="lbl">Name *</label><input className="inp" value={form.name||""} onChange={e=>sf("name",e.target.value)}/></div><div><label className="lbl">Company *</label><input className="inp" value={form.company||""} onChange={e=>sf("company",e.target.value)}/></div></div>
+          <div className="fr fr2"><div><label className="lbl">Phone</label><input className="inp" value={form.phone||""} onChange={e=>sf("phone",e.target.value)}/></div><div><label className="lbl">Email</label><input className="inp" value={form.email||""} onChange={e=>sf("email",e.target.value)}/></div></div>
           <div className="fr fr3">
             <div><label className="lbl">City</label><input className="inp" value={form.city||""} onChange={e=>sf("city",e.target.value)}/></div>
-            <div><label className="lbl">Type</label>
-              <select className="inp" value={form.type||"nbd"} onChange={e=>sf("type",e.target.value)}>
-                <option value="nbd">NBD</option><option value="crm">CRM</option>
-              </select>
-            </div>
-            <div><label className="lbl">Status</label>
-              <select className="inp" value={form.status||"prospect"} onChange={e=>sf("status",e.target.value)}>
-                <option value="prospect">Prospect</option><option value="active">Active</option><option value="inactive">Inactive</option>
-              </select>
-            </div>
+            <div><label className="lbl">Type</label><select className="inp" value={form.type||"nbd"} onChange={e=>sf("type",e.target.value)}><option value="nbd">NBD</option><option value="crm">CRM</option></select></div>
+            <div><label className="lbl">Status</label><select className="inp" value={form.status||"prospect"} onChange={e=>sf("status",e.target.value)}><option value="prospect">Prospect</option><option value="active">Active</option><option value="inactive">Inactive</option></select></div>
           </div>
-          <div className="fr fr2">
-            <div><label className="lbl">Segment</label><input className="inp" value={form.segment||""} onChange={e=>sf("segment",e.target.value)}/></div>
-            <div><label className="lbl">Assigned To</label><input className="inp" value={form.assigned_to||""} onChange={e=>sf("assigned_to",e.target.value)}/></div>
-          </div>
-          <div className="fr fr2">
-            <div><label className="lbl">GST No</label><input className="inp" placeholder="22AAAAA0000A1Z5" value={form.gst_no||""} onChange={e=>sf("gst_no",e.target.value.toUpperCase())}/></div>
-            <div><label className="lbl">Address</label><input className="inp" placeholder="Shop No, Street, Area" value={form.address||""} onChange={e=>sf("address",e.target.value)}/></div>
-          </div>
+          <div className="fr fr2"><div><label className="lbl">Segment</label><input className="inp" value={form.segment||""} onChange={e=>sf("segment",e.target.value)}/></div><div><label className="lbl">Assigned To</label><input className="inp" value={form.assigned_to||""} onChange={e=>sf("assigned_to",e.target.value)}/></div></div>
+          <div className="fr fr2"><div><label className="lbl">GST No</label><input className="inp" placeholder="22AAAAA0000A1Z5" value={form.gst_no||""} onChange={e=>sf("gst_no",e.target.value.toUpperCase())}/></div><div><label className="lbl">Address</label><input className="inp" value={form.address||""} onChange={e=>sf("address",e.target.value)}/></div></div>
           <button className="btn btn-p" style={{width:"100%",justifyContent:"center",marginTop:8}} disabled={saving} onClick={async()=>{
             if(!form.name||!form.company) return toast$("Name aur Company required!",true);
             setSv(true);
             try {
-              await sbPatch("crm_customers", form.id, {
-                name:form.name, company:form.company, phone:form.phone, email:form.email,
-                city:form.city, type:form.type, status:form.status, segment:form.segment,
-                assigned_to:form.assigned_to, gst_no:form.gst_no, address:form.address
-              });
+              await sbPatch("crm_customers",form.id,{name:form.name,company:form.company,phone:form.phone,email:form.email,city:form.city,type:form.type,status:form.status,segment:form.segment,assigned_to:form.assigned_to,gst_no:form.gst_no,address:form.address});
               setC(p=>p.map(x=>x.id===form.id?{...x,...form}:x));
-              toast$("Customer updated ✓");
-              setModal("detail");
-            } catch(e){ toast$(e.message,true); }
+              toast$("Customer updated ✓"); setModal("detail");
+            } catch(e){toast$(e.message,true);}
             setSv(false);
           }}>{saving?<Spin/>:"Save"}</button>
         </div>
@@ -1767,38 +1232,24 @@ export default function CRM({ currentUser, onLogout }) {
       <div className="ov" onClick={closeM}>
         <div className="mod mod-sm" onClick={e=>e.stopPropagation()}>
           <div className="mod-ttl">➕ New Customer <button className="btn btn-o btn-sm" onClick={closeM}><X size={13}/></button></div>
+          <div className="fr fr2"><div><label className="lbl">Name *</label><input className="inp" value={form.name||""} onChange={e=>sf("name",e.target.value)}/></div><div><label className="lbl">Company *</label><input className="inp" value={form.company||""} onChange={e=>sf("company",e.target.value)}/></div></div>
+          <div className="fr fr2"><div><label className="lbl">Phone</label><input className="inp" value={form.phone||""} onChange={e=>sf("phone",e.target.value)}/></div><div><label className="lbl">City</label><input className="inp" value={form.city||""} onChange={e=>sf("city",e.target.value)}/></div></div>
+          <div className="fr fr2"><div><label className="lbl">GST No</label><input className="inp" placeholder="22AAAAA0000A1Z5" value={form.gst_no||""} onChange={e=>sf("gst_no",e.target.value.toUpperCase())}/></div><div><label className="lbl">Address</label><input className="inp" value={form.address||""} onChange={e=>sf("address",e.target.value)}/></div></div>
           <div className="fr fr2">
-            <div><label className="lbl">Name *</label><input className="inp" placeholder="Contact name" value={form.name||""} onChange={e=>sf("name",e.target.value)}/></div>
-            <div><label className="lbl">Company *</label><input className="inp" placeholder="Company name" value={form.company||""} onChange={e=>sf("company",e.target.value)}/></div>
-          </div>
-          <div className="fr fr2">
-            <div><label className="lbl">Phone</label><input className="inp" value={form.phone||""} onChange={e=>sf("phone",e.target.value)}/></div>
-            <div><label className="lbl">City</label><input className="inp" value={form.city||""} onChange={e=>sf("city",e.target.value)}/></div>
-          </div>
-          <div className="fr fr2">
-            <div><label className="lbl">GST No</label><input className="inp" placeholder="22AAAAA0000A1Z5" value={form.gst_no||""} onChange={e=>sf("gst_no",e.target.value.toUpperCase())}/></div>
-            <div><label className="lbl">Address</label><input className="inp" placeholder="Shop No, Street, Area" value={form.address||""} onChange={e=>sf("address",e.target.value)}/></div>
-          </div>
-          <div className="fr fr2">
-            <div><label className="lbl">Type</label>
-              <select className="inp" value={form.type||"nbd"} onChange={e=>sf("type",e.target.value)}>
-                <option value="nbd">NBD (Prospect)</option>
-                <option value="crm">CRM (Existing)</option>
-              </select>
-            </div>
+            <div><label className="lbl">Type</label><select className="inp" value={form.type||"nbd"} onChange={e=>sf("type",e.target.value)}><option value="nbd">NBD (Prospect)</option><option value="crm">CRM (Existing)</option></select></div>
             <div><label className="lbl">Assigned To</label><input className="inp" value={form.assigned_to||""} onChange={e=>sf("assigned_to",e.target.value)}/></div>
           </div>
           <button className="btn btn-p" style={{width:"100%",justifyContent:"center",marginTop:6}} disabled={saving} onClick={async()=>{
             if(!form.name||!form.company) return toast$("Name aur Company required!",true);
             setSv(true);
             try {
-            const r = await sbInsert("crm_customers",{name:form.name,company:form.company,phone:form.phone,city:form.city,gst_no:form.gst_no,address:form.address,type:form.type||"nbd",assigned_to:form.assigned_to,status:"prospect"});
-              const newCust = r[0];
+              const r=await sbInsert("crm_customers",{name:form.name,company:form.company,phone:form.phone,city:form.city,gst_no:form.gst_no,address:form.address,type:form.type||"nbd",assigned_to:form.assigned_to,status:"prospect"});
+              const newCust=r[0];
               setC(p=>[newCust,...p]);
-              setForm(prev=>({...prev, customer_id:newCust.id, name:undefined, phone:undefined, city:undefined, type:undefined, assigned_to:undefined}));
+              setForm(prev=>({...prev,customer_id:newCust.id,name:undefined,phone:undefined,city:undefined,type:undefined,assigned_to:undefined,gst_no:undefined,address:undefined}));
               toast$("Customer add ho gaya ✓");
               setModal("aorder");
-            } catch(e){ toast$(e.message,true); }
+            } catch(e){toast$(e.message,true);}
             setSv(false);
           }}>{saving?<Spin/>:"Save & Select"}</button>
         </div>
@@ -1806,51 +1257,38 @@ export default function CRM({ currentUser, onLogout }) {
     );
 
     if(modal==="editorder") {
-      const editTotal = orderItems.reduce((s,i)=>s+(Number(i.amount)||0),0);
-      const editEprChecked = !!(form.epr || form.epr_applied);
-      const editEpr = editEprChecked ? Math.round(editTotal*0.01) : 0;
-      const editGstType = form.gst_type || "excluding";
-      const editGst = editGstType==="including" ? 0 : Math.round(editTotal*0.18);
+      const editTotal=orderItems.reduce((s,i)=>s+(Number(i.amount)||0),0);
+      const editEprChecked=!!(form.epr||form.epr_applied);
+      const editEpr=editEprChecked?Math.round(editTotal*0.01):0;
+      const editGstType=form.gst_type||"excluding";
+      const editGst=editGstType==="including"?0:Math.round(editTotal*0.18);
       return (
         <div className="ov" onClick={closeM}>
           <div className="mod" style={{width:860,maxWidth:"96vw"}} onClick={e=>e.stopPropagation()}>
             <div className="mod-ttl">✏️ Edit Order — {form.company} <button className="btn btn-o btn-sm" onClick={closeM}><X size={13}/></button></div>
-
-            {/* Top fields */}
             <div className="fr fr2" style={{marginBottom:12}}>
               <div><label className="lbl">Order Date</label><input type="date" className="inp" value={form.order_date||""} onChange={e=>sf("order_date",e.target.value)}/></div>
               <div><label className="lbl">Payment Mode</label>
                 <select className="inp" value={form.payment_mode||"cash"} onChange={e=>sf("payment_mode",e.target.value)}>
-                  <option value="cash">💵 Cash</option>
-                  <option value="credit">🏦 Credit</option>
-                  <option value="bank_transfer">↗ Bank Transfer</option>
-                  <option value="cheque">📝 Cheque</option>
+                  <option value="cash">💵 Cash</option><option value="credit">🏦 Credit</option><option value="bank_transfer">↗ Bank Transfer</option><option value="cheque">📝 Cheque</option>
                 </select>
               </div>
             </div>
-
             <div className="g2" style={{gap:14}}>
-              {/* LEFT: product picker */}
               <div>
                 <label className="lbl">Product Add Karo</label>
                 <div style={{maxHeight:280,overflowY:"auto",border:"1px solid var(--bdr)",borderRadius:8}}>
                   {PRODS.map(p=>(
                     <div key={p.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"7px 10px",borderBottom:"1px solid var(--bdr)",fontSize:11.5}}>
-                      <div>
-                        <div style={{fontWeight:600,fontSize:11.5}}>{p.name}</div>
-                        <div style={{fontSize:10,color:"var(--mut)"}}>{p.sku_code} · ₹{p.ctn_price}/ctn</div>
-                      </div>
+                      <div><div style={{fontWeight:600,fontSize:11.5}}>{p.name}</div><div style={{fontSize:10,color:"var(--mut)"}}>{p.sku_code} · ₹{p.ctn_price}/ctn</div></div>
                       <button className="btn btn-g btn-sm" onClick={()=>addOrderItem(p)}>+ Add</button>
                     </div>
                   ))}
                 </div>
               </div>
-
-              {/* RIGHT: items */}
               <div>
                 <label className="lbl">Order Items ({orderItems.length})</label>
-                {orderItems.length===0
-                  ?<div className="empty" style={{padding:20,border:"1px solid var(--bdr)",borderRadius:8}}><p>Koi item nahi</p></div>
+                {orderItems.length===0?<div className="empty" style={{padding:20,border:"1px solid var(--bdr)",borderRadius:8}}><p>Koi item nahi</p></div>
                   :<div style={{border:"1px solid var(--bdr)",borderRadius:8,overflow:"hidden"}}>
                     {orderItems.map(item=>(
                       <div key={item.product_id||item.id} style={{padding:"8px 10px",borderBottom:"1px solid var(--bdr)"}}>
@@ -1859,18 +1297,10 @@ export default function CRM({ currentUser, onLogout }) {
                           <button style={{background:"none",border:"none",color:"var(--err)",cursor:"pointer"}} onClick={()=>removeOrderItem(item.product_id||item.id)}><Trash2 size={12}/></button>
                         </div>
                         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:6}}>
-                          <div><div style={{fontSize:9,color:"var(--mut)",marginBottom:2}}>CASES</div>
-                            <NumInput style={{padding:"4px 8px",fontSize:12}} value={item.qty_cases} onChange={v=>updOrderItem(item.product_id||item.id,"qty_cases",v)}/>
-                          </div>
-                          <div><div style={{fontSize:9,color:"var(--mut)",marginBottom:2}}>CTN PRICE (₹)</div>
-                            <NumInput style={{padding:"4px 8px",fontSize:12}} value={item.ctn_price} onChange={v=>updOrderItem(item.product_id||item.id,"ctn_price",v)}/>
-                          </div>
-                          <div><div style={{fontSize:9,color:"var(--mut)",marginBottom:2}}>DISCOUNT (₹)</div>
-                            <NumInput style={{padding:"4px 8px",fontSize:12}} value={item.discount||0} onChange={v=>updOrderItem(item.product_id||item.id,"discount",v)}/>
-                          </div>
-                          <div><div style={{fontSize:9,color:"var(--mut)",marginBottom:2}}>AMOUNT</div>
-                            <div style={{fontSize:13,fontWeight:800,color:"#10b981",paddingTop:6}}>₹{Number(item.amount||0).toLocaleString("en-IN")}</div>
-                          </div>
+                          <div><div style={{fontSize:9,color:"var(--mut)",marginBottom:2}}>CASES</div><NumInput style={{padding:"4px 8px",fontSize:12}} value={item.qty_cases} onChange={v=>updOrderItem(item.product_id||item.id,"qty_cases",v)}/></div>
+                          <div><div style={{fontSize:9,color:"var(--mut)",marginBottom:2}}>CTN PRICE (₹)</div><NumInput style={{padding:"4px 8px",fontSize:12}} value={item.ctn_price} onChange={v=>updOrderItem(item.product_id||item.id,"ctn_price",v)}/></div>
+                          <div><div style={{fontSize:9,color:"var(--mut)",marginBottom:2}}>DISCOUNT (₹)</div><NumInput style={{padding:"4px 8px",fontSize:12}} value={item.discount||0} onChange={v=>updOrderItem(item.product_id||item.id,"discount",v)}/></div>
+                          <div><div style={{fontSize:9,color:"var(--mut)",marginBottom:2}}>AMOUNT</div><div style={{fontSize:13,fontWeight:800,color:"#10b981",paddingTop:6}}>₹{Number(item.amount||0).toLocaleString("en-IN")}</div></div>
                         </div>
                       </div>
                     ))}
@@ -1878,22 +1308,15 @@ export default function CRM({ currentUser, onLogout }) {
                       <div style={{display:"flex",justifyContent:"space-between",fontSize:12,marginBottom:4}}><span style={{color:"var(--mut)"}}>Subtotal</span><span style={{fontWeight:600}}>₹{editTotal.toLocaleString("en-IN")}</span></div>
                       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",fontSize:12,marginBottom:4}}>
                         <label style={{display:"flex",alignItems:"center",gap:5,cursor:"pointer",color:"var(--mut)"}}>
-                          <input type="checkbox" checked={editEprChecked} onChange={e=>{sf("epr",e.target.checked);sf("epr_applied",e.target.checked);}} style={{accentColor:"var(--acc)",width:14,height:14}}/>
-                          EPR @1%
+                          <input type="checkbox" checked={editEprChecked} onChange={e=>{sf("epr",e.target.checked);sf("epr_applied",e.target.checked);}} style={{accentColor:"var(--acc)",width:14,height:14}}/>EPR @1%
                         </label>
                         <span style={{fontWeight:600,color:editEprChecked?"var(--txt)":"var(--mut)"}}>₹{editEpr.toLocaleString("en-IN")}</span>
                       </div>
                       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",fontSize:12,marginBottom:6}}>
                         <div style={{display:"flex",alignItems:"center",gap:8}}>
                           <span style={{color:"var(--mut)"}}>GST @18%:</span>
-                          <label style={{display:"flex",alignItems:"center",gap:4,cursor:"pointer"}}>
-                            <input type="radio" name="egst" value="excluding" checked={editGstType!=="including"} onChange={()=>sf("gst_type","excluding")} style={{accentColor:"var(--acc)",width:13,height:13}}/>
-                            <span style={{fontSize:11}}>Excl.</span>
-                          </label>
-                          <label style={{display:"flex",alignItems:"center",gap:4,cursor:"pointer"}}>
-                            <input type="radio" name="egst" value="including" checked={editGstType==="including"} onChange={()=>sf("gst_type","including")} style={{accentColor:"var(--acc)",width:13,height:13}}/>
-                            <span style={{fontSize:11}}>Incl.</span>
-                          </label>
+                          <label style={{display:"flex",alignItems:"center",gap:4,cursor:"pointer"}}><input type="radio" name="egst" value="excluding" checked={editGstType!=="including"} onChange={()=>sf("gst_type","excluding")} style={{accentColor:"var(--acc)",width:13,height:13}}/><span style={{fontSize:11}}>Excl.</span></label>
+                          <label style={{display:"flex",alignItems:"center",gap:4,cursor:"pointer"}}><input type="radio" name="egst" value="including" checked={editGstType==="including"} onChange={()=>sf("gst_type","including")} style={{accentColor:"var(--acc)",width:13,height:13}}/><span style={{fontSize:11}}>Incl.</span></label>
                         </div>
                         <span style={{fontWeight:600}}>{editGstType==="including"?"(included)":"₹"+editGst.toLocaleString("en-IN")}</span>
                       </div>
@@ -1902,33 +1325,24 @@ export default function CRM({ currentUser, onLogout }) {
                   </div>}
               </div>
             </div>
-
             <div className="fr fr2" style={{marginTop:12}}>
               <div><label className="lbl">Notes</label><textarea className="inp" defaultValue={form.notes||""} onBlur={e=>sf("notes",e.target.value)} style={{minHeight:38,resize:"none"}}/></div>
               <div style={{display:"flex",alignItems:"flex-end"}}>
                 <button className="btn btn-p" style={{width:"100%",justifyContent:"center",fontSize:13}} disabled={saving} onClick={async()=>{
                   setSv(true);
-                  const newTotal = editTotal + editEpr + (editGstType==="including"?0:editGst);
+                  const newTotal=editTotal+editEpr+(editGstType==="including"?0:editGst);
                   try {
-                    await sbPatch("crm_orders", form.id, {
-                      order_date: form.order_date,
-                      payment_mode: form.payment_mode,
-                      gst_type: form.gst_type||"excluding",
-                      epr_applied: editEprChecked,
-                      total_amount: newTotal,
-                      notes: form.notes,
-                    });
-                    // delete old items and reinsert
-                    await sbFetch(`crm_order_items?order_id=eq.${form.id}`, {method:"DELETE"});
+                    const totalCases=orderItems.reduce((s,i)=>s+(Number(i.qty_cases)||0),0);
+                    await sbPatch("crm_orders",form.id,{order_date:form.order_date,payment_mode:form.payment_mode,gst_type:editGstType,epr_applied:editEprChecked,total_amount:newTotal,total_cases:totalCases,notes:form.notes});
+                    await sbFetch(`crm_order_items?order_id=eq.${form.id}`,{method:"DELETE"});
                     if(orderItems.length>0){
-                      const items = orderItems.map(i=>({...i, order_id:form.id, product_id: i.product_id||i.id}));
-                      // remove id field from items
-                      const cleanItems = items.map(({id,...rest})=>rest);
-                      await sbInsert("crm_order_items", cleanItems);
+                      const items=orderItems.map(i=>({...i,order_id:form.id,product_id:i.product_id||i.id}));
+                      const cleanItems=items.map(({id,...rest})=>rest);
+                      await sbInsert("crm_order_items",cleanItems);
                     }
                     setORDERS(p=>p.map(x=>x.id===form.id?{...x,...form,total_amount:newTotal}:x));
                     toast$("Order updated ✓"); closeM();
-                  } catch(e){ toast$(e.message,true); }
+                  } catch(e){toast$(e.message,true);}
                   setSv(false);
                 }}>{saving?<Spin/>:"💾 Save Order"}</button>
               </div>
@@ -1948,7 +1362,7 @@ export default function CRM({ currentUser, onLogout }) {
           <div><label className="lbl">Status</label><select className="inp" value={form.status||"prospect"} onChange={e=>sf("status",e.target.value)}><option value="prospect">Prospect</option><option value="active">Active</option><option value="inactive">Inactive</option></select></div>
         </div>
         <div className="fr fr2"><div><label className="lbl">Segment</label><input className="inp" value={form.segment||""} onChange={e=>sf("segment",e.target.value)}/></div><div><label className="lbl">Assigned To</label><input className="inp" value={form.assigned_to||""} onChange={e=>sf("assigned_to",e.target.value)}/></div></div>
-        <div className="fr fr2"><div><label className="lbl">GST No</label><input className="inp" placeholder="22AAAAA0000A1Z5" value={form.gst_no||""} onChange={e=>sf("gst_no",e.target.value.toUpperCase())}/></div><div><label className="lbl">Address</label><input className="inp" placeholder="Shop No, Street, Area" value={form.address||""} onChange={e=>sf("address",e.target.value)}/></div></div>
+        <div className="fr fr2"><div><label className="lbl">GST No</label><input className="inp" placeholder="22AAAAA0000A1Z5" value={form.gst_no||""} onChange={e=>sf("gst_no",e.target.value.toUpperCase())}/></div><div><label className="lbl">Address</label><input className="inp" value={form.address||""} onChange={e=>sf("address",e.target.value)}/></div></div>
       </>},
       aenq:{t:"New Enquiry",fn:saveEnq,f:<>
         <div className="fr"><label className="lbl">Customer *</label><CustomerSearch value={form.customer_id||""} onChange={v=>sf("customer_id",v)}/></div>
@@ -2018,7 +1432,6 @@ export default function CRM({ currentUser, onLogout }) {
     {id:"orders",lbl:"Orders",ic:"🧾",badge:ORDERS.filter(o=>o.status==="draft").length||null,bc:"info"},
     {id:"reports",lbl:"Reports",ic:"📊"},
     {id:"targets",lbl:"Targets",ic:"🎯"},
-    {id:"invoice",lbl:"Tax Invoice",ic:"🧾"},
   ];
 
   return (
@@ -2027,7 +1440,12 @@ export default function CRM({ currentUser, onLogout }) {
         <div className="sb-brand"><h2>Mayur CRM</h2><p>Packaging · Sales Ops</p></div>
         <div className="sb-nav">
           {navs.map(n=>(
-            <div key={n.id} className={`ni ${view===n.id?"active":""}`} onClick={()=>{setView(n.id);setQ("");}}>
+            <div key={n.id} className={`ni ${view===n.id?"active":""}`} onClick={async()=>{
+              setView(n.id); setQ("");
+              if(["orders","reports","targets"].includes(n.id)&&!allOrdersLoaded){
+                await loadAllOrders();
+              }
+            }}>
               <span style={{fontSize:15}}>{n.ic}</span><span>{n.lbl}</span>
               {n.badge?<span className={`nb ${n.bc||""}`}>{n.badge}</span>:null}
             </div>
@@ -2045,7 +1463,7 @@ export default function CRM({ currentUser, onLogout }) {
             <div className="tb-sub">👤 {currentUser?.name} · Mayur Food Packaging</div>
           </div>
           {urgN>0&&<div style={{display:"flex",alignItems:"center",gap:5,padding:"5px 12px",background:"rgba(239,68,68,.1)",border:"1px solid rgba(239,68,68,.2)",borderRadius:8,cursor:"pointer"}} onClick={()=>setView("followups")}><span style={{fontSize:11}}>⚡</span><span style={{fontSize:11.5,color:"#ef4444",fontWeight:800}}>{urgN} Urgent</span></div>}
-          <button className="btn btn-o btn-sm" onClick={()=>{setForm({order_date:new Date().toISOString().split("T")[0], epr:false});setOrderItems([]);setModal("aorder");}}>🧾 New Order</button>
+          <button className="btn btn-o btn-sm" onClick={()=>{setForm({order_date:new Date().toISOString().split("T")[0],epr:false});setOrderItems([]);setModal("aorder");}}>🧾 New Order</button>
           <button className="btn btn-p btn-sm" onClick={()=>{setForm({});setModal("ainter");}}><Plus size={13}/> Log Interaction</button>
         </div>
         <div className="content">
@@ -2059,7 +1477,6 @@ export default function CRM({ currentUser, onLogout }) {
           {view==="orders"&&<Orders/>}
           {view==="reports"&&<Reports/>}
           {view==="targets"&&<Targets/>}
-          {view==="invoice"&&<Invoice/>}
         </div>
       </div>
       {renderModal()}
