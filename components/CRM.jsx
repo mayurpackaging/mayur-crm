@@ -1252,6 +1252,18 @@ export default function CRM({ currentUser, onLogout }) {
             if(!form.name||!form.company) return toast$("Name aur Company required!",true);
             setSv(true);
             try {
+              // Check for existing customer with same company name
+              const dup=C.find(c=>c.company&&form.company&&c.company.trim().toLowerCase()===form.company.trim().toLowerCase());
+              if(dup){
+                setSv(false);
+                if(!window.confirm(`"${dup.company}" already exist karta hai (${dup.type.toUpperCase()}, ${dup.city||"no city"}). Phir bhi naya banayein? \n\nOK = Naya banao | Cancel = Purana use karo`)){
+                  setForm(prev=>({...prev,customer_id:dup.id}));
+                  toast$("Purana customer select kiya ✓");
+                  setModal("aorder");
+                  return;
+                }
+                setSv(true);
+              }
               const r=await sbInsert("crm_customers",{name:form.name,company:form.company,phone:form.phone,city:form.city,gst_no:form.gst_no,address:form.address,type:form.type||"nbd",assigned_to:form.assigned_to,status:"prospect"});
               const newCust=r[0];
               setC(p=>[newCust,...p]);
