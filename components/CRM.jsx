@@ -815,17 +815,19 @@ export default function CRM({ currentUser, onLogout }) {
     const getAch=(name,month,year)=>ORDERS.filter(o=>o.created_by===name&&new Date(o.order_date).getMonth()===Number(month)-1&&new Date(o.order_date).getFullYear()===year).reduce((s,o)=>s+(Number(o.total_amount)||0),0);
     const getAchCases=(name,month,year)=>ORDERS.filter(o=>o.created_by===name&&new Date(o.order_date).getMonth()===Number(month)-1&&new Date(o.order_date).getFullYear()===year).reduce((s,o)=>s+(Number(o.total_cases)||0),0);
     const saveTarget=async()=>{
-     if(!tForm.user_name){return toast$("Salesperson select karo",true);} if(!tForm.month){return toast$("Month select karo",true);} if(!tForm.year){tForm.year=new Date().getFullYear();}
+      const yr = tForm.year || curYear;
+      if(!tForm.user_name) return toast$("Salesperson select karo",true);
+      if(!tForm.month) return toast$("Month select karo",true);
       if(!tForm.target_amount&&!tForm.target_cases) return toast$("Amount ya Cases target bharo",true);
       setTSaving(true);
       try {
-        const ex=TARGETS.find(t=>t.user_name===tForm.user_name&&t.month===tForm.month&&t.year===Number(tForm.year));
+        const ex=TARGETS.find(t=>t.user_name===tForm.user_name&&t.month===tForm.month&&t.year===Number(yr));
         const payload={target_amount:Number(tForm.target_amount||0),target_cases:Number(tForm.target_cases||0)};
         if(ex){
           await sbPatch("crm_targets",ex.id,payload);
           setTARGETS(p=>p.map(x=>x.id===ex.id?{...x,...payload}:x));
         } else {
-          const r=await sbInsert("crm_targets",{user_name:tForm.user_name,month:tForm.month,year:Number(tForm.year),...payload});
+          const r=await sbInsert("crm_targets",{user_name:tForm.user_name,month:tForm.month,year:Number(yr),...payload});
           setTARGETS(p=>[r[0],...p]);
         }
         toast$("Target set ✓"); setTForm({});
