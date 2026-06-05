@@ -947,6 +947,33 @@ export default function CRM({ currentUser, onLogout }) {
             <div style={{fontSize:10,fontWeight:800,color:"var(--mut)",textTransform:"uppercase",letterSpacing:".08em",marginBottom:8}}>🧪 Samples</div>
             {smpl.map(s=><div key={s.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 12px",background:"var(--card2)",borderRadius:8,marginBottom:6,border:"1px solid var(--bdr)"}}><div><div style={{fontSize:12,fontWeight:600}}>{s.product}</div><div style={{fontSize:10,color:"var(--mut)"}}>{s.qty} · {fd(s.sent_date)}</div></div><Bdg s={s.status}/></div>)}
           </div>}
+          {(()=>{
+            const custOrders=ORDERS.filter(o=>o.customer_id===c.id||o.company===c.company).sort((a,b)=>new Date(b.order_date)-new Date(a.order_date));
+            const totalBiz=custOrders.reduce((s,o)=>s+(Number(o.total_amount)||0),0);
+            if(custOrders.length===0) return null;
+            return (
+              <div style={{marginBottom:14}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+                  <div style={{fontSize:10,fontWeight:800,color:"var(--mut)",textTransform:"uppercase",letterSpacing:".08em"}}>🧾 Orders ({custOrders.length})</div>
+                  <div style={{fontSize:12,fontWeight:800,color:"#10b981"}}>Total: {fr(totalBiz)}</div>
+                </div>
+                <div style={{maxHeight:160,overflowY:"auto"}}>
+                  {custOrders.map(o=>(
+                    <div key={o.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 12px",background:"var(--card2)",borderRadius:8,marginBottom:6,border:"1px solid var(--bdr)",cursor:"pointer"}} onClick={()=>openOrder(o)}>
+                      <div style={{flex:1}}>
+                        <div style={{display:"flex",gap:6,alignItems:"center"}}>
+                          <span style={{fontSize:12,fontWeight:700,color:"#10b981"}}>{fr(o.total_amount)}</span>
+                          <Bdg s={o.status}/>
+                        </div>
+                        <div style={{fontSize:10,color:"var(--mut)",marginTop:2}}>{fd(o.order_date)} · {o.payment_mode?.replace("_"," ")}{o.items_summary?` · ${o.items_summary}`:""}</div>
+                      </div>
+                      <Printer size={12} style={{color:"var(--mut)"}}/>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
           <div>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
               <div style={{fontSize:10,fontWeight:800,color:"var(--mut)",textTransform:"uppercase",letterSpacing:".08em"}}>📁 Interactions ({ilist.length})</div>
