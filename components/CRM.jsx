@@ -959,7 +959,7 @@ export default function CRM({ currentUser, onLogout }) {
                 </div>
                 <div style={{maxHeight:160,overflowY:"auto"}}>
                   {custOrders.map(o=>(
-                    <div key={o.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 12px",background:"var(--card2)",borderRadius:8,marginBottom:6,border:"1px solid var(--bdr)",cursor:"pointer"}} onClick={()=>openOrder(o)}>
+                    <div key={o.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 12px",background:"var(--card2)",borderRadius:8,marginBottom:6,border:"1px solid var(--bdr)",borderLeft:`3px solid ${o.status==="delivered"?"#10b981":o.status==="dispatched"?"#f59e0b":o.status==="confirmed"?"#a78bfa":o.status==="cancelled"?"#ef4444":"#60a5fa"}`,cursor:"pointer"}} onClick={()=>openOrder(o)}>
                       <div style={{flex:1}}>
                         <div style={{display:"flex",gap:6,alignItems:"center"}}>
                           <span style={{fontSize:12,fontWeight:700,color:"#10b981"}}>{fr(o.total_amount)}</span>
