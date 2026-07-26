@@ -60,6 +60,7 @@ export default function CRM({ currentUser, onLogout }) {
   const printRef = useRef();
   // pricing state
   const [pxRows,setPxRows] = useState([]);
+  const [pxProducts,setPxProducts] = useState([]);
   const [pxDaana,setPxDaana] = useState({homo:"",cp:"",random:""});
   const [pxLoad,setPxLoad] = useState(false);
   const [pxSave,setPxSave] = useState(false);
@@ -98,6 +99,8 @@ export default function CRM({ currentUser, onLogout }) {
       if(d&&d[0]) setPxDaana({homo:d[0].homo,cp:d[0].cp,random:d[0].random});
       const th = await sbFetch("sales_item_thresholds?order=item_name.asc");
       setPxRows(th||[]);
+      const pz = await sbFetch("product_zone_lookup");
+      setPxProducts(pz||[]);
     }catch(e){ setToast({msg:"Pricing load error",err:true}); }
     setPxLoad(false);
   },[]);
@@ -1513,7 +1516,7 @@ export default function CRM({ currentUser, onLogout }) {
   const PXZ = {N3:{c:"#10b981",bg:"rgba(16,185,129,.12)"},N2:{c:"#f59e0b",bg:"rgba(245,158,11,.12)"},N1:{c:"#f97316",bg:"rgba(249,115,22,.12)"},RED:{c:"#ef4444",bg:"rgba(239,68,68,.12)"}};
 
   const isAdmin = (currentUser?.name||"").toLowerCase().includes("nitin");
-  const pxByProduct = (pname) => pxRows.find(r=>r.crm_product_name===pname);
+  const pxByProduct = (pname) => pxProducts.find(r=>r.crm_product_name===pname);
   const NBadge = ({pname}) => {
     const px = pxByProduct(pname);
     if(!px) return null;
