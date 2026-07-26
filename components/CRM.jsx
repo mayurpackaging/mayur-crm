@@ -1468,6 +1468,113 @@ export default function CRM({ currentUser, onLogout }) {
     );
   };
 
+
+  /* ── PRICING (N1/N2/N3 Engine) ── */
+  const [pxRows,setPxRows] = useState([]);
+  const [pxDaana,setPxDaana] = useState({homo:"",cp:"",random:""});
+  const [pxLoad,setPxLoad] = useState(false);
+  const [pxSave,setPxSave] = useState(false);
+  const [pxQ,setPxQ] = useState("");
+
+  const loadPricing = useCallback(async()=>{
+    setPxLoad(true);
+    try{
+      const d = await sbFetch("price_daana?order=rate_date.desc&limit=1");
+      if(d&&d[0]) setPxDaana({homo:d[0].homo,cp:d[0].cp,random:d[0].random});
+      const th = await sbFetch("sales_item_thresholds?order=item_name.asc");
+      setPxRows(th||[]);
+    }catch(e){ toast$("Pricing load error",true); }
+    setPxLoad(false);
+  },[]);
+
+  const savePxDaana = async()=>{
+    setPxSave(true);
+    try{
+      const today = new Date().toISOString().slice(0,10);
+      const existing = await sbFetch("price_daana?rate_date=eq."+today);
+      const body = {homo:+pxDaana.homo,cp:+pxDaana.cp,random:+pxDaana.random};
+      if(existing&&existing.length>0){
+        await sbFetch("price_daana?rate_date=eq."+today,{method:"PATCH",body});
+      }else{
+        await sbFetch("price_daana",{method:"POST",body:{rate_date:today,...body}});
+      }
+      await loadPricing();
+      toast$("Daana updated ✓ — zones recalculated");
+    }catch(e){ toast$("Daana save error",true); }
+    setPxSave(false);
+  };
+
+  const pxUpdatePrice = async(id,price)=>{
+    try{
+      await sbFetch("price_items?id=eq."+id,{method:"PATCH",body:{list_price:+price}});
+      await loadPricing();
+      toast$("Price updated ✓");
+    }catch(e){ toast$("Price error",true); }
+  };
+
+  const PXZ = {N3:{c:"#10b981",bg:"rgba(16,185,129,.12)"},N2:{c:"#f59e0b",bg:"rgba(245,158,11,.12)"},N1:{c:"#f97316",bg:"rgba(249,115,22,.12)"},RED:{c:"#ef4444",bg:"rgba(239,68,68,.12)"}};
+
+  const Pricing = () => {
+    const list = pxRows.filter(r=>!pxQ||r.item_name.toLowerCase().includes(pxQ.toLowerCase()));
+    const zc = pxRows.reduce((a,r)=>{a[r.zone]=(a[r.zone]||0)+1;return a;},{});
+    return (
+      <div>
+        <div className="sh"><div><div className="sh-t">💰 Pricing Engine — N1/N2/N3</div><div className="sh-s">Daana daalo → sab items ka zone auto-calculate</div></div></div>
+
+        {/* Daana input */}
+        <div className="card" style={{background:"#0e1a24",color:"#fff",marginBottom:14}}>
+          <div style={{fontSize:11,color:"#9fb3c0",textTransform:"uppercase",letterSpacing:1,marginBottom:8}}>Aaj ka Daana Rate ₹/kg</div>
+          <div style={{display:"flex",gap:10}}>
+            {["homo","cp","random"].map(k=>(
+              <div key={k} style={{flex:1}}>
+                <input type="number" value={pxDaana[k]} onChange={e=>setPxDaana({...pxDaana,[k]:e.target.value})}
+                  style={{width:"100%",padding:10,borderRadius:8,border:"1px solid #2c3e4c",background:"#1b2b38",color:"#fff",fontSize:18,fontWeight:700,textAlign:"center"}}/>
+                <div style={{textAlign:"center",fontSize:10,color:"#7f97a6",marginTop:3,textTransform:"uppercase"}}>{k}</div>
+              </div>
+            ))}
+          </div>
+          <button className="btn btn-p" style={{marginTop:12,width:"100%",justifyContent:"center"}} onClick={savePxDaana} disabled={pxSave}>{pxSave?"Saving...":"Save Daana & Recalculate"}</button>
+        </div>
+
+        {/* Zone summary */}
+        <div style={{display:"flex",gap:8,marginBottom:14}}>
+          {["N3","N2","N1","RED"].map(z=>(
+            <div key={z} style={{flex:1,textAlign:"center",padding:12,borderRadius:10,background:PXZ[z].bg,border:`1px solid ${PXZ[z].c}`}}>
+              <div style={{fontSize:22,fontWeight:800,color:PXZ[z].c}}>{zc[z]||0}</div>
+              <div style={{fontSize:10,color:PXZ[z].c,fontWeight:700}}>{z==="RED"?"LOSS":z}</div>
+            </div>
+          ))}
+        </div>
+
+        <div className="sr"><Search size={13} className="sr-ic"/><input className="inp" placeholder="Search item..." value={pxQ} onChange={e=>setPxQ(e.target.value)}/></div>
+
+        {pxLoad?<div className="card empty"><p>Loading...</p></div>
+          :<div style={{overflowX:"auto"}}>
+            <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+              <thead><tr style={{background:"var(--bg2,#1e293b)",color:"var(--mut)"}}>
+                <th style={{padding:9,textAlign:"left"}}>Item</th><th style={{padding:9}}>Ton</th><th style={{padding:9}}>Price</th><th style={{padding:9}}>Zone</th><th style={{padding:9}}>Floor</th><th style={{padding:9}}>Happy</th>
+              </tr></thead>
+              <tbody>
+                {list.map(r=>(
+                  <tr key={r.id} style={{borderBottom:"1px solid var(--bdr)"}}>
+                    <td style={{padding:9}}>{r.item_name}</td>
+                    <td style={{padding:9,textAlign:"center",color:"var(--mut)",fontSize:11}}>{r.tonnage}</td>
+                    <td style={{padding:9,textAlign:"center"}}>
+                      <input type="number" defaultValue={r.list_price} onBlur={e=>e.target.value!=r.list_price&&pxUpdatePrice(r.id,e.target.value)}
+                        style={{width:64,padding:4,textAlign:"center",border:"1px solid var(--bdr)",borderRadius:6,background:"transparent",color:"inherit"}}/>
+                    </td>
+                    <td style={{padding:9,textAlign:"center"}}><span className="bdg" style={{background:PXZ[r.zone].bg,color:PXZ[r.zone].c}}>{r.zone==="RED"?"LOSS":r.zone}</span></td>
+                    <td style={{padding:9,textAlign:"center",fontWeight:700}}>{fr(r.floor_price)}</td>
+                    <td style={{padding:9,textAlign:"center",color:"var(--mut)"}}>{fr(r.happy_price)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>}
+      </div>
+    );
+  };
+
   /* ── NAV ── */
   const navs = [
     {id:"dashboard",lbl:"Dashboard",ic:"🏠"},
@@ -1480,6 +1587,7 @@ export default function CRM({ currentUser, onLogout }) {
     {id:"orders",lbl:"Orders",ic:"🧾",badge:ORDERS.filter(o=>o.status==="draft").length||null,bc:"info"},
     {id:"reports",lbl:"Reports",ic:"📊"},
     {id:"targets",lbl:"Targets",ic:"🎯"},
+    {id:"pricing",lbl:"Pricing",ic:"💰"},
   ];
 
   return (
@@ -1493,6 +1601,7 @@ export default function CRM({ currentUser, onLogout }) {
               if(["orders","reports","targets"].includes(n.id)&&!allOrdersLoaded){
                 await loadAllOrders();
               }
+              if(n.id==="pricing") await loadPricing();
             }}>
               <span style={{fontSize:15}}>{n.ic}</span><span>{n.lbl}</span>
               {n.badge?<span className={`nb ${n.bc||""}`}>{n.badge}</span>:null}
@@ -1525,6 +1634,7 @@ export default function CRM({ currentUser, onLogout }) {
           {view==="orders"&&<Orders/>}
           {view==="reports"&&<Reports/>}
           {view==="targets"&&<Targets/>}
+          {view==="pricing"&&<Pricing/>}
         </div>
       </div>
       {renderModal()}
