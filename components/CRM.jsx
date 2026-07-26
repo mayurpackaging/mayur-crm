@@ -426,7 +426,7 @@ export default function CRM({ currentUser, onLogout }) {
             <div className="sh-t">Orders & Proforma</div>
             <div className="sh-s">{allOrdersLoaded?ORDERS.length:"20 recent"}  orders {!allOrdersLoaded&&<button className="btn btn-o btn-sm" style={{marginLeft:6}} onClick={loadAllOrders}>Load All</button>}</div>
           </div>
-          <button className="btn btn-p" onClick={()=>{setForm({order_date:new Date().toISOString().split("T")[0],epr:false});setOrderItems([]);setModal("aorder");}}><Plus size={13}/> New Order</button>
+          <button className="btn btn-p" onClick={()=>{setForm({order_date:new Date().toISOString().split("T")[0],epr:false});setOrderItems([]);if(pxRows.length===0)loadPricing();setModal("aorder");}}><Plus size={13}/> New Order</button>
         </div>
         <div className="sr"><Search size={13} className="sr-ic"/><input className="inp" placeholder="Search customer..." value={q} onChange={e=>setQ(e.target.value)}/></div>
         {list.length===0?<div className="card empty"><p>Koi order nahi</p></div>
@@ -1095,7 +1095,7 @@ export default function CRM({ currentUser, onLogout }) {
                   {orderItems.map(item=>(
                     <div key={item.product_id} style={{padding:"8px 10px",borderBottom:"1px solid var(--bdr)"}}>
                       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}>
-                        <div style={{fontWeight:600,fontSize:12}}>{item.product_name}</div>
+                        <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}><span style={{fontWeight:600,fontSize:12}}>{item.product_name}</span><NBadge pname={item.product_name}/></div>
                         <button style={{background:"none",border:"none",color:"var(--err)",cursor:"pointer"}} onClick={()=>removeOrderItem(item.product_id)}><Trash2 size={12}/></button>
                       </div>
                       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:6}}>
@@ -1358,7 +1358,7 @@ export default function CRM({ currentUser, onLogout }) {
                     {orderItems.map(item=>(
                       <div key={item.product_id||item.id} style={{padding:"8px 10px",borderBottom:"1px solid var(--bdr)"}}>
                         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
-                          <div style={{fontWeight:600,fontSize:12}}>{item.product_name}</div>
+                          <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}><span style={{fontWeight:600,fontSize:12}}>{item.product_name}</span><NBadge pname={item.product_name}/></div>
                           <button style={{background:"none",border:"none",color:"var(--err)",cursor:"pointer"}} onClick={()=>removeOrderItem(item.product_id||item.id)}><Trash2 size={12}/></button>
                         </div>
                         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:6}}>
@@ -1512,6 +1512,20 @@ export default function CRM({ currentUser, onLogout }) {
   };
   const PXZ = {N3:{c:"#10b981",bg:"rgba(16,185,129,.12)"},N2:{c:"#f59e0b",bg:"rgba(245,158,11,.12)"},N1:{c:"#f97316",bg:"rgba(249,115,22,.12)"},RED:{c:"#ef4444",bg:"rgba(239,68,68,.12)"}};
 
+  const isAdmin = (currentUser?.name||"").toLowerCase().includes("nitin");
+  const pxByProduct = (pname) => pxRows.find(r=>r.crm_product_name===pname);
+  const NBadge = ({pname}) => {
+    const px = pxByProduct(pname);
+    if(!px) return null;
+    const z = PXZ[px.zone];
+    return (
+      <span style={{display:"inline-flex",alignItems:"center",gap:4}}>
+        <span className="bdg" style={{background:z.bg,color:z.c,fontSize:10,fontWeight:800}}>{px.zone==="RED"?"LOSS":px.zone}</span>
+        {isAdmin && <span style={{fontSize:10,color:"var(--mut)"}}>floor {fr(px.floor_price)}</span>}
+      </span>
+    );
+  };
+
   const Pricing = () => {
     const list = pxRows.filter(r=>!pxQ||r.item_name.toLowerCase().includes(pxQ.toLowerCase()));
     const zc = pxRows.reduce((a,r)=>{a[r.zone]=(a[r.zone]||0)+1;return a;},{});
@@ -1612,7 +1626,7 @@ export default function CRM({ currentUser, onLogout }) {
             <div className="tb-sub">👤 {currentUser?.name} · Mayur Food Packaging</div>
           </div>
           {urgN>0&&<div style={{display:"flex",alignItems:"center",gap:5,padding:"5px 12px",background:"rgba(239,68,68,.1)",border:"1px solid rgba(239,68,68,.2)",borderRadius:8,cursor:"pointer"}} onClick={()=>setView("followups")}><span style={{fontSize:11}}>⚡</span><span style={{fontSize:11.5,color:"#ef4444",fontWeight:800}}>{urgN} Urgent</span></div>}
-          <button className="btn btn-o btn-sm" onClick={()=>{setForm({order_date:new Date().toISOString().split("T")[0],epr:false});setOrderItems([]);setModal("aorder");}}>🧾 New Order</button>
+          <button className="btn btn-o btn-sm" onClick={()=>{setForm({order_date:new Date().toISOString().split("T")[0],epr:false});setOrderItems([]);if(pxRows.length===0)loadPricing();setModal("aorder");}}>🧾 New Order</button>
           <button className="btn btn-p btn-sm" onClick={()=>{setForm({});setModal("ainter");}}><Plus size={13}/> Log Interaction</button>
         </div>
         <div className="content">
