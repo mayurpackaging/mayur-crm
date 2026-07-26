@@ -8,13 +8,8 @@ export default function PricingTest() {
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState("");
 
-  // Read env inside component (browser-safe with fallback)
-  const SB_URL = typeof window !== "undefined"
-    ? (window.__SB_URL || process.env.NEXT_PUBLIC_SUPABASE_URL)
-    : process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const SB_KEY = typeof window !== "undefined"
-    ? (window.__SB_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)
-    : process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const SB_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const SB_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
   async function sb(path, opts = {}) {
     const res = await fetch(SB_URL + "/rest/v1/" + path, {
@@ -48,18 +43,24 @@ export default function PricingTest() {
     setSaving(true); setMsg("");
     try {
       const today = new Date().toISOString().slice(0, 10);
-      await fetch(SB_URL + "/rest/v1/price_daana", {
-        method: "POST",
-        headers: {
-          apikey: SB_KEY, Authorization: "Bearer " + SB_KEY,
-          "Content-Type": "application/json",
-          Prefer: "resolution=merge-duplicates,return=minimal",
-        },
-        body: JSON.stringify({ rate_date: today, homo: +daana.homo, cp: +daana.cp, random: +daana.random }),
-      });
+      // Check if today's row exists
+      const existing = await sb("price_daana?rate_date=eq." + today);
+      if (existing.length > 0) {
+        // UPDATE existing row
+        await sb("price_daana?rate_date=eq." + today, {
+          method: "PATCH",
+          body: JSON.stringify({ homo: +daana.homo, cp: +daana.cp, random: +daana.random }),
+        });
+      } else {
+        // INSERT new row
+        await sb("price_daana", {
+          method: "POST",
+          body: JSON.stringify({ rate_date: today, homo: +daana.homo, cp: +daana.cp, random: +daana.random }),
+        });
+      }
       setMsg("Daana saved, recalculating...");
       await load();
-      setMsg("Updated — sab N-zones refresh ho gaye.");
+      setMsg("✓ Updated — sab N-zones refresh ho gaye.");
     } catch (e) { setMsg("Save error: " + e.message); }
     setSaving(false);
   }
@@ -87,7 +88,7 @@ export default function PricingTest() {
           style={{ marginTop:12, width:"100%", padding:11, borderRadius:8, border:"none", background:"#e0a92a", color:"#0e1a24", fontWeight:700, fontSize:14, cursor:"pointer" }}>
           {saving ? "Saving..." : "Save Daana & Recalculate"}
         </button>
-        {msg && <div style={{ marginTop:8, fontSize:12, color:"#9fe6b4" }}>{msg}</div>}
+        {msg && <div style={{ marginTop:8, fontSize:12, color: msg.includes("error")||msg.includes("Error") ? "#ff9999" : "#9fe6b4" }}>{msg}</div>}
       </div>
 
       <div style={{ display:"flex", gap:8, marginTop:14 }}>
