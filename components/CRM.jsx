@@ -58,6 +58,12 @@ export default function CRM({ currentUser, onLogout }) {
   const [orderItems,setOrderItems] = useState([]);
   const [editProd,setEditProd] = useState(null);
   const printRef = useRef();
+  // pricing state
+  const [pxRows,setPxRows] = useState([]);
+  const [pxDaana,setPxDaana] = useState({homo:"",cp:"",random:""});
+  const [pxLoad,setPxLoad] = useState(false);
+  const [pxSave,setPxSave] = useState(false);
+  const [pxQ,setPxQ] = useState("");
 
   const toast$ = (msg,err=false) => { setToast({msg,err}); setTimeout(()=>setToast(null),2500); };
   const sf = (k,v) => setForm(p=>({...p,[k]:v}));
@@ -83,6 +89,17 @@ export default function CRM({ currentUser, onLogout }) {
       setPRODS(pr||[]); setORDERS(o||[]); setTARGETS(t||[]);
     } catch(err){ toast$("Load failed: "+err.message,true); }
     setLd(false);
+  },[]);
+
+  const loadPricing = useCallback(async()=>{
+    setPxLoad(true);
+    try{
+      const d = await sbFetch("price_daana?order=rate_date.desc&limit=1");
+      if(d&&d[0]) setPxDaana({homo:d[0].homo,cp:d[0].cp,random:d[0].random});
+      const th = await sbFetch("sales_item_thresholds?order=item_name.asc");
+      setPxRows(th||[]);
+    }catch(e){ setToast({msg:"Pricing load error",err:true}); }
+    setPxLoad(false);
   },[]);
 
   useEffect(()=>{ load(); },[load]);
@@ -1470,23 +1487,6 @@ export default function CRM({ currentUser, onLogout }) {
 
 
   /* ── PRICING (N1/N2/N3 Engine) ── */
-  const [pxRows,setPxRows] = useState([]);
-  const [pxDaana,setPxDaana] = useState({homo:"",cp:"",random:""});
-  const [pxLoad,setPxLoad] = useState(false);
-  const [pxSave,setPxSave] = useState(false);
-  const [pxQ,setPxQ] = useState("");
-
-  const loadPricing = useCallback(async()=>{
-    setPxLoad(true);
-    try{
-      const d = await sbFetch("price_daana?order=rate_date.desc&limit=1");
-      if(d&&d[0]) setPxDaana({homo:d[0].homo,cp:d[0].cp,random:d[0].random});
-      const th = await sbFetch("sales_item_thresholds?order=item_name.asc");
-      setPxRows(th||[]);
-    }catch(e){ toast$("Pricing load error",true); }
-    setPxLoad(false);
-  },[]);
-
   const savePxDaana = async()=>{
     setPxSave(true);
     try{
@@ -1499,19 +1499,17 @@ export default function CRM({ currentUser, onLogout }) {
         await sbFetch("price_daana",{method:"POST",body:{rate_date:today,...body}});
       }
       await loadPricing();
-      toast$("Daana updated ✓ — zones recalculated");
+      toast$("Daana updated \u2713 zones recalculated");
     }catch(e){ toast$("Daana save error",true); }
     setPxSave(false);
   };
-
   const pxUpdatePrice = async(id,price)=>{
     try{
       await sbFetch("price_items?id=eq."+id,{method:"PATCH",body:{list_price:+price}});
       await loadPricing();
-      toast$("Price updated ✓");
+      toast$("Price updated \u2713");
     }catch(e){ toast$("Price error",true); }
   };
-
   const PXZ = {N3:{c:"#10b981",bg:"rgba(16,185,129,.12)"},N2:{c:"#f59e0b",bg:"rgba(245,158,11,.12)"},N1:{c:"#f97316",bg:"rgba(249,115,22,.12)"},RED:{c:"#ef4444",bg:"rgba(239,68,68,.12)"}};
 
   const Pricing = () => {
@@ -1519,11 +1517,9 @@ export default function CRM({ currentUser, onLogout }) {
     const zc = pxRows.reduce((a,r)=>{a[r.zone]=(a[r.zone]||0)+1;return a;},{});
     return (
       <div>
-        <div className="sh"><div><div className="sh-t">💰 Pricing Engine — N1/N2/N3</div><div className="sh-s">Daana daalo → sab items ka zone auto-calculate</div></div></div>
-
-        {/* Daana input */}
+        <div className="sh"><div><div className="sh-t">\U0001F4B0 Pricing Engine \u2014 N1/N2/N3</div><div className="sh-s">Daana daalo \u2192 sab items ka zone auto-calculate</div></div></div>
         <div className="card" style={{background:"#0e1a24",color:"#fff",marginBottom:14}}>
-          <div style={{fontSize:11,color:"#9fb3c0",textTransform:"uppercase",letterSpacing:1,marginBottom:8}}>Aaj ka Daana Rate ₹/kg</div>
+          <div style={{fontSize:11,color:"#9fb3c0",textTransform:"uppercase",letterSpacing:1,marginBottom:8}}>Aaj ka Daana Rate \u20b9/kg</div>
           <div style={{display:"flex",gap:10}}>
             {["homo","cp","random"].map(k=>(
               <div key={k} style={{flex:1}}>
@@ -1535,8 +1531,6 @@ export default function CRM({ currentUser, onLogout }) {
           </div>
           <button className="btn btn-p" style={{marginTop:12,width:"100%",justifyContent:"center"}} onClick={savePxDaana} disabled={pxSave}>{pxSave?"Saving...":"Save Daana & Recalculate"}</button>
         </div>
-
-        {/* Zone summary */}
         <div style={{display:"flex",gap:8,marginBottom:14}}>
           {["N3","N2","N1","RED"].map(z=>(
             <div key={z} style={{flex:1,textAlign:"center",padding:12,borderRadius:10,background:PXZ[z].bg,border:`1px solid ${PXZ[z].c}`}}>
@@ -1545,13 +1539,11 @@ export default function CRM({ currentUser, onLogout }) {
             </div>
           ))}
         </div>
-
         <div className="sr"><Search size={13} className="sr-ic"/><input className="inp" placeholder="Search item..." value={pxQ} onChange={e=>setPxQ(e.target.value)}/></div>
-
         {pxLoad?<div className="card empty"><p>Loading...</p></div>
           :<div style={{overflowX:"auto"}}>
             <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
-              <thead><tr style={{background:"var(--bg2,#1e293b)",color:"var(--mut)"}}>
+              <thead><tr style={{color:"var(--mut)"}}>
                 <th style={{padding:9,textAlign:"left"}}>Item</th><th style={{padding:9}}>Ton</th><th style={{padding:9}}>Price</th><th style={{padding:9}}>Zone</th><th style={{padding:9}}>Floor</th><th style={{padding:9}}>Happy</th>
               </tr></thead>
               <tbody>
