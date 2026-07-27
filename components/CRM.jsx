@@ -88,7 +88,7 @@ export default function CRM({ currentUser, onLogout }) {
   // User-wise filtering: sales sees only their own
   const myORDERS = isSales ? ORDERS.filter(o=>o.created_by===myName) : ORDERS;
   const myC = isSales ? C.filter(c=>c.assigned_to===myName) : C;
-  const myI = isSales ? I.filter(i=>i.done_by===myName||i.customer_id&&myC.find(c=>c.id===i.customer_id)) : I;
+  const myI = isSales ? I.filter(i=>i.done_by===myName||(i.customer_id&&myC.find(c=>c.id===i.customer_id))) : I;
   const prodCats = useMemo(()=>["all",...[...new Set(PRODS.map(p=>p.category).filter(Boolean))]], [PRODS]);
 
   const load = useCallback(async()=>{
@@ -1628,7 +1628,7 @@ export default function CRM({ currentUser, onLogout }) {
     {id:"reports",lbl:"Reports",ic:"📊",roles:["admin"]},
     {id:"targets",lbl:"Targets",ic:"🎯",roles:["admin"]},
     {id:"pricing",lbl:"Pricing",ic:"💰",roles:["admin"]},
-  ].filter(n=>n.roles.includes(userRole));
+  ].filter(n=>n.roles?.includes(userRole));
 
   return (
     <div className="crm">
