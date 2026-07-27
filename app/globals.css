@@ -152,3 +152,84 @@ textarea.inp{resize:vertical;min-height:72px;line-height:1.5;}
   .sb{width:50px;}.sb-brand p,.ni span:last-child,.sb-brand h2{display:none;}
   .sg{grid-template-columns:1fr 1fr;}.g2,.g3,.fr2,.fr3{grid-template-columns:1fr;}
 }
+
+/* ── MOBILE / PWA ── */
+@media(max-width:768px){
+  /* Hide sidebar on mobile */
+  .sb { display:none !important; }
+
+  /* Main takes full width */
+  .mn { width:100%; }
+
+  /* Topbar compact */
+  .tb { height:48px; padding:0 14px; gap:8px; }
+  .tb-title { font-size:14px; }
+  .tb-sub { display:none; }
+
+  /* Content padding */
+  .content { padding:14px 12px 80px 12px; } /* bottom padding for nav bar */
+
+  /* Stat grid — 2 columns */
+  .sg { grid-template-columns:1fr 1fr; gap:10px; margin-bottom:14px; }
+  .sc { padding:12px 14px; }
+  .sc-val { font-size:22px; }
+
+  /* Grids */
+  .g2,.g3 { grid-template-columns:1fr; gap:10px; }
+  .fr2,.fr3 { grid-template-columns:1fr; }
+
+  /* Tables scroll */
+  .tw { overflow-x:auto; -webkit-overflow-scrolling:touch; }
+  table { font-size:11.5px; min-width:500px; }
+
+  /* Cards */
+  .card { padding:14px; margin-bottom:10px; }
+  .mod { padding:18px 16px; max-height:85vh; }
+  .mod-lg,.mod-sm { width:100%; }
+
+  /* Buttons larger touch targets */
+  .btn { padding:9px 16px; font-size:13px; }
+  .btn-sm { padding:6px 12px; font-size:11.5px; }
+
+  /* Inputs */
+  .inp { padding:10px 12px; font-size:14px; } /* prevent zoom on iOS */
+
+  /* Tabs scrollable */
+  .tabs { overflow-x:auto; width:100%; flex-wrap:nowrap; -webkit-overflow-scrolling:touch; }
+  .tab { white-space:nowrap; flex-shrink:0; }
+
+  /* ── BOTTOM NAV BAR ── */
+  .mobile-nav {
+    position:fixed; bottom:0; left:0; right:0;
+    height:60px;
+    background:#1e293b;
+    border-top:1px solid #2d3f55;
+    display:flex;
+    align-items:center;
+    justify-content:space-around;
+    z-index:50;
+    padding-bottom:env(safe-area-inset-bottom);
+  }
+  .mobile-nav-item {
+    display:flex; flex-direction:column; align-items:center; gap:3px;
+    flex:1; padding:6px 0; cursor:pointer;
+    color:#94a3b8; font-size:9.5px; font-weight:600;
+    text-transform:uppercase; letter-spacing:.04em;
+    transition:color .15s;
+    position:relative;
+  }
+  .mobile-nav-item.active { color:#f59e0b; }
+  .mobile-nav-item span:first-child { font-size:20px; line-height:1; }
+  .mobile-nav-badge {
+    position:absolute; top:2px; right:18px;
+    background:#ef4444; color:#fff;
+    font-size:8px; font-weight:800;
+    padding:1px 4px; border-radius:8px;
+    min-width:14px; text-align:center;
+  }
+}
+
+/* Desktop — hide mobile nav */
+@media(min-width:769px){
+  .mobile-nav { display:none !important; }
+}
