@@ -1098,7 +1098,7 @@ export default function CRM({ currentUser, onLogout }) {
                   {orderItems.map(item=>(
                     <div key={item.product_id} style={{padding:"8px 10px",borderBottom:"1px solid var(--bdr)"}}>
                       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}>
-                        <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}><span style={{fontWeight:600,fontSize:12}}>{item.product_name}</span><NBadge pname={item.product_name}/></div>
+                        <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}><span style={{fontWeight:600,fontSize:12}}>{item.product_name}</span><NBadge pname={item.product_name} price={item.ctn_price}/></div>
                         <button style={{background:"none",border:"none",color:"var(--err)",cursor:"pointer"}} onClick={()=>removeOrderItem(item.product_id)}><Trash2 size={12}/></button>
                       </div>
                       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:6}}>
@@ -1361,7 +1361,7 @@ export default function CRM({ currentUser, onLogout }) {
                     {orderItems.map(item=>(
                       <div key={item.product_id||item.id} style={{padding:"8px 10px",borderBottom:"1px solid var(--bdr)"}}>
                         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
-                          <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}><span style={{fontWeight:600,fontSize:12}}>{item.product_name}</span><NBadge pname={item.product_name}/></div>
+                          <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}><span style={{fontWeight:600,fontSize:12}}>{item.product_name}</span><NBadge pname={item.product_name} price={item.ctn_price}/></div>
                           <button style={{background:"none",border:"none",color:"var(--err)",cursor:"pointer"}} onClick={()=>removeOrderItem(item.product_id||item.id)}><Trash2 size={12}/></button>
                         </div>
                         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:6}}>
@@ -1517,13 +1517,23 @@ export default function CRM({ currentUser, onLogout }) {
 
   const isAdmin = (currentUser?.name||"").toLowerCase().includes("nitin");
   const pxByProduct = (pname) => pxProducts.find(r=>r.crm_product_name===pname);
-  const NBadge = ({pname}) => {
+  const zoneForPrice = (px, price) => {
+    if(!px) return null;
+    const p = Number(price)||0;
+    if(p <= 0) return px.zone; // no price yet -> show list zone
+    if(p >= px.premium_price) return "N3";
+    if(p >= px.happy_price) return "N2";
+    if(p >= px.floor_price) return "N1";
+    return "RED";
+  };
+  const NBadge = ({pname, price}) => {
     const px = pxByProduct(pname);
     if(!px) return null;
-    const z = PXZ[px.zone];
+    const zone = zoneForPrice(px, price);
+    const z = PXZ[zone];
     return (
       <span style={{display:"inline-flex",alignItems:"center",gap:4}}>
-        <span className="bdg" style={{background:z.bg,color:z.c,fontSize:10,fontWeight:800}}>{px.zone==="RED"?"LOSS":px.zone}</span>
+        <span className="bdg" style={{background:z.bg,color:z.c,fontSize:10,fontWeight:800}}>{zone==="RED"?"LOSS":zone}</span>
         {isAdmin && <span style={{fontSize:10,color:"var(--mut)"}}>floor {fr(px.floor_price)}</span>}
       </span>
     );
