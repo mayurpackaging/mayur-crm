@@ -1617,18 +1617,18 @@ export default function CRM({ currentUser, onLogout }) {
 
   /* ── NAV ── */
   const navs = [
-    {id:"dashboard",lbl:"Dashboard",ic:"🏠"},
-    {id:"customers",lbl:"Customers",ic:"👥"},
-    {id:"enquiries",lbl:"Enquiries",ic:"📋"},
-    {id:"followups",lbl:"Follow-ups",ic:"⚡",badge:urgN>0?urgN:null},
-    {id:"samples",lbl:"Samples",ic:"🧪",badge:S.filter(s=>s.status==="pending").length||null,bc:"info"},
-    {id:"payments",lbl:"Payments",ic:"💳",badge:P.filter(p=>p.overdue>0).length||null},
-    {id:"products",lbl:"Products",ic:"📦"},
-    {id:"orders",lbl:"Orders",ic:"🧾",badge:ORDERS.filter(o=>o.status==="draft").length||null,bc:"info"},
+    {id:"dashboard",lbl:"Dashboard",ic:"🏠",roles:["admin","sales","dataentry"]},
+    {id:"customers",lbl:"Customers",ic:"👥",roles:["admin","sales","dataentry"]},
+    {id:"enquiries",lbl:"Enquiries",ic:"📋",roles:["admin","sales"]},
+    {id:"followups",lbl:"Follow-ups",ic:"⚡",badge:urgN>0?urgN:null,roles:["admin","sales","dataentry"]},
+    {id:"samples",lbl:"Samples",ic:"🧪",badge:S.filter(s=>s.status==="pending").length||null,bc:"info",roles:["admin","sales"]},
+    {id:"payments",lbl:"Payments",ic:"💳",badge:P.filter(p=>p.overdue>0).length||null,roles:["admin"]},
+    {id:"products",lbl:"Products",ic:"📦",roles:["admin","dataentry"]},
+    {id:"orders",lbl:"Orders",ic:"🧾",badge:myORDERS.filter(o=>o.status==="draft").length||null,bc:"info",roles:["admin","sales","dataentry"]},
     {id:"reports",lbl:"Reports",ic:"📊",roles:["admin"]},
     {id:"targets",lbl:"Targets",ic:"🎯",roles:["admin"]},
     {id:"pricing",lbl:"Pricing",ic:"💰",roles:["admin"]},
-  ].filter(n=>n.roles?.includes(userRole));
+  ].filter(n=>n.roles?.includes(userRole)||userRole==="viewer");
 
   return (
     <div className="crm">
