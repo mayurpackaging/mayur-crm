@@ -83,15 +83,16 @@ export default function CRM({ currentUser, onLogout }) {
   const isDataEntry = userRole === "dataentry";
   const myName = currentUser?.name||"";
 
-  const odFU = useMemo(()=>myI.filter(i=>i.next_follow_up&&isOD(i.next_follow_up)),[myI]);
-  const tdFU = useMemo(()=>myI.filter(i=>i.next_follow_up&&isTD(i.next_follow_up)),[myI]);
-  const urgN = odFU.length+tdFU.length;
   // User-wise filtering: sales sees only their own
   const myORDERS = isSales ? ORDERS.filter(o=>o.created_by===myName) : ORDERS;
   const myC = isSales ? C.filter(c=>c.assigned_to===myName) : C;
   const myI = isSales ? I.filter(i=>i.done_by===myName||(i.customer_id&&myC.find(c=>c.id===i.customer_id))) : I;
   const myE = isSales ? E.filter(e=>e.assigned_to===myName) : E;
   const myS = isSales ? S.filter(s=>myC.find(c=>c.id===s.customer_id||c.company===s.company)) : S;
+  // Follow-up filters — AFTER myI is defined
+  const odFU = useMemo(()=>myI.filter(i=>i.next_follow_up&&isOD(i.next_follow_up)),[myI]);
+  const tdFU = useMemo(()=>myI.filter(i=>i.next_follow_up&&isTD(i.next_follow_up)),[myI]);
+  const urgN = odFU.length+tdFU.length;
   const prodCats = useMemo(()=>["all",...[...new Set(PRODS.map(p=>p.category).filter(Boolean))]], [PRODS]);
 
   const load = useCallback(async()=>{
