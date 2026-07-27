@@ -42,6 +42,7 @@ export default function CRM({ currentUser, onLogout }) {
   const [PRODS,setPRODS] = useState([]);
   const [ORDERS,setORDERS] = useState([]);
   const [TARGETS,setTARGETS] = useState([]);
+  const [USERS,setUSERS] = useState([]);
   const [allOrdersLoaded,setAllOrdersLoaded] = useState(false);
   const [loading,setLd]  = useState(true);
   const [saving,setSv]   = useState(false);
@@ -102,6 +103,11 @@ export default function CRM({ currentUser, onLogout }) {
       ]);
       setC(c||[]); setE(e||[]); setI(i||[]); setS(s||[]); setP(p||[]);
       setPRODS(pr||[]); setORDERS(o||[]); setTARGETS(t||[]);
+      // Load sales users from crm_users
+      try {
+        const users = await sbFetch("crm_users?role=eq.sales&select=name&order=name.asc");
+        setUSERS(users||[]);
+      } catch(e) {}
     } catch(err){ toast$("Load failed: "+err.message,true); }
     setLd(false);
   },[]);
@@ -647,7 +653,7 @@ export default function CRM({ currentUser, onLogout }) {
     const [rMonth,setRMonth]=useState(new Date().getMonth()+1);
     const [rYear,setRYear]=useState(new Date().getFullYear());
     const months=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-    const SALES_PERSONS=[...new Set(C.map(c=>c.assigned_to).filter(Boolean))];
+    const SALES_PERSONS=USERS.length>0?USERS.map(u=>u.name):[...new Set(C.map(c=>c.assigned_to).filter(Boolean))];
     const monthlyData=Array.from({length:12},(_,mi)=>{
       const ords=ORDERS.filter(o=>{const d=new Date(o.order_date);return d.getFullYear()===rYear&&d.getMonth()===mi;});
       return{month:months[mi],orders:ords.length,revenue:ords.reduce((s,o)=>s+(Number(o.total_amount)||0),0)};
@@ -854,7 +860,7 @@ export default function CRM({ currentUser, onLogout }) {
     const [tForm,setTForm]=useState({});
     const [tSaving,setTSaving]=useState(false);
     const months=[{v:"01",l:"January"},{v:"02",l:"February"},{v:"03",l:"March"},{v:"04",l:"April"},{v:"05",l:"May"},{v:"06",l:"June"},{v:"07",l:"July"},{v:"08",l:"August"},{v:"09",l:"September"},{v:"10",l:"October"},{v:"11",l:"November"},{v:"12",l:"December"}];
-    const SALES_PERSONS=[...new Set(C.map(c=>c.assigned_to).filter(Boolean))];
+    const SALES_PERSONS=USERS.length>0?USERS.map(u=>u.name):[...new Set(C.map(c=>c.assigned_to).filter(Boolean))];
     const curMonth=String(new Date().getMonth()+1).padStart(2,"0");
     const curYear=new Date().getFullYear();
     const getAch=(name,month,year)=>ORDERS.filter(o=>o.created_by===name&&new Date(o.order_date).getMonth()===Number(month)-1&&new Date(o.order_date).getFullYear()===year).reduce((s,o)=>s+(Number(o.total_amount)||0),0);
