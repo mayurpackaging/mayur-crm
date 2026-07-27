@@ -82,13 +82,15 @@ export default function CRM({ currentUser, onLogout }) {
   const isDataEntry = userRole === "dataentry";
   const myName = currentUser?.name||"";
 
-  const odFU = useMemo(()=>I.filter(i=>i.next_follow_up&&isOD(i.next_follow_up)),[I]);
-  const tdFU = useMemo(()=>I.filter(i=>i.next_follow_up&&isTD(i.next_follow_up)),[I]);
+  const odFU = useMemo(()=>myI.filter(i=>i.next_follow_up&&isOD(i.next_follow_up)),[myI]);
+  const tdFU = useMemo(()=>myI.filter(i=>i.next_follow_up&&isTD(i.next_follow_up)),[myI]);
   const urgN = odFU.length+tdFU.length;
   // User-wise filtering: sales sees only their own
   const myORDERS = isSales ? ORDERS.filter(o=>o.created_by===myName) : ORDERS;
   const myC = isSales ? C.filter(c=>c.assigned_to===myName) : C;
   const myI = isSales ? I.filter(i=>i.done_by===myName||(i.customer_id&&myC.find(c=>c.id===i.customer_id))) : I;
+  const myE = isSales ? E.filter(e=>e.assigned_to===myName) : E;
+  const myS = isSales ? S.filter(s=>myC.find(c=>c.id===s.customer_id||c.company===s.company)) : S;
   const prodCats = useMemo(()=>["all",...[...new Set(PRODS.map(p=>p.category).filter(Boolean))]], [PRODS]);
 
   const load = useCallback(async()=>{
@@ -313,7 +315,7 @@ export default function CRM({ currentUser, onLogout }) {
         {[
           {lbl:"CRM Customers",val:myC.filter(c=>c.type==="crm").length,sub:"Active accounts",col:"#10b981",ic:"👥",fn:()=>{setCTab("crm");setView("customers");}},
           {lbl:"NBD Prospects",val:myC.filter(c=>c.type==="nbd").length,sub:"In pipeline",col:"#60a5fa",ic:"🎯",fn:()=>{setCTab("nbd");setView("customers");}},
-          {lbl:"Open Enquiries",val:E.filter(e=>!["won","lost"].includes(e.status)).length,sub:"Active leads",col:"#f59e0b",ic:"📋",fn:()=>setView("enquiries")},
+          {lbl:"Open Enquiries",val:myE.filter(e=>!["won","lost"].includes(e.status)).length,sub:"Active leads",col:"#f59e0b",ic:"📋",fn:()=>setView("enquiries")},
           {lbl:"Urgent Follow-ups",val:urgN,sub:urgN>0?"⚠️ Act now":"All clear ✅",col:urgN>0?"#ef4444":"#10b981",ic:"⚡",fn:()=>setView("followups")},
         ].map(s=>(
           <div key={s.lbl} className="sc" style={{borderLeft:`3px solid ${s.col}`}} onClick={s.fn}>
@@ -346,7 +348,7 @@ export default function CRM({ currentUser, onLogout }) {
         </div>
         <div className="card">
           <div className="sh"><div><div className="sh-t">📋 Recent Orders</div><div className="sh-s">Latest 20</div></div><button className="btn btn-o btn-sm" onClick={()=>{loadAllOrders();setView("orders");}}>All →</button></div>
-          {ORDERS.length===0?<div className="empty"><p>Koi order nahi</p></div>
+          {myORDERS.length===0?<div className="empty"><p>Koi order nahi</p></div>
             :[...myORDERS].sort((a,b)=>new Date(b.order_date)-new Date(a.order_date)).slice(0,5).map(o=>(
               <div key={o.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 0",borderBottom:"1px solid var(--bdr)"}}>
                 <div><div style={{fontSize:12.5,fontWeight:600}}>{o.company}</div><div style={{fontSize:10.5,color:"var(--mut)"}}>{fd(o.order_date)}</div></div>
@@ -363,7 +365,7 @@ export default function CRM({ currentUser, onLogout }) {
           <div className="sh-t" style={{marginBottom:12}}>🧪 Sample Tracker</div>
           <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:8}}>
             {["pending","sent","approved","revision","rejected"].map(st=>{
-              const cfg=ST[st]; const cnt=S.filter(s=>s.status===st).length;
+              const cfg=ST[st]; const cnt=myS.filter(s=>s.status===st).length;
               return <div key={st} className="card2" style={{textAlign:"center"}}><div style={{fontSize:20,fontWeight:800,color:cfg.c}}>{cnt}</div><div style={{fontSize:8.5,color:"var(--mut)",textTransform:"uppercase",fontWeight:700,marginTop:2}}>{st}</div></div>;
             })}
           </div>
@@ -489,11 +491,11 @@ export default function CRM({ currentUser, onLogout }) {
 
   /* ── CUSTOMERS ── */
   const Customers = () => {
-    const list = C.filter(c=>cTab==="all"||c.type===cTab).filter(c=>!q||[c.name,c.company,c.city].some(v=>v?.toLowerCase().includes(q.toLowerCase())));
+    const list = myC.filter(c=>cTab==="all"||c.type===cTab).filter(c=>!q||[c.name,c.company,c.city].some(v=>v?.toLowerCase().includes(q.toLowerCase())));
     return (
       <div>
         <div className="sh">
-          <div><div className="sh-t">Customer Management</div><div className="sh-s">{C.length} total</div></div>
+          <div><div className="sh-t">Customer Management</div><div className="sh-s">{myC.length} total</div></div>
           <div style={{display:"flex",gap:8}}>
             <button className="btn btn-o btn-sm" onClick={()=>{setForm({});setModal("ainter");}}>+ Log Interaction</button>
             <button className="btn btn-p" onClick={()=>{setForm({});setModal("acust");}}><Plus size={13}/> Add Customer</button>
@@ -525,11 +527,11 @@ export default function CRM({ currentUser, onLogout }) {
 
   /* ── ENQUIRIES ── */
   const Enquiries = () => {
-    const list = E.filter(e=>eTab==="all"||e.status===eTab).filter(e=>!q||[e.customer_name,e.product].some(v=>v?.toLowerCase().includes(q.toLowerCase())));
+    const list = myE.filter(e=>eTab==="all"||e.status===eTab).filter(e=>!q||[e.customer_name,e.product].some(v=>v?.toLowerCase().includes(q.toLowerCase())));
     return (
       <div>
-        <div className="sh"><div><div className="sh-t">Enquiry Pipeline</div><div className="sh-s">{E.filter(e=>!["won","lost"].includes(e.status)).length} active</div></div><button className="btn btn-p" onClick={()=>{setForm({});setModal("aenq");}}><Plus size={13}/> New</button></div>
-        <div className="tabs">{["all","new","quoted","negotiating","won","lost"].map(t=><div key={t} className={`tab ${eTab===t?"a":""}`} onClick={()=>setETab(t)} style={{textTransform:"capitalize"}}>{t} ({E.filter(e=>t==="all"||e.status===t).length})</div>)}</div>
+        <div className="sh"><div><div className="sh-t">Enquiry Pipeline</div><div className="sh-s">{myE.filter(e=>!["won","lost"].includes(e.status)).length} active</div></div><button className="btn btn-p" onClick={()=>{setForm({});setModal("aenq");}}><Plus size={13}/> New</button></div>
+        <div className="tabs">{["all","new","quoted","negotiating","won","lost"].map(t=><div key={t} className={`tab ${eTab===t?"a":""}`} onClick={()=>setETab(t)} style={{textTransform:"capitalize"}}>{t} ({myE.filter(e=>t==="all"||e.status===t).length})</div>)}</div>
         <div className="sr"><Search size={13} className="sr-ic"/><input className="inp" placeholder="Search..." value={q} onChange={e=>setQ(e.target.value)}/></div>
         {list.length===0?<div className="card empty"><p>Koi enquiry nahi</p></div>
           :<div className="card" style={{padding:0}}><div className="tw"><table>
@@ -587,11 +589,11 @@ export default function CRM({ currentUser, onLogout }) {
 
   /* ── SAMPLES ── */
   const Samples = () => {
-    const list=S.filter(s=>sTab==="all"||s.status===sTab).filter(s=>!q||[s.customer_name,s.company,s.product].some(v=>v?.toLowerCase().includes(q.toLowerCase())));
+    const list=myS.filter(s=>sTab==="all"||s.status===sTab).filter(s=>!q||[s.customer_name,s.company,s.product].some(v=>v?.toLowerCase().includes(q.toLowerCase())));
     return (
       <div>
-        <div className="sh"><div><div className="sh-t">Sample Tracker</div><div className="sh-s">{S.filter(s=>["pending","sent"].includes(s.status)).length} pending</div></div><button className="btn btn-p" onClick={()=>{setForm({});setModal("asamp");}}><Plus size={13}/> Add</button></div>
-        <div className="tabs">{["all","pending","sent","approved","revision","rejected"].map(t=><div key={t} className={`tab ${sTab===t?"a":""}`} onClick={()=>setSTb(t)} style={{textTransform:"capitalize"}}>{t} ({S.filter(s=>t==="all"||s.status===t).length})</div>)}</div>
+        <div className="sh"><div><div className="sh-t">Sample Tracker</div><div className="sh-s">{myS.filter(s=>["pending","sent"].includes(s.status)).length} pending</div></div><button className="btn btn-p" onClick={()=>{setForm({});setModal("asamp");}}><Plus size={13}/> Add</button></div>
+        <div className="tabs">{["all","pending","sent","approved","revision","rejected"].map(t=><div key={t} className={`tab ${sTab===t?"a":""}`} onClick={()=>setSTb(t)} style={{textTransform:"capitalize"}}>{t} ({myS.filter(s=>t==="all"||s.status===t).length})</div>)}</div>
         <div className="sr"><Search size={13} className="sr-ic"/><input className="inp" placeholder="Search..." value={q} onChange={e=>setQ(e.target.value)}/></div>
         {list.length===0?<div className="card empty"><p>Koi sample nahi</p></div>
           :<div className="card" style={{padding:0}}><div className="tw"><table>
