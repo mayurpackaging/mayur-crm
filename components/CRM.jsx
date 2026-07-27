@@ -248,6 +248,13 @@ export default function CRM({ currentUser, onLogout }) {
       const items=orderItems.map(i=>({...i,order_id:orderId}));
       await sbInsert("crm_order_items",items);
       setORDERS(p=>[{...orderData,id:orderId},...p]);
+      // Auto: NBD/enduser jo order de → enduser ban jaaye
+      if(c && (c.type==="nbd" || c.type==="enduser")) {
+        try {
+          await sbPatch("crm_customers",form.customer_id,{type:"enduser",status:"active"});
+          setC(p=>p.map(x=>x.id===form.customer_id?{...x,type:"enduser",status:"active"}:x));
+        } catch(e) {}
+      }
       toast$("Order save ho gaya ✓");
       const custData=gc(form.customer_id)||{};
       setSelOrder({...orderData,id:orderId,items,customerData:{phone:custData.phone,address:custData.address,gst_no:custData.gst_no}});
@@ -507,7 +514,7 @@ export default function CRM({ currentUser, onLogout }) {
             <button className="btn btn-p" onClick={()=>{setForm({});setModal("acust");}}><Plus size={13}/> Add Customer</button>
           </div>
         </div>
-        <div className="tabs">{[["all","All"],["crm","CRM"],["nbd","NBD"]].map(([id,l])=><div key={id} className={`tab ${cTab===id?"a":""}`} onClick={()=>setCTab(id)}>{l}</div>)}</div>
+        <div className="tabs">{[["all","All"],["enduser","End Users"],["nbd","NBD"]].map(([id,l])=><div key={id} className={`tab ${cTab===id?"a":""}`} onClick={()=>setCTab(id)}>{l}</div>)}</div>
         <div className="sr"><Search size={13} className="sr-ic"/><input className="inp" placeholder="Search..." value={q} onChange={e=>setQ(e.target.value)}/></div>
         {list.length===0?<div className="card empty"><p>Koi customer nahi</p></div>
           :<div className="card" style={{padding:0}}><div className="tw"><table>
