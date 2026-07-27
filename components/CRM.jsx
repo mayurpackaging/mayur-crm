@@ -1683,6 +1683,24 @@ export default function CRM({ currentUser, onLogout }) {
       </div>
       {renderModal()}
       {toast&&<div className={`toast ${toast.err?"err":""}`}>{toast.msg}</div>}
+
+      {/* ── MOBILE BOTTOM NAV ── */}
+      <div className="mobile-nav">
+        {[
+          {id:"dashboard",ic:"🏠",lbl:"Home",roles:["admin","sales","dataentry"]},
+          {id:"orders",ic:"🧾",lbl:"Orders",badge:myORDERS.filter(o=>o.status==="draft").length||null,roles:["admin","sales","dataentry"]},
+          {id:"customers",ic:"👥",lbl:"Parties",roles:["admin","sales","dataentry"]},
+          {id:"followups",ic:"⚡",lbl:"Follow",badge:urgN||null,roles:["admin","sales","dataentry"]},
+          isAdmin?{id:"pricing",ic:"💰",lbl:"Pricing",roles:["admin"]}:{id:"enquiries",ic:"📋",lbl:"Enquiry",roles:["admin","sales"]},
+        ].filter(n=>n?.roles?.includes(userRole)).map(n=>(
+          <div key={n.id} className={`mobile-nav-item ${view===n.id?"active":""}`}
+            onClick={()=>{setView(n.id);setQ("");if(n.id==="orders"&&!allOrdersLoaded)loadAllOrders();if(n.id==="pricing")loadPricing();}}>
+            <span>{n.ic}</span>
+            <span>{n.lbl}</span>
+            {n.badge?<span className="mobile-nav-badge">{n.badge}</span>:null}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
