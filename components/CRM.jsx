@@ -65,6 +65,7 @@ export default function CRM({ currentUser, onLogout }) {
   const [pxLoad,setPxLoad] = useState(false);
   const [pxSave,setPxSave] = useState(false);
   const [pxQ,setPxQ] = useState("");
+  const [partyDiscount,setPartyDiscount] = useState(50); // default ₹50/ctn
 
   const toast$ = (msg,err=false) => { setToast({msg,err}); setTimeout(()=>setToast(null),2500); };
   const sf = (k,v) => setForm(p=>({...p,[k]:v}));
@@ -77,6 +78,10 @@ export default function CRM({ currentUser, onLogout }) {
   const odFU = useMemo(()=>I.filter(i=>i.next_follow_up&&isOD(i.next_follow_up)),[I]);
   const tdFU = useMemo(()=>I.filter(i=>i.next_follow_up&&isTD(i.next_follow_up)),[I]);
   const urgN = odFU.length+tdFU.length;
+  // User-wise filtering: sales sees only their own
+  const myORDERS = isSales ? ORDERS.filter(o=>o.created_by===myName) : ORDERS;
+  const myC = isSales ? C.filter(c=>c.assigned_to===myName) : C;
+  const myI = isSales ? I.filter(i=>i.done_by===myName||i.customer_id&&myC.find(c=>c.id===i.customer_id)) : I;
   const prodCats = useMemo(()=>["all",...[...new Set(PRODS.map(p=>p.category).filter(Boolean))]], [PRODS]);
 
   const load = useCallback(async()=>{
@@ -195,7 +200,9 @@ export default function CRM({ currentUser, onLogout }) {
   const addOrderItem = (prod) => {
     const exists = orderItems.find(i=>i.product_id===prod.id);
     if(exists) return toast$("Yeh item already add hai",true);
-    setOrderItems(p=>[...p,{product_id:prod.id,sku_code:prod.sku_code,product_name:prod.name,packing:prod.packing,qty_cases:1,price_per_pcs:prod.price_per_pcs||0,ctn_price:prod.ctn_price||0,discount:0,amount:prod.ctn_price||0}]);
+    const discAmt=partyDiscount||0;
+    const baseAmt=(prod.ctn_price||0)*1-discAmt;
+    setOrderItems(p=>[...p,{product_id:prod.id,sku_code:prod.sku_code,product_name:prod.name,packing:prod.packing,qty_cases:1,price_per_pcs:prod.price_per_pcs||0,ctn_price:prod.ctn_price||0,discount:discAmt,amount:Math.max(baseAmt,0)}]);
   };
   const updOrderItem = (pid,k,v) => {
     setOrderItems(p=>p.map(i=>{
@@ -297,8 +304,8 @@ export default function CRM({ currentUser, onLogout }) {
     <div>
       <div className="sg">
         {[
-          {lbl:"CRM Customers",val:C.filter(c=>c.type==="crm").length,sub:"Active accounts",col:"#10b981",ic:"👥",fn:()=>{setCTab("crm");setView("customers");}},
-          {lbl:"NBD Prospects",val:C.filter(c=>c.type==="nbd").length,sub:"In pipeline",col:"#60a5fa",ic:"🎯",fn:()=>{setCTab("nbd");setView("customers");}},
+          {lbl:"CRM Customers",val:myC.filter(c=>c.type==="crm").length,sub:"Active accounts",col:"#10b981",ic:"👥",fn:()=>{setCTab("crm");setView("customers");}},
+          {lbl:"NBD Prospects",val:myC.filter(c=>c.type==="nbd").length,sub:"In pipeline",col:"#60a5fa",ic:"🎯",fn:()=>{setCTab("nbd");setView("customers");}},
           {lbl:"Open Enquiries",val:E.filter(e=>!["won","lost"].includes(e.status)).length,sub:"Active leads",col:"#f59e0b",ic:"📋",fn:()=>setView("enquiries")},
           {lbl:"Urgent Follow-ups",val:urgN,sub:urgN>0?"⚠️ Act now":"All clear ✅",col:urgN>0?"#ef4444":"#10b981",ic:"⚡",fn:()=>setView("followups")},
         ].map(s=>(
@@ -333,7 +340,7 @@ export default function CRM({ currentUser, onLogout }) {
         <div className="card">
           <div className="sh"><div><div className="sh-t">📋 Recent Orders</div><div className="sh-s">Latest 20</div></div><button className="btn btn-o btn-sm" onClick={()=>{loadAllOrders();setView("orders");}}>All →</button></div>
           {ORDERS.length===0?<div className="empty"><p>Koi order nahi</p></div>
-            :[...ORDERS].sort((a,b)=>new Date(b.order_date)-new Date(a.order_date)).slice(0,5).map(o=>(
+            :[...myORDERS].sort((a,b)=>new Date(b.order_date)-new Date(a.order_date)).slice(0,5).map(o=>(
               <div key={o.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 0",borderBottom:"1px solid var(--bdr)"}}>
                 <div><div style={{fontSize:12.5,fontWeight:600}}>{o.company}</div><div style={{fontSize:10.5,color:"var(--mut)"}}>{fd(o.order_date)}</div></div>
                 <div style={{display:"flex",gap:7,alignItems:"center"}}>
@@ -403,7 +410,7 @@ export default function CRM({ currentUser, onLogout }) {
 
   /* ── ORDERS ── */
   const Orders = () => {
-    const list = ORDERS.filter(o=>!q||[o.customer_name,o.company].some(v=>v?.toLowerCase().includes(q.toLowerCase())));
+    const list = myORDERS.filter(o=>!q||[o.customer_name,o.company].some(v=>v?.toLowerCase().includes(q.toLowerCase())));
     const ts = dt => dt?new Date(dt).toLocaleString("en-IN",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"}):null;
 
     const PipelineStep = ({done,label,by,at,col}) => (
@@ -427,7 +434,7 @@ export default function CRM({ currentUser, onLogout }) {
         <div className="sh">
           <div>
             <div className="sh-t">Orders & Proforma</div>
-            <div className="sh-s">{allOrdersLoaded?ORDERS.length:"20 recent"}  orders {!allOrdersLoaded&&<button className="btn btn-o btn-sm" style={{marginLeft:6}} onClick={loadAllOrders}>Load All</button>}</div>
+            <div className="sh-s">{allOrdersLoaded?myORDERS.length:"20 recent"}  orders {!allOrdersLoaded&&<button className="btn btn-o btn-sm" style={{marginLeft:6}} onClick={loadAllOrders}>Load All</button>}</div>
           </div>
           <button className="btn btn-p" onClick={()=>{setForm({order_date:new Date().toISOString().split("T")[0],epr:false});setOrderItems([]);if(pxRows.length===0)loadPricing();setModal("aorder");}}><Plus size={13}/> New Order</button>
         </div>
@@ -1078,6 +1085,12 @@ export default function CRM({ currentUser, onLogout }) {
             <div><label className="lbl">Customer *</label><CustomerSearch value={form.customer_id||""} onChange={v=>sf("customer_id",v)}/></div>
             <div><label className="lbl">Order Date</label><input type="date" className="inp" value={form.order_date||""} onChange={e=>sf("order_date",e.target.value)}/></div>
           </div>
+          <div style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",background:"rgba(245,158,11,.08)",border:"1px solid rgba(245,158,11,.2)",borderRadius:8,marginBottom:12}}>
+            <span style={{fontSize:12,color:"var(--acc)",fontWeight:700}}>🏷️ Party Discount</span>
+            <input type="number" value={partyDiscount} onChange={e=>setPartyDiscount(Number(e.target.value))}
+              style={{width:70,padding:"4px 8px",borderRadius:6,border:"1px solid var(--bdr)",textAlign:"center",fontWeight:700}}/>
+            <span style={{fontSize:11,color:"var(--mut)"}}>₹/carton (auto-apply on add)</span>
+          </div>
           <div className="g2" style={{gap:14}}>
             <div>
               <label className="lbl">Products Add Karo</label>
@@ -1515,7 +1528,12 @@ export default function CRM({ currentUser, onLogout }) {
   };
   const PXZ = {N3:{c:"#10b981",bg:"rgba(16,185,129,.12)"},N2:{c:"#f59e0b",bg:"rgba(245,158,11,.12)"},N1:{c:"#f97316",bg:"rgba(249,115,22,.12)"},RED:{c:"#ef4444",bg:"rgba(239,68,68,.12)"}};
 
-  const isAdmin = (currentUser?.name||"").toLowerCase().includes("nitin");
+  // Role from crm_users table (admin / sales / dataentry)
+  const userRole = currentUser?.role || "viewer";
+  const isAdmin = userRole === "admin";
+  const isSales = userRole === "sales";
+  const isDataEntry = userRole === "dataentry";
+  const myName = currentUser?.name||"";
   const pxByProduct = (pname) => pxProducts.find(r=>r.crm_product_name===pname);
   const zoneForPrice = (px, price) => {
     if(!px) return null;
@@ -1604,10 +1622,10 @@ export default function CRM({ currentUser, onLogout }) {
     {id:"payments",lbl:"Payments",ic:"💳",badge:P.filter(p=>p.overdue>0).length||null},
     {id:"products",lbl:"Products",ic:"📦"},
     {id:"orders",lbl:"Orders",ic:"🧾",badge:ORDERS.filter(o=>o.status==="draft").length||null,bc:"info"},
-    {id:"reports",lbl:"Reports",ic:"📊"},
-    {id:"targets",lbl:"Targets",ic:"🎯"},
-    {id:"pricing",lbl:"Pricing",ic:"💰"},
-  ];
+    {id:"reports",lbl:"Reports",ic:"📊",roles:["admin"]},
+    {id:"targets",lbl:"Targets",ic:"🎯",roles:["admin"]},
+    {id:"pricing",lbl:"Pricing",ic:"💰",roles:["admin"]},
+  ].filter(n=>n.roles.includes(userRole));
 
   return (
     <div className="crm">
@@ -1636,7 +1654,9 @@ export default function CRM({ currentUser, onLogout }) {
         <div className="tb">
           <div style={{flex:1}}>
             <div className="tb-title">{navs.find(n=>n.id===view)?.lbl||"Dashboard"}</div>
-            <div className="tb-sub">👤 {currentUser?.name} · Mayur Food Packaging</div>
+            <div className="tb-sub">👤 {currentUser?.name} · {isAdmin?"Admin":""}
+              {isSales?" Sales":""}
+              {isDataEntry?" Data Entry":""} · Mayur Food Packaging</div>
           </div>
           {urgN>0&&<div style={{display:"flex",alignItems:"center",gap:5,padding:"5px 12px",background:"rgba(239,68,68,.1)",border:"1px solid rgba(239,68,68,.2)",borderRadius:8,cursor:"pointer"}} onClick={()=>setView("followups")}><span style={{fontSize:11}}>⚡</span><span style={{fontSize:11.5,color:"#ef4444",fontWeight:800}}>{urgN} Urgent</span></div>}
           <button className="btn btn-o btn-sm" onClick={()=>{setForm({order_date:new Date().toISOString().split("T")[0],epr:false});setOrderItems([]);if(pxRows.length===0)loadPricing();setModal("aorder");}}>🧾 New Order</button>
