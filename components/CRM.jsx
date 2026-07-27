@@ -75,6 +75,13 @@ export default function CRM({ currentUser, onLogout }) {
   const gcp= cid => P.find(p=>p.customer_id===cid);
   const gcs= cid => S.filter(s=>s.customer_id===cid);
 
+  // Role from crm_users table — defined early (used in filtering below)
+  const userRole = currentUser?.role || "viewer";
+  const isAdmin = userRole === "admin";
+  const isSales = userRole === "sales";
+  const isDataEntry = userRole === "dataentry";
+  const myName = currentUser?.name||"";
+
   const odFU = useMemo(()=>I.filter(i=>i.next_follow_up&&isOD(i.next_follow_up)),[I]);
   const tdFU = useMemo(()=>I.filter(i=>i.next_follow_up&&isTD(i.next_follow_up)),[I]);
   const urgN = odFU.length+tdFU.length;
@@ -1529,11 +1536,7 @@ export default function CRM({ currentUser, onLogout }) {
   const PXZ = {N3:{c:"#10b981",bg:"rgba(16,185,129,.12)"},N2:{c:"#f59e0b",bg:"rgba(245,158,11,.12)"},N1:{c:"#f97316",bg:"rgba(249,115,22,.12)"},RED:{c:"#ef4444",bg:"rgba(239,68,68,.12)"}};
 
   // Role from crm_users table (admin / sales / dataentry)
-  const userRole = currentUser?.role || "viewer";
-  const isAdmin = userRole === "admin";
-  const isSales = userRole === "sales";
-  const isDataEntry = userRole === "dataentry";
-  const myName = currentUser?.name||"";
+  // roles defined above
   const pxByProduct = (pname) => pxProducts.find(r=>r.crm_product_name===pname);
   const zoneForPrice = (px, price) => {
     if(!px) return null;
