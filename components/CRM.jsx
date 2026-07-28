@@ -1694,7 +1694,7 @@ export default function CRM({ currentUser, onLogout }) {
                 {(prodData.daily||[]).map(d=>(
                   <tr key={d.date}>
                     <td style={{fontWeight:600}}>{new Date(d.date).toLocaleDateString("en-IN",{day:"2-digit",month:"short"})}</td>
-                    <td style={{textAlign:"center"}}>{d.items?.reduce((s,i)=>s+(i.plant?1:0),0)||"—"}</td>
+                    <td style={{textAlign:"center"}}>{d.machine_count||"—"}</td>
                     <td style={{textAlign:"center"}}>{d.total_mh}h</td>
                     <td style={{fontWeight:700,color:"#10b981"}}>₹{Number(d.total_throughput).toLocaleString("en-IN")}</td>
                     <td style={{fontWeight:800,color:zc(d.zone).c}}>₹{d.avg_t_hr}</td>
