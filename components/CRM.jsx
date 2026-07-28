@@ -43,6 +43,8 @@ export default function CRM({ currentUser, onLogout }) {
   const [ORDERS,setORDERS] = useState([]);
   const [TARGETS,setTARGETS] = useState([]);
   const [USERS,setUSERS] = useState([]);
+  const [prodData,setProdData] = useState(null);
+  const [prodLoad,setProdLoad] = useState(false);
   const [allOrdersLoaded,setAllOrdersLoaded] = useState(false);
   const [loading,setLd]  = useState(true);
   const [saving,setSv]   = useState(false);
@@ -112,6 +114,16 @@ export default function CRM({ currentUser, onLogout }) {
     } catch(err){ toast$("Load failed: "+err.message,true); }
     setLd(false);
   },[]);
+
+  const loadProduction = async(days=7)=>{
+    setProdLoad(true);
+    try{
+      const res = await fetch(`https://mayur-mos.vercel.app/api/throughput?days=${days}`);
+      const data = await res.json();
+      setProdData(data);
+    }catch(e){ setToast({msg:"Production load error",err:true}); }
+    setProdLoad(false);
+  };
 
   const loadPricing = useCallback(async()=>{
     setPxLoad(true);
@@ -1631,6 +1643,105 @@ export default function CRM({ currentUser, onLogout }) {
     );
   };
 
+
+  /* ── PRODUCTION DASHBOARD (Admin only) ── */
+  const Production = () => {
+    const [days,setDays] = useState(7);
+    const N1=1097,N2=1615,N3=1938;
+    const ZC={N3:{c:"#10b981",bg:"rgba(16,185,129,.12)"},N2:{c:"#f59e0b",bg:"rgba(245,158,11,.12)"},N1:{c:"#f97316",bg:"rgba(249,115,22,.12)"},RED:{c:"#ef4444",bg:"rgba(239,68,68,.12)"}};
+    const zc=(z)=>ZC[z]||ZC.N1;
+
+    return (
+      <div>
+        <div className="sh">
+          <div><div className="sh-t">🏭 Production Throughput</div>
+            <div className="sh-s">MOS se real data · N1=₹1,097 N2=₹1,615 N3=₹1,938/hr</div>
+          </div>
+          <div style={{display:"flex",gap:8,alignItems:"center"}}>
+            {[7,15,30].map(d=>(
+              <button key={d} className={`btn btn-sm ${days===d?"btn-p":"btn-o"}`}
+                onClick={()=>{setDays(d);loadProduction(d);}}>
+                {d}d
+              </button>
+            ))}
+            <button className="btn btn-o btn-sm" onClick={()=>loadProduction(days)}>🔄</button>
+          </div>
+        </div>
+
+        {prodLoad?<div className="card empty"><p>Loading production data...</p></div>
+        :!prodData?<div className="card empty"><p>Load karo → button dabao</p><button className="btn btn-p" onClick={()=>loadProduction(days)}>Load Production Data</button></div>
+        :<div>
+          {/* Summary cards */}
+          <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10,marginBottom:16}}>
+            {["N3","N2","N1","RED"].map(z=>{
+              const cnt=(prodData.daily||[]).filter(d=>d.zone===z).length;
+              return <div key={z} style={{textAlign:"center",padding:12,borderRadius:10,background:zc(z).bg,border:`1px solid ${zc(z).c}`}}>
+                <div style={{fontSize:22,fontWeight:800,color:zc(z).c}}>{cnt}</div>
+                <div style={{fontSize:10,color:zc(z).c,fontWeight:700}}>{z==="RED"?"LOSS":z} days</div>
+              </div>;
+            })}
+          </div>
+
+          {/* Daily table */}
+          <div className="card" style={{padding:0}}>
+            <div className="tw"><table>
+              <thead><tr>
+                <th>Date</th><th>Machines</th><th>Total MH</th>
+                <th>Throughput</th><th>Avg T/hr</th><th>Zone</th>
+                <th>vs N2 Gap</th>
+              </tr></thead>
+              <tbody>
+                {(prodData.daily||[]).map(d=>(
+                  <tr key={d.date}>
+                    <td style={{fontWeight:600}}>{new Date(d.date).toLocaleDateString("en-IN",{day:"2-digit",month:"short"})}</td>
+                    <td style={{textAlign:"center"}}>{d.items?.reduce((s,i)=>s+(i.plant?1:0),0)||"—"}</td>
+                    <td style={{textAlign:"center"}}>{d.total_mh}h</td>
+                    <td style={{fontWeight:700,color:"#10b981"}}>₹{Number(d.total_throughput).toLocaleString("en-IN")}</td>
+                    <td style={{fontWeight:800,color:zc(d.zone).c}}>₹{d.avg_t_hr}</td>
+                    <td><span className="bdg" style={{background:zc(d.zone).bg,color:zc(d.zone).c}}>{d.zone==="RED"?"LOSS":d.zone}</span></td>
+                    <td style={{fontSize:11,color:d.avg_t_hr>=N2?"#10b981":"#ef4444",fontWeight:600}}>
+                      {d.avg_t_hr>=N2?`+₹${d.avg_t_hr-N2} above N2`:`-₹${N2-d.avg_t_hr} to N2`}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table></div>
+          </div>
+
+          {/* Today's item breakdown */}
+          {prodData.daily?.[0]&&(
+            <div className="card" style={{marginTop:14}}>
+              <div style={{fontSize:11,fontWeight:800,color:"var(--mut)",textTransform:"uppercase",letterSpacing:".08em",marginBottom:12}}>
+                Today's Item Breakdown — {new Date(prodData.daily[0].date).toLocaleDateString("en-IN",{day:"2-digit",month:"short"})}
+              </div>
+              <div className="tw"><table>
+                <thead><tr><th>Product</th><th>Plant</th><th>Pieces</th><th>MH</th><th>T/hr</th><th>Zone</th><th>Floor(N1)</th><th>Happy(N2)</th></tr></thead>
+                <tbody>
+                  {(prodData.daily[0].items||[]).map((it,i)=>(
+                    <tr key={i}>
+                      <td style={{fontWeight:600,fontSize:12}}>{it.product}</td>
+                      <td style={{fontSize:11,color:"var(--mut)"}}>{it.plant?.replace("Plant ","P")}</td>
+                      <td style={{textAlign:"center"}}>{Number(it.good_parts).toLocaleString()}</td>
+                      <td style={{textAlign:"center",fontSize:11}}>{it.mh?.toFixed(1)}h</td>
+                      <td style={{fontWeight:700,color:zc(it.zone).c}}>₹{Math.round(it.t_hr)}</td>
+                      <td><span className="bdg" style={{background:zc(it.zone).bg,color:zc(it.zone).c}}>{it.zone==="RED"?"LOSS":it.zone}</span></td>
+                      <td style={{fontSize:11}}>₹{it.floor}</td>
+                      <td style={{fontSize:11,color:"var(--mut)"}}>₹{it.happy}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table></div>
+            </div>
+          )}
+
+          {prodData.updated_at&&<div style={{fontSize:10,color:"var(--mut)",marginTop:8,textAlign:"right"}}>
+            Last updated: {new Date(prodData.updated_at).toLocaleString("en-IN")}
+          </div>}
+        </div>}
+      </div>
+    );
+  };
+
   /* ── NAV ── */
   const navs = [
     {id:"dashboard",lbl:"Dashboard",ic:"🏠",roles:["admin","sales","dataentry"]},
@@ -1644,6 +1755,7 @@ export default function CRM({ currentUser, onLogout }) {
     {id:"reports",lbl:"Reports",ic:"📊",roles:["admin"]},
     {id:"targets",lbl:"Targets",ic:"🎯",roles:["admin"]},
     {id:"pricing",lbl:"Pricing",ic:"💰",roles:["admin"]},
+    {id:"production",lbl:"Production",ic:"🏭",roles:["admin"]},
   ].filter(n=>n.roles?.includes(userRole)||userRole==="viewer");
 
   return (
@@ -1658,6 +1770,7 @@ export default function CRM({ currentUser, onLogout }) {
                 await loadAllOrders();
               }
               if(n.id==="pricing") await loadPricing();
+              if(n.id==="production") await loadProduction();
             }}>
               <span style={{fontSize:15}}>{n.ic}</span><span>{n.lbl}</span>
               {n.badge?<span className={`nb ${n.bc||""}`}>{n.badge}</span>:null}
@@ -1693,6 +1806,7 @@ export default function CRM({ currentUser, onLogout }) {
           {view==="reports"&&<Reports/>}
           {view==="targets"&&<Targets/>}
           {view==="pricing"&&<Pricing/>}
+          {view==="production"&&isAdmin&&<Production/>}
         </div>
       </div>
       {renderModal()}
