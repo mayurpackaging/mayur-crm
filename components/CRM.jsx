@@ -1647,7 +1647,12 @@ export default function CRM({ currentUser, onLogout }) {
   /* ── PRODUCTION DASHBOARD (Admin only) ── */
   const Production = () => {
     const [days,setDays] = useState(7);
+    const [viewMode,setViewMode] = useState("trend"); // trend | yesterday
+    // N thresholds — from pricing model
     const N1=1097,N2=1615,N3=1938;
+    // Yesterday date
+    const yesterday = new Date(Date.now()-86400000).toISOString().slice(0,10);
+    const yesterdayFmt = new Date(Date.now()-86400000).toLocaleDateString("en-IN",{day:"2-digit",month:"short"});
     const ZC={N3:{c:"#10b981",bg:"rgba(16,185,129,.12)"},N2:{c:"#f59e0b",bg:"rgba(245,158,11,.12)"},N1:{c:"#f97316",bg:"rgba(249,115,22,.12)"},RED:{c:"#ef4444",bg:"rgba(239,68,68,.12)"}};
     const zc=(z)=>ZC[z]||ZC.N1;
 
@@ -1657,20 +1662,114 @@ export default function CRM({ currentUser, onLogout }) {
           <div><div className="sh-t">🏭 Production Throughput</div>
             <div className="sh-s">MOS se real data · N1=₹1,097 N2=₹1,615 N3=₹1,938/hr</div>
           </div>
-          <div style={{display:"flex",gap:8,alignItems:"center"}}>
+          <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+            <button className={`btn btn-sm ${viewMode==="yesterday"?"btn-p":"btn-o"}`}
+              onClick={()=>{setViewMode("yesterday");loadProduction(1);}}>
+              📅 {yesterdayFmt} Floor
+            </button>
             {[7,15,30].map(d=>(
-              <button key={d} className={`btn btn-sm ${days===d?"btn-p":"btn-o"}`}
-                onClick={()=>{setDays(d);loadProduction(d);}}>
+              <button key={d} className={`btn btn-sm ${viewMode==="trend"&&days===d?"btn-p":"btn-o"}`}
+                onClick={()=>{setViewMode("trend");setDays(d);loadProduction(d);}}>
                 {d}d
               </button>
             ))}
-            <button className="btn btn-o btn-sm" onClick={()=>loadProduction(days)}>🔄</button>
+            <button className="btn btn-o btn-sm" onClick={()=>loadProduction(viewMode==="yesterday"?1:days)}>🔄</button>
           </div>
         </div>
 
         {prodLoad?<div className="card empty"><p>Loading production data...</p></div>
         :!prodData?<div className="card empty"><p>Load karo → button dabao</p><button className="btn btn-p" onClick={()=>loadProduction(days)}>Load Production Data</button></div>
         :<div>
+          {/* ── DAILY SUMMARY CARD ── */}
+          {prodData.daily?.[0]&&(()=>{
+            const td=prodData.daily[0];
+            const N1=1097,N2=1615,N3=1938;
+            const zc2=(z)=>({N3:{c:"#10b981",bg:"rgba(16,185,129,.12)"},N2:{c:"#f59e0b",bg:"rgba(245,158,11,.12)"},N1:{c:"#f97316",bg:"rgba(249,115,22,.12)"},RED:{c:"#ef4444",bg:"rgba(239,68,68,.12)"}}[z]||{c:"#666",bg:"#f5f5f5"});
+            const floorAmt=Math.round(N1*td.total_mh);
+            const happyAmt=Math.round(N2*td.total_mh);
+            const premAmt=Math.round(N3*td.total_mh);
+            const aboveFloor=td.total_throughput-floorAmt;
+            const aboveHappy=td.total_throughput-happyAmt;
+            const coverPct=Math.min(Math.round(td.total_throughput/happyAmt*100),200);
+            return (
+              <div className="card" style={{background:"#0e1a24",color:"#fff",marginBottom:16,border:"none"}}>
+                {/* Header */}
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:16}}>
+                  <div>
+                    <div style={{fontSize:11,color:"#9fb3c0",textTransform:"uppercase",letterSpacing:1}}>
+                      📅 {new Date(td.date).toLocaleDateString("en-IN",{weekday:"long",day:"2-digit",month:"long"})}
+                    </div>
+                    <div style={{fontSize:22,fontWeight:800,marginTop:4}}>Daily Production Summary</div>
+                    <div style={{fontSize:11,color:"#9fb3c0",marginTop:2}}>{td.machine_count} machines · {td.total_mh}h (Box {td.box_mh}h + Lid {td.lid_mh}h)</div>
+                  </div>
+                  <span style={{padding:"6px 16px",borderRadius:20,fontWeight:800,fontSize:14,background:zc2(td.zone).bg,color:zc2(td.zone).c}}>
+                    {td.zone==="RED"?"LOSS":td.zone}
+                  </span>
+                </div>
+
+                {/* Main numbers */}
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12,marginBottom:16}}>
+                  <div style={{background:"rgba(255,255,255,.06)",borderRadius:10,padding:12}}>
+                    <div style={{fontSize:10,color:"#9fb3c0",textTransform:"uppercase",letterSpacing:.8,marginBottom:4}}>Throughput (Price−Daana)</div>
+                    <div style={{fontSize:22,fontWeight:800,color:"#10b981"}}>₹{Number(td.total_throughput).toLocaleString("en-IN")}</div>
+                    <div style={{fontSize:10,color:"#9fb3c0",marginTop:2}}>₹{td.avg_t_hr}/hr avg</div>
+                  </div>
+                  <div style={{background:"rgba(255,255,255,.06)",borderRadius:10,padding:12}}>
+                    <div style={{fontSize:10,color:"#9fb3c0",textTransform:"uppercase",letterSpacing:.8,marginBottom:4}}>Floor (N1) — Break-even</div>
+                    <div style={{fontSize:22,fontWeight:800,color:"#f97316"}}>₹{Number(floorAmt).toLocaleString("en-IN")}</div>
+                    <div style={{fontSize:10,color:aboveFloor>=0?"#10b981":"#ef4444",marginTop:2,fontWeight:700}}>
+                      {aboveFloor>=0?`+₹${Number(aboveFloor).toLocaleString("en-IN")} above floor`:`₹${Number(-aboveFloor).toLocaleString("en-IN")} below floor!`}
+                    </div>
+                  </div>
+                  <div style={{background:"rgba(255,255,255,.06)",borderRadius:10,padding:12}}>
+                    <div style={{fontSize:10,color:"#9fb3c0",textTransform:"uppercase",letterSpacing:.8,marginBottom:4}}>Happy (N2) — ₹50L/month</div>
+                    <div style={{fontSize:22,fontWeight:800,color:"#f59e0b"}}>₹{Number(happyAmt).toLocaleString("en-IN")}</div>
+                    <div style={{fontSize:10,color:aboveHappy>=0?"#10b981":"#ef4444",marginTop:2,fontWeight:700}}>
+                      {aboveHappy>=0?`+₹${Number(aboveHappy).toLocaleString("en-IN")} above target`:`₹${Number(-aboveHappy).toLocaleString("en-IN")} below target`}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Progress bar */}
+                <div style={{marginBottom:16}}>
+                  <div style={{display:"flex",justifyContent:"space-between",fontSize:10,color:"#9fb3c0",marginBottom:6}}>
+                    <span>N1 Floor ₹{Number(floorAmt).toLocaleString("en-IN")}</span>
+                    <span style={{color:"#f59e0b",fontWeight:700}}>N2 Target {coverPct}% achieved</span>
+                    <span>N3 Premium ₹{Number(premAmt).toLocaleString("en-IN")}</span>
+                  </div>
+                  <div style={{height:10,background:"rgba(255,255,255,.1)",borderRadius:5,overflow:"hidden",position:"relative"}}>
+                    {/* N1 marker */}
+                    <div style={{position:"absolute",left:`${Math.round(floorAmt/premAmt*100)}%`,top:0,bottom:0,width:2,background:"#f97316",zIndex:2}}/>
+                    {/* Progress fill */}
+                    <div style={{height:"100%",width:`${Math.min(td.total_throughput/premAmt*100,100)}%`,
+                      background:td.zone==="N3"?"linear-gradient(90deg,#10b981,#34d399)":td.zone==="N2"?"linear-gradient(90deg,#f59e0b,#fcd34d)":"linear-gradient(90deg,#f97316,#fb923c)",
+                      borderRadius:5,transition:"width .5s"}}/>
+                  </div>
+                  <div style={{display:"flex",justifyContent:"space-between",fontSize:9,color:"#64748b",marginTop:4}}>
+                    <span>0</span>
+                    <span style={{color:"#f97316"}}>▲ N1</span>
+                    <span style={{color:"#f59e0b"}}>▲ N2</span>
+                    <span>N3 →</span>
+                  </div>
+                </div>
+
+                {/* Item breakdown mini */}
+                <div style={{borderTop:"1px solid rgba(255,255,255,.1)",paddingTop:12}}>
+                  <div style={{fontSize:10,color:"#9fb3c0",textTransform:"uppercase",letterSpacing:.8,marginBottom:8}}>Aaj ke items</div>
+                  <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+                    {(td.items||[]).map((it,i)=>(
+                      <div key={i} style={{background:"rgba(255,255,255,.06)",borderRadius:8,padding:"6px 10px",fontSize:11}}>
+                        <span style={{color:"#e2e8f0",fontWeight:600}}>{it.product?.replace(" Container","")?.replace(" ml","ml")}</span>
+                        <span style={{marginLeft:6,fontWeight:800,color:zc2(it.zone).c}}>₹{Math.round(it.t_hr)}</span>
+                        <span style={{marginLeft:4,fontSize:9,color:zc2(it.zone).c}}>{it.zone}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
           {/* Summary cards */}
           <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10,marginBottom:16}}>
             {["N3","N2","N1","RED"].map(z=>{
@@ -1681,6 +1780,75 @@ export default function CRM({ currentUser, onLogout }) {
               </div>;
             })}
           </div>
+
+          {/* Yesterday Floor Price Card */}
+          {viewMode==="yesterday"&&prodData.daily?.[0]&&(()=>{
+            const yd=prodData.daily[0];
+            const ydDate=new Date(yd.date).toLocaleDateString("en-IN",{weekday:"long",day:"2-digit",month:"long"});
+            const ZC2=(z)=>({N3:{c:"#10b981",bg:"rgba(16,185,129,.15)"},N2:{c:"#f59e0b",bg:"rgba(245,158,11,.15)"},N1:{c:"#f97316",bg:"rgba(249,115,22,.15)"},RED:{c:"#ef4444",bg:"rgba(239,68,68,.15)"}}[z]||{c:"#666",bg:"#f5f5f5"});
+            return (
+              <div style={{background:"#0e1a24",color:"#fff",borderRadius:12,padding:18,marginBottom:14}}>
+                <div style={{fontSize:11,color:"#9fb3c0",textTransform:"uppercase",letterSpacing:1}}>
+                  📅 {ydDate} — Kal Ki Production Se Aaj Ka Floor
+                </div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginTop:12,marginBottom:14}}>
+                  <div style={{background:"rgba(255,255,255,.07)",borderRadius:8,padding:12}}>
+                    <div style={{fontSize:9,color:"#9fb3c0",textTransform:"uppercase",marginBottom:4}}>Total MH (kal)</div>
+                    <div style={{fontSize:20,fontWeight:800}}>{yd.total_mh}h</div>
+                    <div style={{fontSize:9,color:"#9fb3c0",marginTop:2}}>Box {yd.box_mh}h + Lid {yd.lid_mh}h</div>
+                  </div>
+                  <div style={{background:"rgba(255,255,255,.07)",borderRadius:8,padding:12}}>
+                    <div style={{fontSize:9,color:"#9fb3c0",textTransform:"uppercase",marginBottom:4}}>Throughput (kal)</div>
+                    <div style={{fontSize:20,fontWeight:800,color:"#10b981"}}>₹{Number(yd.total_throughput).toLocaleString("en-IN")}</div>
+                    <div style={{fontSize:9,color:"#9fb3c0",marginTop:2}}>Price − Daana</div>
+                  </div>
+                  <div style={{background:ZC2(yd.zone).bg,border:`1px solid ${ZC2(yd.zone).c}`,borderRadius:8,padding:12}}>
+                    <div style={{fontSize:9,color:ZC2(yd.zone).c,textTransform:"uppercase",marginBottom:4}}>Avg T/hr</div>
+                    <div style={{fontSize:24,fontWeight:800,color:ZC2(yd.zone).c}}>₹{yd.avg_t_hr}</div>
+                    <div style={{fontSize:12,fontWeight:700,color:ZC2(yd.zone).c,marginTop:2}}>{yd.zone==="RED"?"LOSS":yd.zone}</div>
+                  </div>
+                </div>
+                {/* Item-wise yesterday */}
+                <div style={{fontSize:10,color:"#9fb3c0",marginBottom:8,textTransform:"uppercase",letterSpacing:.5}}>
+                  Kal ke items — floor vs actual
+                </div>
+                <div style={{overflowX:"auto"}}>
+                  <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
+                    <thead>
+                      <tr style={{color:"#7f97a6"}}>
+                        <th style={{padding:"6px 8px",textAlign:"left"}}>Product</th>
+                        <th style={{padding:"6px 8px"}}>Plant</th>
+                        <th style={{padding:"6px 8px"}}>Pieces</th>
+                        <th style={{padding:"6px 8px"}}>MH</th>
+                        <th style={{padding:"6px 8px"}}>T/hr</th>
+                        <th style={{padding:"6px 8px"}}>Zone</th>
+                        <th style={{padding:"6px 8px"}}>Floor(N1)</th>
+                        <th style={{padding:"6px 8px"}}>Happy(N2)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(yd.items||[]).sort((a,b)=>b.t_hr-a.t_hr).map((it,i)=>(
+                        <tr key={i} style={{borderTop:"1px solid rgba(255,255,255,.08)"}}>
+                          <td style={{padding:"7px 8px",fontWeight:600,color:"#e2e8f0"}}>{it.product?.replace(" Container","")?.replace(" ml","ml")}</td>
+                          <td style={{padding:"7px 8px",textAlign:"center",color:"#7f97a6",fontSize:10}}>{it.plant?.replace("Plant ","P")}</td>
+                          <td style={{padding:"7px 8px",textAlign:"center"}}>{Number(it.good_parts).toLocaleString()}</td>
+                          <td style={{padding:"7px 8px",textAlign:"center",color:"#7f97a6"}}>{it.mh?.toFixed(1)}h</td>
+                          <td style={{padding:"7px 8px",textAlign:"center",fontWeight:700,color:ZC2(it.zone).c}}>₹{Math.round(it.t_hr)}</td>
+                          <td style={{padding:"7px 8px",textAlign:"center"}}>
+                            <span style={{padding:"2px 8px",borderRadius:10,fontSize:10,fontWeight:700,background:ZC2(it.zone).bg,color:ZC2(it.zone).c}}>
+                              {it.zone==="RED"?"LOSS":it.zone}
+                            </span>
+                          </td>
+                          <td style={{padding:"7px 8px",textAlign:"center",fontSize:10,color:"#f97316"}}>₹{it.floor}</td>
+                          <td style={{padding:"7px 8px",textAlign:"center",fontSize:10,color:"#f59e0b"}}>₹{it.happy}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Daily table */}
           <div className="card" style={{padding:0}}>
