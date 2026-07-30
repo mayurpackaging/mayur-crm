@@ -1621,43 +1621,67 @@ export default function CRM({ currentUser, onLogout }) {
     const m2N2 = (truFixed + pxThis.happy) / pxThis.scu;
     const m2N3 = m2N2 * 1.20;
 
-    // Calculate floors from price_items columns directly
+    // Calculate floors from price_items columns — ALL components
     const calcFloors = (row) => {
       const HOMO = Number(pxDaana.homo)||146;
       const CP   = Number(pxDaana.cp)||146;
       const RAND = Number(pxDaana.random)||152;
+      const MB_BLACK=180; const MB_MILKY=225; const POLY_RATE=225; const TAPE=10;
       const pcs  = row.pcs_per_carton || 500;
-      // Daana cost per carton
+
+      // 1. Daana cost per carton
       const daana = (
         ((row.box_homo||0)*HOMO + (row.box_cp||0)*CP + (row.box_random||0)*RAND) +
         ((row.lid_homo||0)*HOMO + (row.lid_cp||0)*CP + (row.lid_random||0)*RAND)
       ) / 1000 * pcs;
-      // Machine hours per carton (box + lid)
+
+      // 2. Machine hours per carton (box + lid)
       const boxMH = (row.box_cav>0 && row.box_cyc>0)
         ? pcs / ((3600/row.box_cyc)*row.box_cav) : 0;
       const lidMH = (row.lid_cav>0 && row.lid_cyc>0)
         ? pcs / ((3600/row.lid_cyc)*row.lid_cav) : 0;
       const mh = boxMH + lidMH;
-      // kg per carton (for electricity in Model 2)
+
+      // 3. kg per carton
       const kg = ((row.box_wt||0) + (row.lid_wt||0)) * pcs / 1000;
-      const me = getME(row.tonnage || "");
-      if(!mh || !daana) return {
+
+      // 4. Masterbatch (2% colour loading)
+      const mbRate = (row.colour||"").toLowerCase()==="milky" ? MB_MILKY : MB_BLACK;
+      const mb = kg * 0.02 * mbRate;
+
+      // 5. Carton + Poly + Tape
+      const carton = row.carton_cost || 0;
+      const poly = ((row.poly_gm||0) / 1000) * POLY_RATE;
+      const tape = TAPE;
+
+      // 6. Variable costs total (same for both models)
+      const varCosts = daana + mb + carton + poly + tape;
+
+      if(!mh) return {
         m1Floor:null,m1Happy:null,m1Super:null,m1Zone:"N3",
         m2Floor:null,m2Happy:null,m2Super:null,m2Zone:"N3"
       };
-      const m1Floor = daana + m1N1 * mh;
-      const m1Happy = daana + m1N2 * mh;
-      const m1Super = daana + m1N3 * mh;
-      const m2Floor = daana + (epk * kg) + m2N1 * mh;
-      const m2Happy = daana + (epk * kg) + m2N2 * mh;
-      const m2Super = daana + (epk * kg) + m2N3 * mh;
+
+      // MODEL 1: Floor = VarCosts + (Total Fixed / SCU) × MH
+      const m1Floor = varCosts + m1N1 * mh;
+      const m1Happy = varCosts + m1N2 * mh;
+      const m1Super = varCosts + m1N3 * mh;
+
+      // MODEL 2: Floor = VarCosts + Electricity(₹/kg×kg) + (True Fixed / SCU) × MH
+      const m2Floor = varCosts + (epk * kg) + m2N1 * mh;
+      const m2Happy = varCosts + (epk * kg) + m2N2 * mh;
+      const m2Super = varCosts + (epk * kg) + m2N3 * mh;
+
       const getZone = (price, floor, happy, super_) =>
-        !price||!floor ? "N3" :
+        !price||!floor ? "—" :
         price < floor ? "RED" : price < happy ? "N1" : price < super_ ? "N2" : "N3";
+
       return {
-        m1Floor, m1Happy, m1Super, m1Zone: getZone(row.list_price, m1Floor, m1Happy, m1Super),
-        m2Floor, m2Happy, m2Super, m2Zone: getZone(row.list_price, m2Floor, m2Happy, m2Super),
-        daana, mh, kg,
+        m1Floor, m1Happy, m1Super,
+        m1Zone: getZone(row.list_price, m1Floor, m1Happy, m1Super),
+        m2Floor, m2Happy, m2Super,
+        m2Zone: getZone(row.list_price, m2Floor, m2Happy, m2Super),
+        daana, mb, carton, poly, tape, mh, kg,
       };
     };
 
@@ -1756,7 +1780,10 @@ export default function CRM({ currentUser, onLogout }) {
                 <tr style={{background:"var(--card2)"}}>
                   <th style={{padding:"8px 10px",textAlign:"left",fontSize:10,color:"var(--mut)",textTransform:"uppercase"}}>Item</th>
                   <th style={{padding:"8px 6px",fontSize:10,color:"var(--mut)"}}>Ton</th>
-                  <th style={{padding:"8px 6px",fontSize:10,color:"var(--mut)"}}>List Price</th>
+                  <th style={{padding:"8px 6px",fontSize:10,color:"var(--mut)"}}>List ₹</th>
+                  <th style={{padding:"8px 6px",fontSize:10,color:"var(--mut)"}}>Daana</th>
+                  <th style={{padding:"8px 6px",fontSize:10,color:"var(--mut)"}}>MB+Box+Poly</th>
+                  <th style={{padding:"8px 6px",fontSize:10,color:"var(--mut)"}}>MH</th>
                   {(pxModel==="m1"||pxModel==="both")&&<>
                     <th style={{padding:"8px 6px",fontSize:10,color:"#b71c1c",background:"#fff5f5"}}>M1 Floor</th>
                     <th style={{padding:"8px 6px",fontSize:10,color:"#b71c1c",background:"#fff5f5"}}>M1 Happy</th>
@@ -1789,6 +1816,9 @@ export default function CRM({ currentUser, onLogout }) {
                           onBlur={e=>e.target.value!=row.list_price&&pxUpdatePrice(row.id,e.target.value)}
                           style={{width:64,padding:4,textAlign:"center",border:"1px solid var(--bdr)",borderRadius:6,background:"transparent",color:"inherit",fontSize:12}}/>
                       </td>
+                      <td style={{padding:"8px 6px",textAlign:"center",fontSize:11,color:"var(--mut)"}}>{f.daana?fr2(f.daana):"—"}</td>
+                      <td style={{padding:"8px 6px",textAlign:"center",fontSize:11,color:"var(--mut)"}}>{f.mb!=null?fr2((f.mb||0)+(f.carton||0)+(f.poly||0)+(f.tape||0)):"—"}</td>
+                      <td style={{padding:"8px 6px",textAlign:"center",fontSize:11,color:"var(--mut)"}}>{f.mh?f.mh.toFixed(3):"—"}</td>
                       {(pxModel==="m1"||pxModel==="both")&&<>
                         <td style={{padding:"8px 6px",textAlign:"center",fontWeight:700,color:"#b71c1c",background:"#fff5f5"}}>{fr2(f.m1Floor)}</td>
                         <td style={{padding:"8px 6px",textAlign:"center",background:"#fff5f5"}}>{fr2(f.m1Happy)}</td>
