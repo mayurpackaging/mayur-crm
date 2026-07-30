@@ -1589,14 +1589,70 @@ export default function CRM({ currentUser, onLogout }) {
   };
 
   const Pricing = () => {
+    const [pxModel, setPxModel] = useState("both"); // m1 | m2 | both
+    const [pxThis, setPxThis] = useState({fixed:9800000, elecBill:2452659, salesKg:164297, scu:9660, happy:5000000});
+
+    // Machine electricity ₹/hr (actual + 5% buffer)
+    const MELEC = {
+      "180T":191.8,"180T Sumitomo":191.8,"180T JSW":193.8,
+      "200T":213.0,"200T Milacron":213.0,
+      "280T":233.7,"280T Sumitomo":233.7,
+      "350T Sumitomo":226.1,"350T JSW":252.2,"350T":252.2,
+    };
+    const getME = (ton) => {
+      if(!ton) return 213.0;
+      for(const [k,v] of Object.entries(MELEC)){if(ton.includes(k))return v;}
+      return 213.0;
+    };
+
+    // Model 1: N1 = Total Fixed / SCU
+    const m1N1 = pxThis.fixed / pxThis.scu;
+    const m1N2 = (pxThis.fixed + pxThis.happy) / pxThis.scu;
+    const m1N3 = m1N2 * 1.20;
+
+    // Model 2: True Fixed = Total Fixed - Electricity Bill
+    const truFixed = pxThis.fixed - pxThis.elecBill;
+    const epk = (pxThis.elecBill / pxThis.salesKg) * 1.05; // ₹/kg +5%
+    const m2N1 = truFixed / pxThis.scu;
+    const m2N2 = (truFixed + pxThis.happy) / pxThis.scu;
+    const m2N3 = m2N2 * 1.20;
+
+    // Calculate floors for each item
+    const calcFloors = (row) => {
+      const mh = row.mh_per_carton || 0;
+      const daana = row.daana_cost || 0;
+      const kg = row.tonnage_kg || 0;
+      const me = getME(row.tonnage || "");
+      const m1Floor = daana + m1N1 * mh;
+      const m1Happy = daana + m1N2 * mh;
+      const m1Super = daana + m1N3 * mh;
+      const m2Floor = daana + (epk * kg) + m2N1 * mh;
+      const m2Happy = daana + (epk * kg) + m2N2 * mh;
+      const m2Super = daana + (epk * kg) + m2N3 * mh;
+      const getZone = (price, floor, happy, super_) =>
+        price < floor ? "RED" : price < happy ? "N1" : price < super_ ? "N2" : "N3";
+      return {
+        m1Floor, m1Happy, m1Super, m1Zone: getZone(row.list_price, m1Floor, m1Happy, m1Super),
+        m2Floor, m2Happy, m2Super, m2Zone: getZone(row.list_price, m2Floor, m2Happy, m2Super),
+      };
+    };
+
     const list = pxRows.filter(r=>!pxQ||r.item_name.toLowerCase().includes(pxQ.toLowerCase()));
-    const zc = pxRows.reduce((a,r)=>{a[r.zone]=(a[r.zone]||0)+1;return a;},{});
+    const fr2 = (v) => v ? "₹"+Math.round(v).toLocaleString("en-IN") : "—";
+
     return (
       <div>
-        <div className="sh"><div><div className="sh-t">\U0001F4B0 Pricing Engine \u2014 N1/N2/N3</div><div className="sh-s">Daana daalo \u2192 sab items ka zone auto-calculate</div></div></div>
-        <div className="card" style={{background:"#0e1a24",color:"#fff",marginBottom:14}}>
-          <div style={{fontSize:11,color:"#9fb3c0",textTransform:"uppercase",letterSpacing:1,marginBottom:8}}>Aaj ka Daana Rate \u20b9/kg</div>
-          <div style={{display:"flex",gap:10}}>
+        <div className="sh">
+          <div>
+            <div className="sh-t">💰 Pricing Engine — Dono Models</div>
+            <div className="sh-s">Model 1 (Blended 30%) vs Model 2 (Variable Electricity) · Daana change karo → live update</div>
+          </div>
+        </div>
+
+        {/* Daana input */}
+        <div className="card" style={{background:"#0e1a24",color:"#fff",marginBottom:12}}>
+          <div style={{fontSize:10,color:"#9fb3c0",textTransform:"uppercase",letterSpacing:1,marginBottom:8}}>🌾 Aaj Ka Daana Rate ₹/kg</div>
+          <div style={{display:"flex",gap:10,marginBottom:10}}>
             {["homo","cp","random"].map(k=>(
               <div key={k} style={{flex:1}}>
                 <input type="number" value={pxDaana[k]} onChange={e=>setPxDaana({...pxDaana,[k]:e.target.value})}
@@ -1605,37 +1661,126 @@ export default function CRM({ currentUser, onLogout }) {
               </div>
             ))}
           </div>
-          <button className="btn btn-p" style={{marginTop:12,width:"100%",justifyContent:"center"}} onClick={savePxDaana} disabled={pxSave}>{pxSave?"Saving...":"Save Daana & Recalculate"}</button>
+          <button className="btn btn-p" style={{width:"100%",justifyContent:"center"}} onClick={savePxDaana} disabled={pxSave}>
+            {pxSave?"Saving...":"💾 Save Daana & Recalculate"}
+          </button>
         </div>
-        <div style={{display:"flex",gap:8,marginBottom:14}}>
-          {["N3","N2","N1","RED"].map(z=>(
-            <div key={z} style={{flex:1,textAlign:"center",padding:12,borderRadius:10,background:PXZ[z].bg,border:`1px solid ${PXZ[z].c}`}}>
-              <div style={{fontSize:22,fontWeight:800,color:PXZ[z].c}}>{zc[z]||0}</div>
-              <div style={{fontSize:10,color:PXZ[z].c,fontWeight:700}}>{z==="RED"?"LOSS":z}</div>
+
+        {/* Monthly inputs for Model 2 */}
+        <div className="card" style={{marginBottom:12}}>
+          <div style={{fontSize:10,color:"var(--mut)",textTransform:"uppercase",letterSpacing:1,marginBottom:10}}>📅 Is Mahine Ka Data (Model 2 ke liye)</div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
+            {[
+              ["Total Fixed ₹","fixed",9800000],
+              ["Electricity Bill ₹","elecBill",2452659],
+              ["Sales KG","salesKg",164297],
+            ].map(([lbl,key,def])=>(
+              <div key={key}>
+                <div style={{fontSize:10,color:"var(--mut)",marginBottom:4}}>{lbl}</div>
+                <input type="number" value={pxThis[key]}
+                  onChange={e=>setPxThis(p=>({...p,[key]:Number(e.target.value)}))}
+                  className="inp" style={{textAlign:"center",fontWeight:700}}/>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Thresholds comparison */}
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
+          <div className="card" style={{border:"2px solid #b71c1c"}}>
+            <div style={{fontSize:10,fontWeight:700,color:"#b71c1c",marginBottom:8}}>MODEL 1 — Simple (30% Blended)</div>
+            <div style={{display:"flex",gap:6}}>
+              {[["N1 Floor",m1N1,"FFE0E0","b71c1c"],["N2 Happy",m1N2,"FFF9C4","7b5800"],["N3 Super",m1N3,"E8F5E9","1b5e20"]].map(([lbl,val,bg,c])=>(
+                <div key={lbl} style={{flex:1,textAlign:"center",padding:8,borderRadius:8,background:`#${bg}`}}>
+                  <div style={{fontSize:16,fontWeight:800,color:`#${c}`}}>₹{Math.round(val)}</div>
+                  <div style={{fontSize:9,color:`#${c}`,fontWeight:700}}>{lbl}/hr</div>
+                </div>
+              ))}
             </div>
-          ))}
+          </div>
+          <div className="card" style={{border:"2px solid #1b5e20"}}>
+            <div style={{fontSize:10,fontWeight:700,color:"#1b5e20",marginBottom:8}}>MODEL 2 — Variable Electricity (+5% buffer)</div>
+            <div style={{display:"flex",gap:6}}>
+              {[["TF N1",m2N1,"FFE0E0","b71c1c"],["TF N2",m2N2,"FFF9C4","7b5800"],["TF N3",m2N3,"E8F5E9","1b5e20"]].map(([lbl,val,bg,c])=>(
+                <div key={lbl} style={{flex:1,textAlign:"center",padding:8,borderRadius:8,background:`#${bg}`}}>
+                  <div style={{fontSize:16,fontWeight:800,color:`#${c}`}}>₹{Math.round(val)}</div>
+                  <div style={{fontSize:9,color:`#${c}`,fontWeight:700}}>{lbl}/hr</div>
+                </div>
+              ))}
+            </div>
+            <div style={{fontSize:9,color:"var(--mut)",marginTop:6}}>Elec: ₹{epk.toFixed(2)}/kg | True Fixed: ₹{Math.round(truFixed/1e5)}L</div>
+          </div>
         </div>
-        <div className="sr"><Search size={13} className="sr-ic"/><input className="inp" placeholder="Search item..." value={pxQ} onChange={e=>setPxQ(e.target.value)}/></div>
+
+        {/* Model toggle */}
+        <div style={{display:"flex",gap:6,marginBottom:10,alignItems:"center"}}>
+          <span style={{fontSize:11,color:"var(--mut)"}}>Show:</span>
+          {[["both","Dono Models"],["m1","Model 1 Only"],["m2","Model 2 Only"]].map(([v,lbl])=>(
+            <button key={v} className={`btn btn-sm ${pxModel===v?"btn-p":"btn-o"}`} onClick={()=>setPxModel(v)}>{lbl}</button>
+          ))}
+          <div className="sr" style={{flex:1,marginBottom:0}}>
+            <Search size={13} className="sr-ic"/>
+            <input className="inp" placeholder="Search item..." value={pxQ} onChange={e=>setPxQ(e.target.value)}/>
+          </div>
+        </div>
+
+        {/* Items table */}
         {pxLoad?<div className="card empty"><p>Loading...</p></div>
           :<div style={{overflowX:"auto"}}>
-            <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
-              <thead><tr style={{color:"var(--mut)"}}>
-                <th style={{padding:9,textAlign:"left"}}>Item</th><th style={{padding:9}}>Ton</th><th style={{padding:9}}>Price</th><th style={{padding:9}}>Zone</th><th style={{padding:9}}>Floor</th><th style={{padding:9}}>Happy</th>
-              </tr></thead>
+            <table style={{width:"100%",borderCollapse:"collapse",fontSize:12,minWidth:700}}>
+              <thead>
+                <tr style={{background:"var(--card2)"}}>
+                  <th style={{padding:"8px 10px",textAlign:"left",fontSize:10,color:"var(--mut)",textTransform:"uppercase"}}>Item</th>
+                  <th style={{padding:"8px 6px",fontSize:10,color:"var(--mut)"}}>Ton</th>
+                  <th style={{padding:"8px 6px",fontSize:10,color:"var(--mut)"}}>List Price</th>
+                  {(pxModel==="m1"||pxModel==="both")&&<>
+                    <th style={{padding:"8px 6px",fontSize:10,color:"#b71c1c",background:"#fff5f5"}}>M1 Floor</th>
+                    <th style={{padding:"8px 6px",fontSize:10,color:"#b71c1c",background:"#fff5f5"}}>M1 Happy</th>
+                    <th style={{padding:"8px 6px",fontSize:10,color:"#b71c1c",background:"#fff5f5"}}>M1 Super</th>
+                    <th style={{padding:"8px 6px",fontSize:10,color:"#b71c1c",background:"#fff5f5"}}>M1 Zone</th>
+                  </>}
+                  {pxModel==="both"&&<th style={{padding:"8px 4px",background:"#f5f5f5"}}/>}
+                  {(pxModel==="m2"||pxModel==="both")&&<>
+                    <th style={{padding:"8px 6px",fontSize:10,color:"#1b5e20",background:"#f5fff5"}}>M2 Floor</th>
+                    <th style={{padding:"8px 6px",fontSize:10,color:"#1b5e20",background:"#f5fff5"}}>M2 Happy</th>
+                    <th style={{padding:"8px 6px",fontSize:10,color:"#1b5e20",background:"#f5fff5"}}>M2 Super</th>
+                    <th style={{padding:"8px 6px",fontSize:10,color:"#1b5e20",background:"#f5fff5"}}>M2 Zone</th>
+                  </>}
+                </tr>
+              </thead>
               <tbody>
-                {list.map(r=>(
-                  <tr key={r.id} style={{borderBottom:"1px solid var(--bdr)"}}>
-                    <td style={{padding:9}}>{r.item_name}</td>
-                    <td style={{padding:9,textAlign:"center",color:"var(--mut)",fontSize:11}}>{r.tonnage}</td>
-                    <td style={{padding:9,textAlign:"center"}}>
-                      <input type="number" defaultValue={r.list_price} onBlur={e=>e.target.value!=r.list_price&&pxUpdatePrice(r.id,e.target.value)}
-                        style={{width:64,padding:4,textAlign:"center",border:"1px solid var(--bdr)",borderRadius:6,background:"transparent",color:"inherit"}}/>
-                    </td>
-                    <td style={{padding:9,textAlign:"center"}}><span className="bdg" style={{background:PXZ[r.zone].bg,color:PXZ[r.zone].c}}>{r.zone==="RED"?"LOSS":r.zone}</span></td>
-                    <td style={{padding:9,textAlign:"center",fontWeight:700}}>{fr(r.floor_price)}</td>
-                    <td style={{padding:9,textAlign:"center",color:"var(--mut)"}}>{fr(r.happy_price)}</td>
-                  </tr>
-                ))}
+                {list.map(row=>{
+                  const f=calcFloors(row);
+                  const zBadge=(z,model)=>{
+                    const colors={N3:{c:"#10b981",bg:"rgba(16,185,129,.1)"},N2:{c:"#f59e0b",bg:"rgba(245,158,11,.1)"},N1:{c:"#f97316",bg:"rgba(249,115,22,.1)"},RED:{c:"#ef4444",bg:"rgba(239,68,68,.1)"}};
+                    const cl=colors[z]||colors.N1;
+                    return <span style={{padding:"2px 8px",borderRadius:10,fontSize:10,fontWeight:700,background:cl.bg,color:cl.c}}>{z==="RED"?"LOSS":z}</span>;
+                  };
+                  return (
+                    <tr key={row.id} style={{borderBottom:"1px solid var(--bdr)"}}>
+                      <td style={{padding:"8px 10px",fontWeight:600}}>{row.item_name}</td>
+                      <td style={{padding:"8px 6px",textAlign:"center",color:"var(--mut)",fontSize:10}}>{row.tonnage}</td>
+                      <td style={{padding:"8px 6px",textAlign:"center"}}>
+                        <input type="number" defaultValue={row.list_price}
+                          onBlur={e=>e.target.value!=row.list_price&&pxUpdatePrice(row.id,e.target.value)}
+                          style={{width:64,padding:4,textAlign:"center",border:"1px solid var(--bdr)",borderRadius:6,background:"transparent",color:"inherit",fontSize:12}}/>
+                      </td>
+                      {(pxModel==="m1"||pxModel==="both")&&<>
+                        <td style={{padding:"8px 6px",textAlign:"center",fontWeight:700,color:"#b71c1c",background:"#fff5f5"}}>{fr2(f.m1Floor)}</td>
+                        <td style={{padding:"8px 6px",textAlign:"center",background:"#fff5f5"}}>{fr2(f.m1Happy)}</td>
+                        <td style={{padding:"8px 6px",textAlign:"center",background:"#fff5f5",color:"var(--mut)"}}>{fr2(f.m1Super)}</td>
+                        <td style={{padding:"8px 6px",textAlign:"center",background:"#fff5f5"}}>{zBadge(f.m1Zone,"m1")}</td>
+                      </>}
+                      {pxModel==="both"&&<td style={{padding:0,background:"#f0f0f0",width:4}}/>}
+                      {(pxModel==="m2"||pxModel==="both")&&<>
+                        <td style={{padding:"8px 6px",textAlign:"center",fontWeight:700,color:"#1b5e20",background:"#f5fff5"}}>{fr2(f.m2Floor)}</td>
+                        <td style={{padding:"8px 6px",textAlign:"center",background:"#f5fff5"}}>{fr2(f.m2Happy)}</td>
+                        <td style={{padding:"8px 6px",textAlign:"center",background:"#f5fff5",color:"var(--mut)"}}>{fr2(f.m2Super)}</td>
+                        <td style={{padding:"8px 6px",textAlign:"center",background:"#f5fff5"}}>{zBadge(f.m2Zone,"m2")}</td>
+                      </>}
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>}
