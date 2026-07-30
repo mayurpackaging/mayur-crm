@@ -115,10 +115,13 @@ export default function CRM({ currentUser, onLogout }) {
     setLd(false);
   },[]);
 
-  const loadProduction = async(days=7)=>{
+  const loadProduction = async(days=7, date=null)=>{
     setProdLoad(true);
     try{
-      const res = await fetch(`https://mayur-mos.vercel.app/api/throughput?days=${days}`);
+      const url = date
+        ? `https://mayur-mos.vercel.app/api/throughput?date=${date}`
+        : `https://mayur-mos.vercel.app/api/throughput?days=${days}`;
+      const res = await fetch(url);
       const data = await res.json();
       setProdData(data);
     }catch(e){ setToast({msg:"Production load error",err:true}); }
@@ -1809,7 +1812,7 @@ export default function CRM({ currentUser, onLogout }) {
           </div>
           <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
             <button className={`btn btn-sm ${viewMode==="yesterday"?"btn-p":"btn-o"}`}
-              onClick={()=>{setViewMode("yesterday");loadProduction(1);}}>
+              onClick={()=>{setViewMode("yesterday");loadProduction(1, yesterday);}}>
               📅 {yesterdayFmt} Floor
             </button>
             {[7,15,30].map(d=>(
@@ -1818,7 +1821,7 @@ export default function CRM({ currentUser, onLogout }) {
                 {d}d
               </button>
             ))}
-            <button className="btn btn-o btn-sm" onClick={()=>loadProduction(viewMode==="yesterday"?1:days)}>🔄</button>
+            <button className="btn btn-o btn-sm" onClick={()=>loadProduction(viewMode==="yesterday"?1:days, viewMode==="yesterday"?yesterday:null)}>🔄</button>
           </div>
         </div>
 
