@@ -133,8 +133,9 @@ export default function CRM({ currentUser, onLogout }) {
     try{
       const d = await sbFetch("price_daana?order=rate_date.desc&limit=1");
       if(d&&d[0]) setPxDaana({homo:d[0].homo,cp:d[0].cp,random:d[0].random});
-      const th = await sbFetch("sales_item_thresholds?order=item_name.asc");
-      setPxRows(th||[]);
+      // Fetch price_items with ALL columns for floor calculation
+      const th = await sbFetch("price_items?order=item_name.asc&select=id,item_name,pcs_per_carton,box_wt,box_homo,box_cp,box_random,lid_wt,lid_homo,lid_cp,lid_random,box_cav,box_cyc,lid_cav,lid_cyc,list_price,tonnage,is_active");
+      setPxRows((th||[]).filter(r=>r.is_active!==false));
       const pz = await sbFetch("product_zone_lookup");
       setPxProducts(pz||[]);
     }catch(e){ setToast({msg:"Pricing load error",err:true}); }
@@ -1620,12 +1621,30 @@ export default function CRM({ currentUser, onLogout }) {
     const m2N2 = (truFixed + pxThis.happy) / pxThis.scu;
     const m2N3 = m2N2 * 1.20;
 
-    // Calculate floors for each item
+    // Calculate floors from price_items columns directly
     const calcFloors = (row) => {
-      const mh = row.mh_per_carton || 0;
-      const daana = row.daana_cost || 0;
-      const kg = row.tonnage_kg || 0;
+      const HOMO = Number(pxDaana.homo)||146;
+      const CP   = Number(pxDaana.cp)||146;
+      const RAND = Number(pxDaana.random)||152;
+      const pcs  = row.pcs_per_carton || 500;
+      // Daana cost per carton
+      const daana = (
+        ((row.box_homo||0)*HOMO + (row.box_cp||0)*CP + (row.box_random||0)*RAND) +
+        ((row.lid_homo||0)*HOMO + (row.lid_cp||0)*CP + (row.lid_random||0)*RAND)
+      ) / 1000 * pcs;
+      // Machine hours per carton (box + lid)
+      const boxMH = (row.box_cav>0 && row.box_cyc>0)
+        ? pcs / ((3600/row.box_cyc)*row.box_cav) : 0;
+      const lidMH = (row.lid_cav>0 && row.lid_cyc>0)
+        ? pcs / ((3600/row.lid_cyc)*row.lid_cav) : 0;
+      const mh = boxMH + lidMH;
+      // kg per carton (for electricity in Model 2)
+      const kg = ((row.box_wt||0) + (row.lid_wt||0)) * pcs / 1000;
       const me = getME(row.tonnage || "");
+      if(!mh || !daana) return {
+        m1Floor:null,m1Happy:null,m1Super:null,m1Zone:"N3",
+        m2Floor:null,m2Happy:null,m2Super:null,m2Zone:"N3"
+      };
       const m1Floor = daana + m1N1 * mh;
       const m1Happy = daana + m1N2 * mh;
       const m1Super = daana + m1N3 * mh;
@@ -1633,10 +1652,12 @@ export default function CRM({ currentUser, onLogout }) {
       const m2Happy = daana + (epk * kg) + m2N2 * mh;
       const m2Super = daana + (epk * kg) + m2N3 * mh;
       const getZone = (price, floor, happy, super_) =>
+        !price||!floor ? "N3" :
         price < floor ? "RED" : price < happy ? "N1" : price < super_ ? "N2" : "N3";
       return {
         m1Floor, m1Happy, m1Super, m1Zone: getZone(row.list_price, m1Floor, m1Happy, m1Super),
         m2Floor, m2Happy, m2Super, m2Zone: getZone(row.list_price, m2Floor, m2Happy, m2Super),
+        daana, mh, kg,
       };
     };
 
