@@ -1918,7 +1918,7 @@ export default function CRM({ currentUser, onLogout }) {
     // Current month aggregates
     const curr = prodData?.daily ? {
       total_mh: prodData.daily.reduce((a,d)=>a+d.total_mh,0),
-      total_t: prodData.daily.reduce((a,d)=>a+(d.total_throughput||0),0),
+      total_t: prodData.daily.reduce((a,d)=>a+(d.total_throughput||d.avg_t_hr*(d.total_mh||0)||0),0),
       days: prodData.daily.length,
       avg_t_hr: prodData.daily.length ? prodData.daily.reduce((a,d)=>a+d.avg_t_hr,0)/prodData.daily.length : 0,
     } : null;
@@ -1927,24 +1927,35 @@ export default function CRM({ currentUser, onLogout }) {
     const dynN2 = curr ? Math.round((FIXED+5000000)/curr.total_mh) : N2;
     const currZone = curr?.avg_t_hr < dynN1 ? "RED" : curr?.avg_t_hr < dynN2 ? "N1" : curr?.avg_t_hr < dynN2*1.2 ? "N2" : "N3";
 
-    // Item-wise monthly aggregation
+    // Item-wise monthly aggregation — use MOS t_per_hour directly
     const itemMonthly = prodData?.daily ? (() => {
       const map = {};
       prodData.daily.forEach(day => {
         (day.items||[]).forEach(it => {
           if(!map[it.product]) map[it.product] = {
-            product:it.product, total_t:0, total_mh:0, good_parts:0, zone_counts:{N3:0,N2:0,N1:0,RED:0}
+            product:it.product, total_t:0, total_mh:0, good_parts:0,
+            weighted_thr:0, zone_counts:{N3:0,N2:0,N1:0,RED:0}
           };
-          map[it.product].total_t += (it.throughput_per_carton||0)*(it.good_parts/(pxRows.find(r=>r.crm_product_name===it.product)?.pcs_per_carton||500));
-          map[it.product].total_mh += it.total_mh||0;
+          const mh = it.total_mh||0;
+          const thr = it.t_hr||0;
+          // Use weighted avg T/hr from MOS (t_hr × mh for weighted avg)
+          map[it.product].weighted_thr += thr * mh;
+          map[it.product].total_mh += mh;
           map[it.product].good_parts += it.good_parts||0;
-          map[it.product].zone_counts[it.zone] = (map[it.product].zone_counts[it.zone]||0)+1;
+          // Throughput = t_hr × mh (total throughput this item this day)
+          map[it.product].total_t += thr * mh;
+          const z = thr<dynN1?"RED":thr<dynN2?"N1":thr<dynN2*1.2?"N2":"N3";
+          map[it.product].zone_counts[z] = (map[it.product].zone_counts[z]||0)+1;
         });
       });
       return Object.values(map).map(it=>({
         ...it,
-        avg_t_hr: it.total_mh>0 ? Math.round(it.total_t/it.total_mh) : 0,
-        zone: it.total_mh>0 ? (it.total_t/it.total_mh<dynN1?"RED":it.total_t/it.total_mh<dynN2?"N1":it.total_t/it.total_mh<dynN2*1.2?"N2":"N3") : "RED"
+        avg_t_hr: it.total_mh>0 ? Math.round(it.weighted_thr/it.total_mh) : 0,
+        zone: it.total_mh>0 ? (
+          it.weighted_thr/it.total_mh<dynN1?"RED":
+          it.weighted_thr/it.total_mh<dynN2?"N1":
+          it.weighted_thr/it.total_mh<dynN2*1.2?"N2":"N3"
+        ) : "RED"
       })).sort((a,b)=>b.avg_t_hr-a.avg_t_hr);
     })() : [];
 
@@ -2007,7 +2018,8 @@ export default function CRM({ currentUser, onLogout }) {
 
             {/* This month vs last month */}
             {lastData&&(()=>{
-              const lastAvg = lastData.total_mh>0 ? lastData.total_t/lastData.total_mh : 0;
+              const lastT = lastData.daily?.reduce((a,d)=>a+(d.avg_t_hr||0),0)||0;
+        const lastAvg = lastData.daily?.length ? lastT/lastData.daily.length : 0;
               const lastZone = lastAvg<dynN1?"RED":lastAvg<dynN2?"N1":lastAvg<dynN2*1.2?"N2":"N3";
               const tDiff = curr.avg_t_hr - lastAvg;
               const mhDiff = curr.total_mh - lastData.total_mh;
@@ -2018,7 +2030,7 @@ export default function CRM({ currentUser, onLogout }) {
                     {[
                       ["Total MH", Math.round(curr.total_mh)+"h", Math.round(lastData.total_mh)+"h", mhDiff],
                       ["Avg T/hr", "₹"+Math.round(curr.avg_t_hr), "₹"+Math.round(lastAvg), tDiff],
-                      ["Throughput", "₹"+(curr.total_t/1e5).toFixed(1)+"L", "₹"+(lastData.total_throughput/1e5).toFixed(1)+"L", curr.total_t-lastData.total_throughput],
+                      ["Throughput", "₹"+(curr.total_t/1e5).toFixed(1)+"L", lastData.daily?.length?"₹"+(lastData.daily.reduce((a,d)=>a+(d.total_throughput||0),0)/1e5).toFixed(1)+"L":"—", curr.total_t-(lastData.daily?.reduce((a,d)=>a+(d.total_throughput||0),0)||0)],
                     ].map(([lbl,curr_v,last_v,diff])=>(
                       <div key={lbl} style={{background:"var(--card2)",borderRadius:8,padding:12}}>
                         <div style={{fontSize:10,color:"var(--mut)",marginBottom:6}}>{lbl}</div>
