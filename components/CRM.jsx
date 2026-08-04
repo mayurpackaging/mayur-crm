@@ -64,7 +64,11 @@ export default function CRM({ currentUser, onLogout }) {
   // pricing state
   const [pxRows,setPxRows] = useState([]);
   const [pxProducts,setPxProducts] = useState([]);
-  const [pxDaana,setPxDaana] = useState({homo:"",cp:"",random:""});
+  const [pxDaana,setPxDaana] = useState(()=>{
+    try{const s=localStorage.getItem("mayur_daana");if(s)return JSON.parse(s);}catch(e){}
+    return {homo:"",cp:"",random:""};
+  });
+  useEffect(()=>{try{localStorage.setItem("mayur_daana",JSON.stringify(pxDaana));}catch(e){}},[pxDaana]);
   const [pxLoad,setPxLoad] = useState(false);
   const [pxSave,setPxSave] = useState(false);
   const [pxQ,setPxQ] = useState("");
@@ -1607,7 +1611,11 @@ export default function CRM({ currentUser, onLogout }) {
 
   const Pricing = () => {
     const [pxModel, setPxModel] = useState("both"); // m1 | m2 | both
-    const [pxThis, setPxThis] = useState({fixed:9800000, elecBill:2452659, salesKg:164297, scu:9660, happy:5000000});
+    const [pxThis, setPxThis] = useState(()=>{
+      try{const s=localStorage.getItem("mayur_px");if(s)return JSON.parse(s);}catch(e){}
+      return {fixed:9800000,elecBill:2452659,salesKg:164297,scu:9660,happy:5000000};
+    });
+    useEffect(()=>{try{localStorage.setItem("mayur_px",JSON.stringify(pxThis));}catch(e){}},[pxThis]);
 
     // Machine electricity ₹/hr (actual + 5% buffer)
     const MELEC = {
