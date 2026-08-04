@@ -2109,6 +2109,468 @@ export default function CRM({ currentUser, onLogout }) {
     );
   };
 
+
+  // ══════════════════════════════════════════════
+  // ANALYTICS TAB
+  // ══════════════════════════════════════════════
+  const Analytics = () => {
+    const [anTab, setAnTab] = useState("model"); // model | throughput | floor | whatif
+    const [anProd, setAnProd] = useState(null);
+    const [anLoad, setAnLoad] = useState(false);
+    const [wiItem, setWiItem] = useState(null);
+    const [wiPcs, setWiPcs] = useState(0);
+    const [selDate, setSelDate] = useState(new Date(Date.now()-86400000).toISOString().slice(0,10));
+
+    const HOMO=Number(pxDaana.homo)||146, CP=Number(pxDaana.cp)||146, RAND=Number(pxDaana.random)||152;
+    const MB_B=180, MB_M=225, POLY=225, TAPE=10;
+    const FIXED=9800000, ELEC_BILL=2452659, KG=164297, SCU=9660, HAPPY=5000000;
+    const TRUE_FIXED=FIXED-ELEC_BILL;
+    const EPK=(ELEC_BILL/KG)*1.05;
+
+    // Model 1
+    const m1N1=FIXED/SCU, m1N2=(FIXED+HAPPY)/SCU, m1N3=m1N2*1.2;
+    // Model 2
+    const m2N1=TRUE_FIXED/SCU, m2N2=(TRUE_FIXED+HAPPY)/SCU, m2N3=m2N2*1.2;
+
+    const fr3=(v)=>v!=null?("₹"+Math.round(v).toLocaleString("en-IN")):"—";
+    const zc=(z)=>({N3:{c:"#10b981",bg:"rgba(16,185,129,.1)"},N2:{c:"#f59e0b",bg:"rgba(245,158,11,.1)"},N1:{c:"#f97316",bg:"rgba(249,115,22,.1)"},RED:{c:"#ef4444",bg:"rgba(239,68,68,.1)"}}[z]||{c:"#666",bg:"#f5f5f5"});
+
+    const getFloor=(row,model="m1")=>{
+      if(!row) return null;
+      const pcs=row.pcs_per_carton||500;
+      const daana=((row.box_homo||0)*HOMO+(row.box_cp||0)*CP+(row.box_random||0)*RAND+
+                   (row.lid_homo||0)*HOMO+(row.lid_cp||0)*CP+(row.lid_random||0)*RAND)/1000*pcs;
+      const bMH=(row.box_cav>0&&row.box_cyc>0)?pcs/((3600/row.box_cyc)*row.box_cav):0;
+      const lMH=(row.lid_cav>0&&row.lid_cyc>0)?pcs/((3600/row.lid_cyc)*row.lid_cav):0;
+      const mh=bMH+lMH;
+      const kg=((row.box_wt||0)+(row.lid_wt||0))*pcs/1000;
+      const mbR=(row.colour||"").toLowerCase()==="milky"?MB_M:MB_B;
+      const mb=kg*0.02*mbR;
+      const crt=row.carton_cost||0;
+      const poly=((row.poly_gm||0)/1000)*POLY;
+      const varC=daana+mb+crt+poly+TAPE;
+      if(!mh) return null;
+      if(model==="m1") return {floor:varC+m1N1*mh, happy:varC+m1N2*mh, super_:varC+m1N3*mh, daana, mb, crt, poly, mh, kg, varC};
+      return {floor:varC+(EPK*kg)+m2N1*mh, happy:varC+(EPK*kg)+m2N2*mh, super_:varC+(EPK*kg)+m2N3*mh, daana, mb, crt, poly, elec:EPK*kg, mh, kg, varC};
+    };
+
+    const getZone=(price,f)=>{
+      if(!f||!price) return "—";
+      return price<f.floor?"RED":price<f.happy?"N1":price<f.super_?"N2":"N3";
+    };
+
+    // Load production for throughput tab
+    const loadAnProd = async(date) => {
+      setAnLoad(true);
+      try {
+        const res = await fetch(`https://mayur-mos.vercel.app/api/throughput?date=${date}`);
+        const data = await res.json();
+        setAnProd(data);
+      } catch(e) {}
+      setAnLoad(false);
+    };
+
+    const TABS = [
+      {id:"model", lbl:"📊 Model 1 vs 2"},
+      {id:"throughput", lbl:"⚙️ Throughput Breakdown"},
+      {id:"floor", lbl:"📈 Floor Price Analysis"},
+      {id:"whatif", lbl:"🔮 What-If Calculator"},
+    ];
+
+    return (
+      <div>
+        <div className="sh">
+          <div>
+            <div className="sh-t">📊 Analytics — Deep Dive</div>
+            <div className="sh-s">Model comparison · Throughput · Floor price analysis · What-if</div>
+          </div>
+        </div>
+
+        {/* Sub tabs */}
+        <div style={{display:"flex",gap:6,marginBottom:14,flexWrap:"wrap"}}>
+          {TABS.map(t=>(
+            <button key={t.id} className={`btn btn-sm ${anTab===t.id?"btn-p":"btn-o"}`}
+              onClick={()=>setAnTab(t.id)}>{t.lbl}</button>
+          ))}
+        </div>
+
+        {/* ── TAB 1: Model 1 vs Model 2 ── */}
+        {anTab==="model"&&(
+          <div>
+            {/* Concept cards */}
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:16}}>
+              <div className="card" style={{border:"2px solid #b71c1c"}}>
+                <div style={{fontWeight:800,color:"#b71c1c",marginBottom:10,fontSize:13}}>🔴 MODEL 1 — Simple (30% Blended)</div>
+                <div style={{fontSize:12,lineHeight:1.8,color:"var(--txt)"}}>
+                  <div style={{background:"#fff5f5",padding:10,borderRadius:8,fontFamily:"monospace",fontSize:11,marginBottom:8}}>
+                    Floor = VarCosts + (Total Fixed ÷ 9660) × MH
+                  </div>
+                  <div>✅ <b>Electricity</b> Fixed mein included hai</div>
+                  <div>✅ <b>MB + Box + Tape</b> Fixed mein included</div>
+                  <div>✅ Simple — sirf Fixed Cost ÷ SCU</div>
+                  <div style={{marginTop:8,padding:8,background:"#fff5f5",borderRadius:6}}>
+                    <div style={{fontSize:10,color:"var(--mut)"}}>Current thresholds</div>
+                    <div>N1: <b>₹{Math.round(m1N1)}</b> · N2: <b>₹{Math.round(m1N2)}</b> · N3: <b>₹{Math.round(m1N3)}</b></div>
+                  </div>
+                </div>
+              </div>
+              <div className="card" style={{border:"2px solid #1b5e20"}}>
+                <div style={{fontWeight:800,color:"#1b5e20",marginBottom:10,fontSize:13}}>🟢 MODEL 2 — Variable Electricity</div>
+                <div style={{fontSize:12,lineHeight:1.8,color:"var(--txt)"}}>
+                  <div style={{background:"#f5fff5",padding:10,borderRadius:8,fontFamily:"monospace",fontSize:11,marginBottom:8}}>
+                    Floor = VarCosts + Elec(₹/kg×kg) + (True Fixed ÷ 9660) × MH
+                  </div>
+                  <div>✅ <b>Electricity alag</b> — weight se proportional</div>
+                  <div>✅ Bhaari item = zyada electricity cost</div>
+                  <div>✅ True Fixed = Total Fixed − Electricity</div>
+                  <div style={{marginTop:8,padding:8,background:"#f5fff5",borderRadius:6}}>
+                    <div style={{fontSize:10,color:"var(--mut)"}}>True Fixed N1 thresholds</div>
+                    <div>TF N1: <b>₹{Math.round(m2N1)}</b> · TF N2: <b>₹{Math.round(m2N2)}</b> · TF N3: <b>₹{Math.round(m2N3)}</b></div>
+                    <div style={{fontSize:10,color:"var(--mut)",marginTop:4}}>Elec ₹/kg: <b>₹{EPK.toFixed(2)}</b> (+5% buffer)</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Comparison table */}
+            <div className="card" style={{padding:0}}>
+              <div style={{padding:"12px 16px",fontWeight:700,fontSize:13,borderBottom:"1px solid var(--bdr)"}}>
+                Item-wise Comparison — M1 vs M2 Floor Price
+              </div>
+              <div style={{overflowX:"auto"}}>
+                <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+                  <thead>
+                    <tr style={{background:"var(--card2)"}}>
+                      <th style={{padding:"8px 12px",textAlign:"left",fontSize:10,color:"var(--mut)"}}>Item</th>
+                      <th style={{padding:"8px 8px",fontSize:10,color:"var(--mut)"}}>List ₹</th>
+                      <th style={{padding:"8px 8px",fontSize:10,color:"var(--mut)"}}>Daana</th>
+                      <th style={{padding:"8px 8px",fontSize:10,color:"var(--mut)"}}>MB+Box+Poly+Tape</th>
+                      <th style={{padding:"8px 8px",fontSize:10,color:"var(--mut)"}}>MH/ctn</th>
+                      <th style={{padding:"8px 8px",fontSize:10,color:"#b71c1c",background:"#fff5f5"}}>M1 Floor</th>
+                      <th style={{padding:"8px 8px",fontSize:10,color:"#b71c1c",background:"#fff5f5"}}>M1 Zone</th>
+                      <th style={{padding:"8px 4px",background:"#f0f0f0",width:8}}/>
+                      <th style={{padding:"8px 8px",fontSize:10,color:"#1b5e20",background:"#f5fff5"}}>Elec/ctn</th>
+                      <th style={{padding:"8px 8px",fontSize:10,color:"#1b5e20",background:"#f5fff5"}}>M2 Floor</th>
+                      <th style={{padding:"8px 8px",fontSize:10,color:"#1b5e20",background:"#f5fff5"}}>M2 Zone</th>
+                      <th style={{padding:"8px 8px",fontSize:10,color:"var(--mut)"}}>Fark</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pxRows.map(row=>{
+                      const f1=getFloor(row,"m1");
+                      const f2=getFloor(row,"m2");
+                      if(!f1||!f2) return null;
+                      const z1=getZone(row.list_price,f1);
+                      const z2=getZone(row.list_price,f2);
+                      const fark=Math.round(f2.floor-f1.floor);
+                      return (
+                        <tr key={row.id} style={{borderBottom:"1px solid var(--bdr)"}}>
+                          <td style={{padding:"8px 12px",fontWeight:600,fontSize:12}}>{row.item_name}</td>
+                          <td style={{padding:"8px 8px",textAlign:"center"}}>{fr3(row.list_price)}</td>
+                          <td style={{padding:"8px 8px",textAlign:"center",color:"var(--mut)"}}>{fr3(f1.daana)}</td>
+                          <td style={{padding:"8px 8px",textAlign:"center",color:"var(--mut)"}}>{fr3((f1.mb||0)+(f1.crt||0)+(f1.poly||0)+TAPE)}</td>
+                          <td style={{padding:"8px 8px",textAlign:"center",color:"var(--mut)",fontSize:11}}>{f1.mh.toFixed(3)}</td>
+                          <td style={{padding:"8px 8px",textAlign:"center",fontWeight:700,color:"#b71c1c",background:"#fff5f5"}}>{fr3(f1.floor)}</td>
+                          <td style={{padding:"8px 8px",textAlign:"center",background:"#fff5f5"}}>
+                            <span style={{padding:"2px 8px",borderRadius:10,fontSize:10,fontWeight:700,background:zc(z1).bg,color:zc(z1).c}}>{z1==="RED"?"LOSS":z1}</span>
+                          </td>
+                          <td style={{padding:0,background:"#f0f0f0"}}/>
+                          <td style={{padding:"8px 8px",textAlign:"center",color:"#1565c0",background:"#f5fff5",fontSize:11}}>{fr3(f2.elec)}</td>
+                          <td style={{padding:"8px 8px",textAlign:"center",fontWeight:700,color:"#1b5e20",background:"#f5fff5"}}>{fr3(f2.floor)}</td>
+                          <td style={{padding:"8px 8px",textAlign:"center",background:"#f5fff5"}}>
+                            <span style={{padding:"2px 8px",borderRadius:10,fontSize:10,fontWeight:700,background:zc(z2).bg,color:zc(z2).c}}>{z2==="RED"?"LOSS":z2}</span>
+                          </td>
+                          <td style={{padding:"8px 8px",textAlign:"center",fontSize:11,
+                            color:fark>0?"#ef4444":fark<0?"#10b981":"var(--mut)",fontWeight:fark!==0?700:400}}>
+                            {fark>0?"+":""}{fark}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── TAB 2: Throughput Breakdown ── */}
+        {anTab==="throughput"&&(
+          <div>
+            <div style={{display:"flex",gap:8,marginBottom:12,alignItems:"center"}}>
+              <input type="date" value={selDate} onChange={e=>setSelDate(e.target.value)}
+                className="inp" style={{width:150}}/>
+              <button className="btn btn-p" onClick={()=>loadAnProd(selDate)} disabled={anLoad}>
+                {anLoad?"Loading...":"Load Data"}
+              </button>
+            </div>
+
+            {anProd?.daily?.[0]&&(()=>{
+              const day=anProd.daily[0];
+              return (
+                <div>
+                  {/* How throughput is calculated — explanation */}
+                  <div className="card" style={{background:"#0e1a24",color:"#fff",marginBottom:12}}>
+                    <div style={{fontSize:11,color:"#9fb3c0",textTransform:"uppercase",letterSpacing:1,marginBottom:10}}>
+                      ⚙️ Throughput Kaise Calculate Hua — {new Date(day.date).toLocaleDateString("en-IN",{day:"2-digit",month:"short"})}
+                    </div>
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:10,marginBottom:12}}>
+                      {[
+                        ["Total Cartons","Pieces ÷ Pcs/ctn",Math.round(day.items?.reduce((a,i)=>a+(i.good_parts/(pxRows.find(r=>r.crm_product_name===i.product)?.pcs_per_carton||500)),0)||0)+" ctns"],
+                        ["Price − Daana","Per carton margin","Avg ₹"+(day.items?.length?Math.round(day.items.reduce((a,i)=>a+(i.throughput_per_carton||0),0)/day.items.length):0)+"/ctn"],
+                        ["Total MH","Box MH + Lid MH",day.total_mh+"h"],
+                        ["T/hr","Total Throughput ÷ MH","₹"+day.avg_t_hr+"/hr"],
+                      ].map(([lbl,sub,val])=>(
+                        <div key={lbl} style={{background:"rgba(255,255,255,.07)",borderRadius:8,padding:10}}>
+                          <div style={{fontSize:9,color:"#9fb3c0",marginBottom:4}}>{lbl}</div>
+                          <div style={{fontSize:16,fontWeight:800}}>{val}</div>
+                          <div style={{fontSize:9,color:"#7f97a6",marginTop:2}}>{sub}</div>
+                        </div>
+                      ))}
+                    </div>
+                    <div style={{background:"rgba(255,255,255,.05)",borderRadius:8,padding:12,fontFamily:"monospace",fontSize:11,lineHeight:2}}>
+                      <div style={{color:"#9fb3c0"}}>// Formula:</div>
+                      <div>Throughput/ctn = List Price − Daana Cost</div>
+                      <div>Total Throughput = Σ (Throughput/ctn × Cartons)</div>
+                      <div>Machine Hours = Pieces ÷ (3600 ÷ Cycle × Cavities)</div>
+                      <div style={{color:"#f59e0b"}}>T/hr = Total Throughput ÷ Total Machine Hours</div>
+                    </div>
+                  </div>
+
+                  {/* Item breakdown table */}
+                  <div className="card" style={{padding:0}}>
+                    <div style={{padding:"12px 16px",fontWeight:700,fontSize:13,borderBottom:"1px solid var(--bdr)"}}>
+                      Item-wise Throughput Breakdown
+                    </div>
+                    <div style={{overflowX:"auto"}}>
+                      <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+                        <thead>
+                          <tr style={{background:"var(--card2)"}}>
+                            {["Product","Plant","Pieces","Cartons","Price/ctn","Daana/ctn","T/ctn","Box MH","Lid MH","Total MH","T/hr","Zone","Floor N1","Happy N2","vs Floor"].map(h=>(
+                              <th key={h} style={{padding:"8px 8px",fontSize:10,color:"var(--mut)",textAlign:h==="Product"?"left":"center"}}>{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {(day.items||[]).sort((a,b)=>b.t_hr-a.t_hr).map((it,i)=>{
+                            const pxR=pxRows.find(r=>r.crm_product_name===it.product||r.item_name===it.product);
+                            const pcs=pxR?.pcs_per_carton||500;
+                            const ctns=it.good_parts/pcs;
+                            const vsFloor=it.t_hr-it.floor;
+                            const z=it.zone;
+                            return (
+                              <tr key={i} style={{borderBottom:"1px solid var(--bdr)"}}>
+                                <td style={{padding:"7px 8px",fontWeight:600,fontSize:11}}>{it.product?.replace(" Container","")}</td>
+                                <td style={{padding:"7px 8px",textAlign:"center",color:"var(--mut)",fontSize:10}}>{it.plant?.replace("Plant ","P")}</td>
+                                <td style={{padding:"7px 8px",textAlign:"center"}}>{Number(it.good_parts).toLocaleString()}</td>
+                                <td style={{padding:"7px 8px",textAlign:"center"}}>{ctns.toFixed(1)}</td>
+                                <td style={{padding:"7px 8px",textAlign:"center"}}>{fr3(it.list_price)}</td>
+                                <td style={{padding:"7px 8px",textAlign:"center",color:"var(--mut)"}}>{fr3(it.daana_cost)}</td>
+                                <td style={{padding:"7px 8px",textAlign:"center",fontWeight:600}}>{fr3(it.throughput_per_carton)}</td>
+                                <td style={{padding:"7px 8px",textAlign:"center",color:"var(--mut)",fontSize:10}}>{it.box_mh?.toFixed(2)}h</td>
+                                <td style={{padding:"7px 8px",textAlign:"center",color:"var(--mut)",fontSize:10}}>{it.lid_mh?.toFixed(2)}h</td>
+                                <td style={{padding:"7px 8px",textAlign:"center",fontWeight:600}}>{it.total_mh?.toFixed(2)}h</td>
+                                <td style={{padding:"7px 8px",textAlign:"center",fontWeight:700,color:zc(z).c}}>₹{Math.round(it.t_hr)}</td>
+                                <td style={{padding:"7px 8px",textAlign:"center"}}>
+                                  <span style={{padding:"2px 6px",borderRadius:8,fontSize:10,fontWeight:700,background:zc(z).bg,color:zc(z).c}}>{z==="RED"?"LOSS":z}</span>
+                                </td>
+                                <td style={{padding:"7px 8px",textAlign:"center",fontSize:10,color:"#f97316"}}>{fr3(it.floor_price)}</td>
+                                <td style={{padding:"7px 8px",textAlign:"center",fontSize:10,color:"#f59e0b"}}>{fr3(it.happy_price)}</td>
+                                <td style={{padding:"7px 8px",textAlign:"center",fontSize:11,fontWeight:700,
+                                  color:vsFloor>=0?"#10b981":"#ef4444"}}>
+                                  {vsFloor>=0?"+":""}{Math.round(vsFloor)}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+            {!anProd&&!anLoad&&(
+              <div className="card empty"><p>Date select karo aur "Load Data" dabao</p></div>
+            )}
+          </div>
+        )}
+
+        {/* ── TAB 3: Floor Price Analysis ── */}
+        {anTab==="floor"&&(
+          <div>
+            <div className="card" style={{marginBottom:12}}>
+              <div style={{fontWeight:700,fontSize:13,marginBottom:12}}>📈 Floor Price Increase Ki Wajah — 5 Reasons</div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                {[
+                  ["1. Daana Rate Badha","Market se PP granule rate daily change hota hai. Homo ₹1 badha → 500ml ka floor ~₹9 badh jaata hai.","#fff3e0","#e65100"],
+                  ["2. Electricity Bill Badha","Naye plants add hue → bill badha. FY25-26 avg ₹6.33/kg → FY26-27 ₹14.93/kg (2.3x)","#e3f2fd","#0d47a1"],
+                  ["3. Fixed Cost Badha","New salary, rent increase, repairs — fixed cost badhi to N1 threshold badha.","#fce4ec","#880e4f"],
+                  ["4. Machine Hours Kam","Agar machines breakdown pe thi → actual MH kam → fixed per hour badha → floor badha.","#e8f5e9","#1b5e20"],
+                  ["5. MB/Box Cost Badha","Corrugated box rate, masterbatch price market rate se change hota hai.","#f3e5f5","#4a148c"],
+                  ["6. Mix Change","Zyada bade items (1500ml, 2000ml) → zyada MH/ctn → zyada fixed cost absorption.","#fff8e1","#f57f17"],
+                ].map(([title,desc,bg,color])=>(
+                  <div key={title} style={{background:bg,border:`1px solid ${color}22`,borderRadius:10,padding:12}}>
+                    <div style={{fontWeight:700,color,fontSize:12,marginBottom:6}}>{title}</div>
+                    <div style={{fontSize:11,lineHeight:1.6,color:"var(--txt)"}}>{desc}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Action sheet */}
+            <div className="card" style={{padding:0}}>
+              <div style={{padding:"12px 16px",fontWeight:700,fontSize:13,borderBottom:"1px solid var(--bdr)"}}>
+                📋 Action Sheet — Floor Price Theek Karne Ke Liye
+              </div>
+              <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+                <thead>
+                  <tr style={{background:"var(--card2)"}}>
+                    {["Problem","Item/Area","Action","Priority","Status"].map(h=>(
+                      <th key={h} style={{padding:"8px 12px",fontSize:10,color:"var(--mut)",textAlign:"left"}}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {[
+                    ["RCT floor > price","RCT 500/650/750/1000","Price badhao ya band karo","🔴 High","Pending"],
+                    ["250ml Milky N1","250ml Milky 1000pc","Price ₹2,600 → ₹2,900 karo","🔴 High","Pending"],
+                    ["Machine idle time","June 87% util","Preventive maintenance schedule","🟡 Medium","In Progress"],
+                    ["Electricity ₹/kg high","All plants","Compressor efficiency check","🟡 Medium","Pending"],
+                    ["Mix shift","All","RCT → SSRE shift karo 350T pe","🟢 Strategic","Planning"],
+                    ["Daana negotiation","Homo/CP","Supplier rate negotiate karo","🟡 Medium","Pending"],
+                  ].map(([prob,item,action,pri,status],i)=>(
+                    <tr key={i} style={{borderBottom:"1px solid var(--bdr)"}}>
+                      <td style={{padding:"9px 12px",fontWeight:600}}>{prob}</td>
+                      <td style={{padding:"9px 12px",color:"var(--mut)"}}>{item}</td>
+                      <td style={{padding:"9px 12px"}}>{action}</td>
+                      <td style={{padding:"9px 12px"}}>{pri}</td>
+                      <td style={{padding:"9px 12px",color:"var(--mut)"}}>{status}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* ── TAB 4: What-If Calculator ── */}
+        {anTab==="whatif"&&(
+          <div>
+            <div className="card" style={{marginBottom:12}}>
+              <div style={{fontWeight:700,fontSize:13,marginBottom:12}}>🔮 What-If Calculator — Agar Itne Pcs Nikalte Toh?</div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}}>
+                <div>
+                  <div style={{fontSize:11,color:"var(--mut)",marginBottom:6}}>Item select karo</div>
+                  <select className="inp" value={wiItem?.id||""} onChange={e=>{
+                    const r=pxRows.find(p=>p.id===Number(e.target.value));
+                    setWiItem(r||null);
+                    setWiPcs(r?.pcs_per_carton*10||0);
+                  }}>
+                    <option value="">-- Item chuniye --</option>
+                    {pxRows.map(r=><option key={r.id} value={r.id}>{r.item_name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <div style={{fontSize:11,color:"var(--mut)",marginBottom:6}}>Pieces (good parts) daalo</div>
+                  <input type="number" className="inp" value={wiPcs}
+                    onChange={e=>setWiPcs(Number(e.target.value))}
+                    placeholder="e.g. 31488"/>
+                </div>
+              </div>
+
+              {wiItem&&wiPcs>0&&(()=>{
+                const pcs=wiItem.pcs_per_carton||500;
+                const ctns=wiPcs/pcs;
+                const f1=getFloor(wiItem,"m1");
+                const f2=getFloor(wiItem,"m2");
+                if(!f1||!f2) return <div>Data nahi hai is item ka</div>;
+                const thru=wiItem.list_price-(f1.daana/pcs*(pcs/wiItem.pcs_per_carton||1));
+                const totalThru=(wiItem.list_price-f1.daana/pcs*pcs)*ctns;
+                const boxMH=(wiItem.box_cav>0&&wiItem.box_cyc>0)?wiPcs/((3600/wiItem.box_cyc)*wiItem.box_cav):0;
+                const lidMH=(wiItem.lid_cav>0&&wiItem.lid_cyc>0)?wiPcs/((3600/wiItem.lid_cyc)*wiItem.lid_cav):0;
+                const totalMH=boxMH+lidMH;
+                const thr=totalMH>0?(wiItem.list_price-f1.daana/pcs*pcs)*ctns/totalMH:0;
+                // Scenarios
+                const scenarios=[0.7,0.85,1.0,1.15,1.3].map(mult=>{
+                  const p2=Math.round(wiPcs*mult);
+                  const c2=p2/pcs;
+                  const bm=(wiItem.box_cav>0&&wiItem.box_cyc>0)?p2/((3600/wiItem.box_cyc)*wiItem.box_cav):0;
+                  const lm=(wiItem.lid_cav>0&&wiItem.lid_cyc>0)?p2/((3600/wiItem.lid_cyc)*wiItem.lid_cav):0;
+                  const mh2=bm+lm;
+                  const tt=(wiItem.list_price-f1.daana/pcs*pcs)*c2;
+                  const thr2=mh2>0?tt/mh2:0;
+                  const z=thr2<1097?"RED":thr2<1615?"N1":thr2<1938?"N2":"N3";
+                  return {mult,pcs:p2,ctns:c2.toFixed(1),mh:mh2.toFixed(2),thr:Math.round(thr2),zone:z,tt:Math.round(tt)};
+                });
+                return (
+                  <div>
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:10,marginBottom:14}}>
+                      {[
+                        ["Pieces",wiPcs.toLocaleString()],
+                        ["Cartons",ctns.toFixed(1)],
+                        ["Total MH",totalMH.toFixed(2)+"h"],
+                        ["T/hr","₹"+Math.round(thr)],
+                      ].map(([l,v])=>(
+                        <div key={l} style={{background:"var(--card2)",borderRadius:8,padding:12,textAlign:"center"}}>
+                          <div style={{fontSize:10,color:"var(--mut)"}}>{l}</div>
+                          <div style={{fontSize:18,fontWeight:800,marginTop:4}}>{v}</div>
+                        </div>
+                      ))}
+                    </div>
+                    <div style={{fontWeight:600,fontSize:12,marginBottom:8}}>Agar production change hoti — T/hr kya hota?</div>
+                    <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+                      <thead>
+                        <tr style={{background:"var(--card2)"}}>
+                          {["Scenario","Pieces","Cartons","MH","T/hr","Zone","Throughput"].map(h=>(
+                            <th key={h} style={{padding:"8px",fontSize:10,color:"var(--mut)"}}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {scenarios.map((s,i)=>(
+                          <tr key={i} style={{borderBottom:"1px solid var(--bdr)",
+                            background:s.mult===1?"var(--card2)":"transparent"}}>
+                            <td style={{padding:"8px",textAlign:"center",fontWeight:s.mult===1?700:400}}>
+                              {s.mult===1?"📍 Actual":`${Math.round((s.mult-1)*100)}${s.mult>1?"%+":"%"}`}
+                            </td>
+                            <td style={{padding:"8px",textAlign:"center"}}>{s.pcs.toLocaleString()}</td>
+                            <td style={{padding:"8px",textAlign:"center"}}>{s.ctns}</td>
+                            <td style={{padding:"8px",textAlign:"center"}}>{s.mh}h</td>
+                            <td style={{padding:"8px",textAlign:"center",fontWeight:700,
+                              color:({N3:"#10b981",N2:"#f59e0b",N1:"#f97316",RED:"#ef4444"})[s.zone]}}>
+                              ₹{s.thr}
+                            </td>
+                            <td style={{padding:"8px",textAlign:"center"}}>
+                              <span style={{padding:"2px 8px",borderRadius:8,fontSize:10,fontWeight:700,
+                                background:zc(s.zone).bg,color:zc(s.zone).c}}>
+                                {s.zone==="RED"?"LOSS":s.zone}
+                              </span>
+                            </td>
+                            <td style={{padding:"8px",textAlign:"center"}}>₹{s.tt.toLocaleString()}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    <div style={{marginTop:10,padding:10,background:"var(--card2)",borderRadius:8,fontSize:11,color:"var(--mut)"}}>
+                      💡 T/hr production se nahi badlta — zyada pieces = zyada cartons = zyada throughput, 
+                      par MH bhi proportionally badh jaata hai. T/hr sirf price aur cycle time se badlta hai.
+                    </div>
+                  </div>
+                );
+              })()}
+              {(!wiItem||wiPcs===0)&&(
+                <div style={{textAlign:"center",padding:20,color:"var(--mut)"}}>
+                  Item aur pieces daalo upar — what-if analysis dikhega
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   /* ── NAV ── */
   const navs = [
     {id:"dashboard",lbl:"Dashboard",ic:"🏠",roles:["admin","sales","dataentry"]},
@@ -2123,6 +2585,7 @@ export default function CRM({ currentUser, onLogout }) {
     {id:"targets",lbl:"Targets",ic:"🎯",roles:["admin"]},
     {id:"pricing",lbl:"Pricing",ic:"💰",roles:["admin"]},
     {id:"production",lbl:"Production",ic:"🏭",roles:["admin"]},
+    {id:"analytics",lbl:"Analytics",ic:"📊",roles:["admin"]},
   ].filter(n=>n.roles?.includes(userRole)||userRole==="viewer");
 
   return (
@@ -2174,6 +2637,7 @@ export default function CRM({ currentUser, onLogout }) {
           {view==="targets"&&<Targets/>}
           {view==="pricing"&&<Pricing/>}
           {view==="production"&&isAdmin&&<Production/>}
+          {view==="analytics"&&isAdmin&&<Analytics/>}
         </div>
       </div>
       {renderModal()}
