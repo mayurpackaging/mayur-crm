@@ -1599,14 +1599,20 @@ export default function CRM({ currentUser, onLogout }) {
   // ── Global helpers ──
   const normP = (s) => (s||"").toLowerCase().replace(/\s+/g,"").replace(/ml/g,"ml").trim();
   const findPxRow = (mosProduct) => {
-    if(!mosProduct) return null;
+    if(!mosProduct||!pxRows.length) return null;
     const np = normP(mosProduct);
-    return pxRows.find(r=>
-      normP(r.crm_product_name)===np ||
-      normP(r.item_name)===np ||
-      normP(r.crm_product_name).includes(np) ||
-      np.includes(normP(r.crm_product_name))
-    )||null;
+    // Try exact crm_product_name match first
+    let found = pxRows.find(r=>r.crm_product_name&&normP(r.crm_product_name)===np);
+    if(found) return found;
+    // Try item_name match
+    found = pxRows.find(r=>normP(r.item_name)===np);
+    if(found) return found;
+    // Try partial match — MOS product contains CRM name
+    found = pxRows.find(r=>r.crm_product_name&&np.includes(normP(r.crm_product_name))&&normP(r.crm_product_name).length>8);
+    if(found) return found;
+    // Try CRM contains MOS
+    found = pxRows.find(r=>r.crm_product_name&&normP(r.crm_product_name).includes(np)&&np.length>8);
+    return found||null;
   };
 
   const Pricing = () => {
@@ -2391,9 +2397,15 @@ export default function CRM({ currentUser, onLogout }) {
                   </div>
 
                   {/* Item breakdown table */}
+                  {pxRows.length===0&&<div className="card"><p style={{color:"var(--mut)",fontSize:12}}>
+                    ⚠️ Pricing data load ho raha hai... please wait ya Pricing tab ek baar kholo.
+                  </p></div>}
                   <div className="card" style={{padding:0}}>
                     <div style={{padding:"12px 16px",fontWeight:700,fontSize:13,borderBottom:"1px solid var(--bdr)"}}>
                       Item-wise Throughput Breakdown
+                      {pxRows.length>0&&<span style={{fontSize:10,color:"var(--mut)",marginLeft:8}}>
+                        ({pxRows.length} items loaded)
+                      </span>}
                     </div>
                     <div style={{overflowX:"auto"}}>
                       <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
