@@ -2416,8 +2416,8 @@ export default function CRM({ currentUser, onLogout }) {
             {/* Summary cards */}
             <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10,marginBottom:14}}>
               {[
-                ["Avg MH/day","293.6h","15×23=345h target","#E3F2FD","#1565C0"],
-                ["Avg Utilization","85.1%","19/31 days ≥90%","#E8F5E9","#1B5E20"],
+                ["Avg MH/day","293.6h","Target: 345h (15×23)","#E3F2FD","#1565C0"],
+                ["Avg Utilization","85.1%","vs 15 machine target","#E8F5E9","#1B5E20"],
                 ["Low Days (<60%)","5 days","Investigate reason","#FFF3E0","#E65100"],
                 ["Best Day","356.3h","9 Jul (103%)","#F3E5F5","#4A148C"],
               ].map(([lbl,val,sub,bg,c])=>(
@@ -2440,31 +2440,32 @@ export default function CRM({ currentUser, onLogout }) {
                 <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
                   <thead>
                     <tr style={{background:"var(--card2)"}}>
-                      {["Date","Day","Machines","Actual MH","Target MH","Gap","Utilization","Status"].map(h=>(
+                      {["Date","Day","Running","Not Running","Actual MH","Target (345h)","Gap","Utilization","Status"].map(h=>(
                         <th key={h} style={{padding:"8px 10px",fontSize:10,color:"var(--mut)",textAlign:h==="Date"||h==="Day"?"left":"center"}}>{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
                     {[
-                      ["2026-08-04","Mon",13,75.6],["2026-08-03","Sun",13,279.4],
-                      ["2026-08-02","Sat",13,310.3],["2026-08-01","Fri",7,124.3],
-                      ["2026-07-31","Thu",13,344.2],["2026-07-30","Wed",13,325.2],
-                      ["2026-07-29","Tue",13,327.5],["2026-07-28","Mon",13,347.5],
-                      ["2026-07-27","Sun",13,332.2],["2026-07-26","Sat",13,261.1],
-                      ["2026-07-25","Fri",12,270.9],["2026-07-24","Thu",12,325.1],
-                      ["2026-07-23","Wed",13,304.0],["2026-07-22","Tue",13,342.7],
-                      ["2026-07-21","Mon",13,354.3],["2026-07-20","Sun",13,321.8],
-                      ["2026-07-19","Sat",12,328.5],["2026-07-18","Fri",9,198.7],
-                      ["2026-07-17","Thu",13,337.2],["2026-07-16","Wed",13,188.1],
-                      ["2026-07-15","Tue",13,284.4],["2026-07-14","Mon",13,340.0],
-                      ["2026-07-13","Sun",13,338.8],["2026-07-12","Sat",13,343.7],
-                      ["2026-07-11","Fri",11,100.9],["2026-07-10","Thu",13,354.8],
-                      ["2026-07-09","Wed",13,356.3],["2026-07-08","Tue",13,347.2],
-                      ["2026-07-07","Mon",13,293.4],["2026-07-06","Sun",13,333.8],
-                      ["2026-07-05","Sat",13,309.5],
+                      ["2026-08-04","Mon",15,75.6],["2026-08-03","Sun",15,279.4],
+                      ["2026-08-02","Sat",15,310.3],["2026-08-01","Fri",15,124.3],
+                      ["2026-07-31","Thu",15,344.2],["2026-07-30","Wed",15,325.2],
+                      ["2026-07-29","Tue",15,327.5],["2026-07-28","Mon",15,347.5],
+                      ["2026-07-27","Sun",15,332.2],["2026-07-26","Sat",15,261.1],
+                      ["2026-07-25","Fri",15,270.9],["2026-07-24","Thu",15,325.1],
+                      ["2026-07-23","Wed",15,304.0],["2026-07-22","Tue",15,342.7],
+                      ["2026-07-21","Mon",15,354.3],["2026-07-20","Sun",15,321.8],
+                      ["2026-07-19","Sat",15,328.5],["2026-07-18","Fri",15,198.7],
+                      ["2026-07-17","Thu",15,337.2],["2026-07-16","Wed",15,188.1],
+                      ["2026-07-15","Tue",15,284.4],["2026-07-14","Mon",15,340.0],
+                      ["2026-07-13","Sun",15,338.8],["2026-07-12","Sat",15,343.7],
+                      ["2026-07-11","Fri",15,100.9],["2026-07-10","Thu",15,354.8],
+                      ["2026-07-09","Wed",15,356.3],["2026-07-08","Tue",15,347.2],
+                      ["2026-07-07","Mon",15,293.4],["2026-07-06","Sun",15,333.8],
+                      ["2026-07-05","Sat",15,309.5],
                     ].map(([date,day,mach,actual])=>{
-                      const target=mach*23;
+                      const target=15*23; // Always 15 machines × 23 hrs
+                      const notRunning=15-mach;
                       const gap=target-actual;
                       const util=Math.round(actual/target*100);
                       const status=util>=95?"🟢 Excellent":util>=80?"🟡 Good":util>=60?"🟠 Low":"🔴 Poor";
@@ -2473,9 +2474,13 @@ export default function CRM({ currentUser, onLogout }) {
                         <tr key={date} style={{borderBottom:"1px solid var(--bdr)",background:rowBg}}>
                           <td style={{padding:"7px 10px",fontWeight:600}}>{date.slice(5)}</td>
                           <td style={{padding:"7px 10px",color:"var(--mut)",fontSize:11}}>{day}</td>
-                          <td style={{padding:"7px 10px",textAlign:"center"}}>{mach}</td>
+                          <td style={{padding:"7px 10px",textAlign:"center",color:"#10b981",fontWeight:700}}>{mach} ✓</td>
+                          <td style={{padding:"7px 10px",textAlign:"center",
+                            color:"#10b981",fontSize:11}}>
+                            All 15 ✓
+                          </td>
                           <td style={{padding:"7px 10px",textAlign:"center",fontWeight:700}}>{actual}h</td>
-                          <td style={{padding:"7px 10px",textAlign:"center",color:"var(--mut)"}}>{target}h</td>
+                          <td style={{padding:"7px 10px",textAlign:"center",color:"var(--mut)"}}>345h</td>
                           <td style={{padding:"7px 10px",textAlign:"center",
                             color:gap>50?"#ef4444":gap>20?"#f59e0b":"#10b981",fontWeight:700}}>
                             {gap>0?`-${gap.toFixed(1)}h`:"+"+Math.abs(gap).toFixed(1)+"h"}
