@@ -2452,6 +2452,85 @@ export default function CRM({ currentUser, onLogout }) {
                       </table>
                     </div>
                   </div>
+                  {/* Sales Impact Table */}
+                  <div className="card" style={{marginTop:14}}>
+                    <div style={{padding:"12px 16px 8px",fontWeight:700,fontSize:13,borderBottom:"1px solid var(--bdr)"}}>
+                      🚀 Sales Impact — Agar Ye Items 10% Zyada Bikein Toh?
+                      <div style={{fontSize:10,color:"var(--mut)",fontWeight:400,marginTop:2}}>
+                        Current production × 30 days × 10% extra
+                      </div>
+                    </div>
+                    <div style={{overflowX:"auto"}}>
+                      <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+                        <thead>
+                          <tr style={{background:"var(--card2)"}}>
+                            {["Item","T/hr","Ctns/day","10% Extra","Extra T/day","Extra Profit/month","Action"].map(h=>(
+                              <th key={h} style={{padding:"8px",fontSize:10,color:"var(--mut)",textAlign:h==="Item"?"left":"center"}}>{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {(()=>{
+                            const grp={};
+                            (day.items||[]).forEach(it=>{
+                              const px=findPxRow(it.product);
+                              const pcs=px?.pcs_per_carton||500;
+                              if(!grp[it.product]) grp[it.product]={product:it.product,t_hr:it.t_hr,tpc:it.throughput_per_carton||0,ctns:0,mh:0,zone:it.zone};
+                              grp[it.product].ctns+=it.good_parts/pcs;
+                              grp[it.product].mh+=it.total_mh||0;
+                            });
+                            const fph=FIXED/(day.total_mh*30||9660);
+                            return Object.values(grp).sort((a,b)=>b.t_hr-a.t_hr).map((item,i)=>{
+                              const e=item.ctns*0.1;
+                              const eT=e*item.tpc;
+                              const eMH=item.mh>0?(item.mh/item.ctns)*e:0;
+                              const ePr=(eT-fph*eMH)*30;
+                              const z=item.zone;
+                              const act=item.t_hr>=1938?"🟩 Push Sales!":item.t_hr>=1615?"🟨 Sell More":item.t_hr>=1097?"🟡 Price Review":"🔴 Fix Price";
+                              return (
+                                <tr key={i} style={{borderBottom:"1px solid var(--bdr)",background:item.t_hr>=1938?"rgba(16,185,129,.04)":"transparent"}}>
+                                  <td style={{padding:"8px",fontWeight:600,fontSize:11}}>{item.product?.replace(" Container","")}</td>
+                                  <td style={{padding:"8px",textAlign:"center",fontWeight:700,color:zc(z).c}}>₹{Math.round(item.t_hr)}</td>
+                                  <td style={{padding:"8px",textAlign:"center"}}>{item.ctns.toFixed(1)}</td>
+                                  <td style={{padding:"8px",textAlign:"center",color:"#10b981",fontWeight:700}}>+{e.toFixed(1)}</td>
+                                  <td style={{padding:"8px",textAlign:"center",color:"#10b981"}}>+₹{Math.round(eT).toLocaleString()}</td>
+                                  <td style={{padding:"8px",textAlign:"center",fontWeight:800,fontSize:13,color:ePr>0?"#10b981":"#ef4444"}}>
+                                    {ePr>0?"+":" "}₹{Math.round(Math.abs(ePr)/1000)}K
+                                  </td>
+                                  <td style={{padding:"8px",textAlign:"center",fontSize:11}}>{act}</td>
+                                </tr>
+                              );
+                            });
+                          })()}
+                        </tbody>
+                        <tfoot>
+                          <tr style={{background:"#0e1a24",color:"#fff"}}>
+                            <td colSpan={5} style={{padding:"10px 12px",fontWeight:700}}>
+                              💰 Total agar sab items 10% zyada bikein (monthly)
+                            </td>
+                            <td colSpan={2} style={{padding:"10px 12px",textAlign:"center",fontWeight:800,fontSize:16,color:"#10b981"}}>
+                              +₹{(()=>{
+                                const grp2={};
+                                (day.items||[]).forEach(it=>{
+                                  const px=findPxRow(it.product);
+                                  const pcs=px?.pcs_per_carton||500;
+                                  if(!grp2[it.product]) grp2[it.product]={tpc:it.throughput_per_carton||0,ctns:0,mh:0};
+                                  grp2[it.product].ctns+=it.good_parts/pcs;
+                                  grp2[it.product].mh+=it.total_mh||0;
+                                });
+                                const fph2=FIXED/(day.total_mh*30||9660);
+                                return Math.round(Object.values(grp2).reduce((s,item)=>{
+                                  const e=item.ctns*0.1;
+                                  const eMH=item.mh>0?(item.mh/item.ctns)*e:0;
+                                  return s+(e*item.tpc-fph2*eMH)*30;
+                                },0)/1000);
+                              })()}K/month
+                            </td>
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
+                  </div>
                 </div>
               );
             })()}
