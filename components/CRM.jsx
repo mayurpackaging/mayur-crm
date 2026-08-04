@@ -1872,274 +1872,280 @@ export default function CRM({ currentUser, onLogout }) {
 
   /* ── PRODUCTION DASHBOARD (Admin only) ── */
   const Production = () => {
-    const [days,setDays] = useState(7);
-    const [viewMode,setViewMode] = useState("trend"); // trend | yesterday
-    // N thresholds — from pricing model
-    const N1=1097,N2=1615,N3=1938;
-    // Yesterday date
-    const yesterday = new Date(Date.now()-86400000).toISOString().slice(0,10);
-    const yesterdayFmt = new Date(Date.now()-86400000).toLocaleDateString("en-IN",{day:"2-digit",month:"short"});
-    const ZC={N3:{c:"#10b981",bg:"rgba(16,185,129,.12)"},N2:{c:"#f59e0b",bg:"rgba(245,158,11,.12)"},N1:{c:"#f97316",bg:"rgba(249,115,22,.12)"},RED:{c:"#ef4444",bg:"rgba(239,68,68,.12)"}};
-    const zc=(z)=>ZC[z]||ZC.N1;
+    const [prodData, setProdData] = useState(null);
+    const [prodLoad, setProdLoad] = useState(false);
+    const [lastData, setLastData] = useState(null); // last month
+
+    const N1=1097, N2=1615, N3=1938;
+    const FIXED=9800000;
+    const TARGET_MH = 345 * 30; // 15 machines × 23h × 30 days = 10,350h/month
+
+    const zc2=(z)=>({
+      N3:{c:"#10b981",bg:"rgba(16,185,129,.15)"},
+      N2:{c:"#f59e0b",bg:"rgba(245,158,11,.15)"},
+      N1:{c:"#f97316",bg:"rgba(249,115,22,.15)"},
+      RED:{c:"#ef4444",bg:"rgba(239,68,68,.15)"}
+    }[z]||{c:"#666",bg:"#f5f5f5"});
+
+    const zoneName=(z)=>z==="RED"?"🔴 LOSS":z==="N1"?"🟡 Floor":z==="N2"?"🟨 Happy":"🟩 Super Happy";
+
+    const loadProduction = async() => {
+      setProdLoad(true);
+      try {
+        // Current month — last 30 days
+        const r1 = await fetch("https://mayur-mos.vercel.app/api/throughput?days=30");
+        const d1 = await r1.json();
+        setProdData(d1);
+        // Last month — days 31-60
+        const r2 = await fetch("https://mayur-mos.vercel.app/api/throughput?days=60");
+        const d2 = await r2.json();
+        // Filter to days 31-60 only
+        if(d2?.daily) {
+          const last30 = d2.daily.slice(30);
+          setLastData({
+            daily: last30,
+            total_mh: last30.reduce((a,d)=>a+d.total_mh,0),
+            total_throughput: last30.reduce((a,d)=>a+(d.total_throughput||0),0),
+            avg_t_hr: last30.length ? last30.reduce((a,d)=>a+d.avg_t_hr,0)/last30.length : 0,
+          });
+        }
+      } catch(e) { }
+      setProdLoad(false);
+    };
+
+    useEffect(()=>{ loadProduction(); },[]);
+
+    // Current month aggregates
+    const curr = prodData?.daily ? {
+      total_mh: prodData.daily.reduce((a,d)=>a+d.total_mh,0),
+      total_t: prodData.daily.reduce((a,d)=>a+(d.total_throughput||0),0),
+      days: prodData.daily.length,
+      avg_t_hr: prodData.daily.length ? prodData.daily.reduce((a,d)=>a+d.avg_t_hr,0)/prodData.daily.length : 0,
+    } : null;
+
+    const dynN1 = curr ? Math.round(FIXED/curr.total_mh) : N1;
+    const dynN2 = curr ? Math.round((FIXED+5000000)/curr.total_mh) : N2;
+    const currZone = curr?.avg_t_hr < dynN1 ? "RED" : curr?.avg_t_hr < dynN2 ? "N1" : curr?.avg_t_hr < dynN2*1.2 ? "N2" : "N3";
+
+    // Item-wise monthly aggregation
+    const itemMonthly = prodData?.daily ? (() => {
+      const map = {};
+      prodData.daily.forEach(day => {
+        (day.items||[]).forEach(it => {
+          if(!map[it.product]) map[it.product] = {
+            product:it.product, total_t:0, total_mh:0, good_parts:0, zone_counts:{N3:0,N2:0,N1:0,RED:0}
+          };
+          map[it.product].total_t += (it.throughput_per_carton||0)*(it.good_parts/(pxRows.find(r=>r.crm_product_name===it.product)?.pcs_per_carton||500));
+          map[it.product].total_mh += it.total_mh||0;
+          map[it.product].good_parts += it.good_parts||0;
+          map[it.product].zone_counts[it.zone] = (map[it.product].zone_counts[it.zone]||0)+1;
+        });
+      });
+      return Object.values(map).map(it=>({
+        ...it,
+        avg_t_hr: it.total_mh>0 ? Math.round(it.total_t/it.total_mh) : 0,
+        zone: it.total_mh>0 ? (it.total_t/it.total_mh<dynN1?"RED":it.total_t/it.total_mh<dynN2?"N1":it.total_t/it.total_mh<dynN2*1.2?"N2":"N3") : "RED"
+      })).sort((a,b)=>b.avg_t_hr-a.avg_t_hr);
+    })() : [];
 
     return (
       <div>
         <div className="sh">
-          <div><div className="sh-t">🏭 Production Throughput</div>
-            <div className="sh-s">MOS se real data · N1=₹1,097 N2=₹1,615 N3=₹1,938/hr</div>
+          <div>
+            <div className="sh-t">🏭 Monthly Production Performance</div>
+            <div className="sh-s">MOS se real data · Last 30 days · Monthly throughput accurate hai</div>
           </div>
-          <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
-            <button className={`btn btn-sm ${viewMode==="yesterday"?"btn-p":"btn-o"}`}
-              onClick={()=>{setViewMode("yesterday");loadProduction(1, yesterday);}}>
-              📅 {yesterdayFmt} Floor
-            </button>
-            {[7,15,30].map(d=>(
-              <button key={d} className={`btn btn-sm ${viewMode==="trend"&&days===d?"btn-p":"btn-o"}`}
-                onClick={()=>{setViewMode("trend");setDays(d);loadProduction(d);}}>
-                {d}d
-              </button>
-            ))}
-            <button className="btn btn-o btn-sm" onClick={()=>loadProduction(viewMode==="yesterday"?1:days, viewMode==="yesterday"?yesterday:null)}>🔄</button>
-          </div>
+          <button className="btn btn-o btn-sm" onClick={loadProduction} disabled={prodLoad}>
+            {prodLoad?"Loading...":"🔄 Refresh"}
+          </button>
         </div>
 
-        {prodLoad?<div className="card empty"><p>Loading production data...</p></div>
-        :!prodData?<div className="card empty"><p>Load karo → button dabao</p><button className="btn btn-p" onClick={()=>loadProduction(days)}>Load Production Data</button></div>
-        :<div>
-          {/* ── DAILY SUMMARY CARD ── */}
-          {prodData.daily?.[0]&&(()=>{
-            const td=prodData.daily[0];
-            const N1=1097,N2=1615,N3=1938;
-            const zc2=(z)=>({N3:{c:"#10b981",bg:"rgba(16,185,129,.12)"},N2:{c:"#f59e0b",bg:"rgba(245,158,11,.12)"},N1:{c:"#f97316",bg:"rgba(249,115,22,.12)"},RED:{c:"#ef4444",bg:"rgba(239,68,68,.12)"}}[z]||{c:"#666",bg:"#f5f5f5"});
-            const floorAmt=Math.round(N1*td.total_mh);
-            const happyAmt=Math.round(N2*td.total_mh);
-            const premAmt=Math.round(N3*td.total_mh);
-            const aboveFloor=td.total_throughput-floorAmt;
-            const aboveHappy=td.total_throughput-happyAmt;
-            const coverPct=Math.min(Math.round(td.total_throughput/happyAmt*100),200);
-            return (
-              <div className="card" style={{background:"#0e1a24",color:"#fff",marginBottom:16,border:"none"}}>
-                {/* Header */}
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:16}}>
-                  <div>
-                    <div style={{fontSize:11,color:"#9fb3c0",textTransform:"uppercase",letterSpacing:1}}>
-                      📅 {new Date(td.date).toLocaleDateString("en-IN",{weekday:"long",day:"2-digit",month:"long"})}
-                    </div>
-                    <div style={{fontSize:22,fontWeight:800,marginTop:4}}>Daily Production Summary</div>
-                    <div style={{fontSize:11,color:"#9fb3c0",marginTop:2}}>{td.machine_count} machines · {td.total_mh}h (Box {td.box_mh}h + Lid {td.lid_mh}h)</div>
-                  </div>
-                  <span style={{padding:"6px 16px",borderRadius:20,fontWeight:800,fontSize:14,background:zc2(td.zone).bg,color:zc2(td.zone).c}}>
-                    {td.zone==="RED"?"LOSS":td.zone}
-                  </span>
-                </div>
+        {prodLoad&&<div className="card empty"><p>Loading MOS data...</p></div>}
 
-                {/* Main numbers */}
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12,marginBottom:16}}>
-                  <div style={{background:"rgba(255,255,255,.06)",borderRadius:10,padding:12}}>
-                    <div style={{fontSize:10,color:"#9fb3c0",textTransform:"uppercase",letterSpacing:.8,marginBottom:4}}>Throughput (Price−Daana)</div>
-                    <div style={{fontSize:22,fontWeight:800,color:"#10b981"}}>₹{Number(td.total_throughput).toLocaleString("en-IN")}</div>
-                    <div style={{fontSize:10,color:"#9fb3c0",marginTop:2}}>₹{td.avg_t_hr}/hr avg</div>
-                  </div>
-                  <div style={{background:"rgba(255,255,255,.06)",borderRadius:10,padding:12}}>
-                    <div style={{fontSize:10,color:"#9fb3c0",textTransform:"uppercase",letterSpacing:.8,marginBottom:4}}>Floor (N1) — Break-even</div>
-                    <div style={{fontSize:22,fontWeight:800,color:"#f97316"}}>₹{Number(floorAmt).toLocaleString("en-IN")}</div>
-                    <div style={{fontSize:10,color:aboveFloor>=0?"#10b981":"#ef4444",marginTop:2,fontWeight:700}}>
-                      {aboveFloor>=0?`+₹${Number(aboveFloor).toLocaleString("en-IN")} above floor`:`₹${Number(-aboveFloor).toLocaleString("en-IN")} below floor!`}
-                    </div>
-                  </div>
-                  <div style={{background:"rgba(255,255,255,.06)",borderRadius:10,padding:12}}>
-                    <div style={{fontSize:10,color:"#9fb3c0",textTransform:"uppercase",letterSpacing:.8,marginBottom:4}}>Happy (N2) — ₹50L/month profit</div>
-                    <div style={{fontSize:22,fontWeight:800,color:"#f59e0b"}}>₹{Number(happyAmt).toLocaleString("en-IN")}</div>
-                    <div style={{fontSize:10,color:aboveHappy>=0?"#10b981":"#ef4444",marginTop:2,fontWeight:700}}>
-                      {aboveHappy>=0?`+₹${Number(aboveHappy).toLocaleString("en-IN")} above target`:`₹${Number(-aboveHappy).toLocaleString("en-IN")} below target`}
-                    </div>
-                  </div>
+        {curr&&(
+          <>
+            {/* Monthly KPI cards */}
+            <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10,marginBottom:14}}>
+              {[
+                ["Total MH (30d)", Math.round(curr.total_mh)+"h", TARGET_MH+"h target", curr.total_mh/TARGET_MH>=0.85?"#E8F5E9":"#FFF3E0", curr.total_mh/TARGET_MH>=0.85?"#1B5E20":"#E65100"],
+                ["Utilization", Math.round(curr.total_mh/TARGET_MH*100)+"%", curr.days+" days data", curr.total_mh/TARGET_MH>=0.85?"#E8F5E9":"#FFF3E0", curr.total_mh/TARGET_MH>=0.85?"#1B5E20":"#E65100"],
+                ["Avg T/hr", "₹"+Math.round(curr.avg_t_hr), zoneName(currZone), zc2(currZone).bg, zc2(currZone).c],
+                ["Monthly Throughput", "₹"+(curr.total_t/1e5).toFixed(1)+"L", "Price − Daana", "#E3F2FD","#1565C0"],
+              ].map(([lbl,val,sub,bg,c])=>(
+                <div key={lbl} style={{background:bg,border:`1px solid ${c}33`,borderRadius:10,padding:14,textAlign:"center"}}>
+                  <div style={{fontSize:10,color:"var(--mut)",marginBottom:4}}>{lbl}</div>
+                  <div style={{fontSize:20,fontWeight:800,color:c}}>{val}</div>
+                  <div style={{fontSize:10,color:"var(--mut)",marginTop:3}}>{sub}</div>
                 </div>
+              ))}
+            </div>
 
-                {/* Progress bar */}
-                <div style={{marginBottom:16}}>
-                  <div style={{display:"flex",justifyContent:"space-between",fontSize:10,color:"#9fb3c0",marginBottom:6}}>
-                    <span>N1 Floor ₹{Number(floorAmt).toLocaleString("en-IN")}</span>
-                    <span style={{color:"#f59e0b",fontWeight:700}}>N2 Target {coverPct}% achieved</span>
-                    <span>N3 Premium ₹{Number(premAmt).toLocaleString("en-IN")}</span>
-                  </div>
-                  <div style={{height:10,background:"rgba(255,255,255,.1)",borderRadius:5,overflow:"hidden",position:"relative"}}>
-                    {/* N1 marker */}
-                    <div style={{position:"absolute",left:`${Math.round(floorAmt/premAmt*100)}%`,top:0,bottom:0,width:2,background:"#f97316",zIndex:2}}/>
-                    {/* Progress fill */}
-                    <div style={{height:"100%",width:`${Math.min(td.total_throughput/premAmt*100,100)}%`,
-                      background:td.zone==="N3"?"linear-gradient(90deg,#10b981,#34d399)":td.zone==="N2"?"linear-gradient(90deg,#f59e0b,#fcd34d)":"linear-gradient(90deg,#f97316,#fb923c)",
-                      borderRadius:5,transition:"width .5s"}}/>
-                  </div>
-                  <div style={{display:"flex",justifyContent:"space-between",fontSize:9,color:"#64748b",marginTop:4}}>
-                    <span>0</span>
-                    <span style={{color:"#f97316"}}>▲ N1</span>
-                    <span style={{color:"#f59e0b"}}>▲ N2</span>
-                    <span>N3 →</span>
-                  </div>
-                </div>
+            {/* Zone progress bar */}
+            <div className="card" style={{marginBottom:14}}>
+              <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
+                <span style={{fontWeight:700,fontSize:13}}>Monthly Zone — {zoneName(currZone)}</span>
+                <span style={{fontSize:12,color:"var(--mut)"}}>Dynamic N1=₹{dynN1} N2=₹{dynN2} (actual MH based)</span>
+              </div>
+              <div style={{background:"var(--card2)",borderRadius:8,height:20,position:"relative",overflow:"hidden"}}>
+                <div style={{
+                  height:"100%",
+                  width:`${Math.min(curr.avg_t_hr/dynN2*100,100)}%`,
+                  background:zc2(currZone).c,
+                  borderRadius:8,transition:"width .5s"
+                }}/>
+                <span style={{position:"absolute",right:8,top:0,fontSize:11,lineHeight:"20px",fontWeight:700}}>
+                  ₹{Math.round(curr.avg_t_hr)}/hr
+                </span>
+              </div>
+              <div style={{display:"flex",justifyContent:"space-between",fontSize:10,color:"var(--mut)",marginTop:4}}>
+                <span>₹0</span>
+                <span>Floor ₹{dynN1}</span>
+                <span>Happy ₹{dynN2}</span>
+                <span>Super ₹{Math.round(dynN2*1.2)}</span>
+              </div>
+            </div>
 
-                {/* Item breakdown mini */}
-                <div style={{borderTop:"1px solid rgba(255,255,255,.1)",paddingTop:12}}>
-                  <div style={{fontSize:10,color:"#9fb3c0",textTransform:"uppercase",letterSpacing:.8,marginBottom:8}}>Aaj ke items</div>
-                  <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
-                    {(td.items||[]).map((it,i)=>(
-                      <div key={i} style={{background:"rgba(255,255,255,.06)",borderRadius:8,padding:"6px 10px",fontSize:11}}>
-                        <span style={{color:"#e2e8f0",fontWeight:600}}>{it.product?.replace(" Container","")?.replace(" ml","ml")}</span>
-                        <span style={{marginLeft:6,fontWeight:800,color:zc2(it.zone).c}}>₹{Math.round(it.t_hr)}</span>
-                        <span style={{marginLeft:4,fontSize:9,color:zc2(it.zone).c}}>{it.zone}</span>
+            {/* This month vs last month */}
+            {lastData&&(()=>{
+              const lastAvg = lastData.total_mh>0 ? lastData.total_t/lastData.total_mh : 0;
+              const lastZone = lastAvg<dynN1?"RED":lastAvg<dynN2?"N1":lastAvg<dynN2*1.2?"N2":"N3";
+              const tDiff = curr.avg_t_hr - lastAvg;
+              const mhDiff = curr.total_mh - lastData.total_mh;
+              return (
+                <div className="card" style={{marginBottom:14}}>
+                  <div style={{fontWeight:700,fontSize:13,marginBottom:12}}>📊 Is Mahine vs Pichla Mahina</div>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10}}>
+                    {[
+                      ["Total MH", Math.round(curr.total_mh)+"h", Math.round(lastData.total_mh)+"h", mhDiff],
+                      ["Avg T/hr", "₹"+Math.round(curr.avg_t_hr), "₹"+Math.round(lastAvg), tDiff],
+                      ["Throughput", "₹"+(curr.total_t/1e5).toFixed(1)+"L", "₹"+(lastData.total_throughput/1e5).toFixed(1)+"L", curr.total_t-lastData.total_throughput],
+                    ].map(([lbl,curr_v,last_v,diff])=>(
+                      <div key={lbl} style={{background:"var(--card2)",borderRadius:8,padding:12}}>
+                        <div style={{fontSize:10,color:"var(--mut)",marginBottom:6}}>{lbl}</div>
+                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                          <div>
+                            <div style={{fontSize:16,fontWeight:800}}>{curr_v}</div>
+                            <div style={{fontSize:10,color:"var(--mut)"}}>Is mahina</div>
+                          </div>
+                          <div style={{fontSize:18,fontWeight:700,color:diff>0?"#10b981":"#ef4444"}}>
+                            {diff>0?"▲":"▼"}
+                          </div>
+                          <div style={{textAlign:"right"}}>
+                            <div style={{fontSize:14,color:"var(--mut)"}}>{last_v}</div>
+                            <div style={{fontSize:10,color:"var(--mut)"}}>Pichla</div>
+                          </div>
+                        </div>
                       </div>
                     ))}
                   </div>
                 </div>
+              );
+            })()}
+
+            {/* Item-wise monthly breakdown */}
+            <div className="card" style={{padding:0}}>
+              <div style={{padding:"12px 16px",fontWeight:700,fontSize:13,borderBottom:"1px solid var(--bdr)"}}>
+                Item-wise Monthly Performance (Last 30 Days)
+                <span style={{fontSize:10,color:"var(--mut)",marginLeft:8,fontWeight:400}}>
+                  Monthly avg T/hr — daily fluctuation smooth ho jaata hai
+                </span>
               </div>
-            );
-          })()}
-
-          {/* Summary cards */}
-          <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10,marginBottom:16}}>
-            {["N3","N2","N1","RED"].map(z=>{
-              const cnt=(prodData.daily||[]).filter(d=>d.zone===z).length;
-              return <div key={z} style={{textAlign:"center",padding:12,borderRadius:10,background:zc(z).bg,border:`1px solid ${zc(z).c}`}}>
-                <div style={{fontSize:22,fontWeight:800,color:zc(z).c}}>{cnt}</div>
-                <div style={{fontSize:10,color:zc(z).c,fontWeight:700}}>{(z==="RED"?"🔴 LOSS":z==="N1"?"🟡 Floor":z==="N2"?"🟨 Happy":z==="N3"?"🟩 Super Happy":z)} days</div>
-              </div>;
-            })}
-          </div>
-
-          {/* Yesterday Floor Price Card */}
-          {viewMode==="yesterday"&&prodData.daily?.[0]&&(()=>{
-            const yd=prodData.daily[0];
-            const ydDate=new Date(yd.date).toLocaleDateString("en-IN",{weekday:"long",day:"2-digit",month:"long"});
-            const ZC2=(z)=>({N3:{c:"#10b981",bg:"rgba(16,185,129,.15)"},N2:{c:"#f59e0b",bg:"rgba(245,158,11,.15)"},N1:{c:"#f97316",bg:"rgba(249,115,22,.15)"},RED:{c:"#ef4444",bg:"rgba(239,68,68,.15)"}}[z]||{c:"#666",bg:"#f5f5f5"});
-            return (
-              <div style={{background:"#0e1a24",color:"#fff",borderRadius:12,padding:18,marginBottom:14}}>
-                <div style={{fontSize:11,color:"#9fb3c0",textTransform:"uppercase",letterSpacing:1}}>
-                  📅 {ydDate} — Kal Ki Production Se Aaj Ka Floor
-                </div>
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginTop:12,marginBottom:14}}>
-                  <div style={{background:"rgba(255,255,255,.07)",borderRadius:8,padding:12}}>
-                    <div style={{fontSize:9,color:"#9fb3c0",textTransform:"uppercase",marginBottom:4}}>Total MH (kal)</div>
-                    <div style={{fontSize:20,fontWeight:800}}>{yd.total_mh}h</div>
-                    <div style={{fontSize:9,color:"#9fb3c0",marginTop:2}}>Box {yd.box_mh}h + Lid {yd.lid_mh}h</div>
-                  </div>
-                  <div style={{background:"rgba(255,255,255,.07)",borderRadius:8,padding:12}}>
-                    <div style={{fontSize:9,color:"#9fb3c0",textTransform:"uppercase",marginBottom:4}}>Throughput (kal)</div>
-                    <div style={{fontSize:20,fontWeight:800,color:"#10b981"}}>₹{Number(yd.total_throughput).toLocaleString("en-IN")}</div>
-                    <div style={{fontSize:9,color:"#9fb3c0",marginTop:2}}>Price − Daana</div>
-                  </div>
-                  <div style={{background:ZC2(yd.zone).bg,border:`1px solid ${ZC2(yd.zone).c}`,borderRadius:8,padding:12}}>
-                    <div style={{fontSize:9,color:ZC2(yd.zone).c,textTransform:"uppercase",marginBottom:4}}>Avg T/hr</div>
-                    <div style={{fontSize:24,fontWeight:800,color:ZC2(yd.zone).c}}>₹{yd.avg_t_hr}</div>
-                    <div style={{fontSize:12,fontWeight:700,color:ZC2(yd.zone).c,marginTop:2}}>{(yd.zone==="RED"?"🔴 LOSS":yd.zone==="N1"?"🟡 Floor":yd.zone==="N2"?"🟨 Happy":yd.zone==="N3"?"🟩 Super Happy":yd.zone)}</div>
-                  </div>
-                </div>
-                {/* Item-wise yesterday */}
-                <div style={{fontSize:10,color:"#9fb3c0",marginBottom:8,textTransform:"uppercase",letterSpacing:.5}}>
-                  Kal ke items — floor vs actual
-                </div>
-                <div style={{overflowX:"auto"}}>
-                  <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
-                    <thead>
-                      <tr style={{color:"#7f97a6"}}>
-                        <th style={{padding:"6px 8px",textAlign:"left"}}>Product</th>
-                        <th style={{padding:"6px 8px"}}>Plant</th>
-                        <th style={{padding:"6px 8px"}}>Pieces</th>
-                        <th style={{padding:"6px 8px"}}>MH</th>
-                        <th style={{padding:"6px 8px"}}>T/hr</th>
-                        <th style={{padding:"6px 8px"}}>Zone</th>
-                        <th style={{padding:"6px 8px"}}>Floor(N1)</th>
-                        <th style={{padding:"6px 8px"}}>Happy(N2)</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {(yd.items||[]).sort((a,b)=>b.t_hr-a.t_hr).map((it,i)=>(
-                        <tr key={i} style={{borderTop:"1px solid rgba(255,255,255,.08)"}}>
-                          <td style={{padding:"7px 8px",fontWeight:600,color:"#e2e8f0"}}>{it.product?.replace(" Container","")?.replace(" ml","ml")}</td>
-                          <td style={{padding:"7px 8px",textAlign:"center",color:"#7f97a6",fontSize:10}}>{it.plant?.replace("Plant ","P")}</td>
-                          <td style={{padding:"7px 8px",textAlign:"center"}}>{Number(it.good_parts).toLocaleString()}</td>
-                          <td style={{padding:"7px 8px",textAlign:"center",color:"#7f97a6"}}>{it.mh?.toFixed(1)}h</td>
-                          <td style={{padding:"7px 8px",textAlign:"center",fontWeight:700,color:ZC2(it.zone).c}}>₹{Math.round(it.t_hr)}</td>
-                          <td style={{padding:"7px 8px",textAlign:"center"}}>
-                            <span style={{padding:"2px 8px",borderRadius:10,fontSize:10,fontWeight:700,background:ZC2(it.zone).bg,color:ZC2(it.zone).c}}>
-                              {(it.zone==="RED"?"🔴 LOSS":it.zone==="N1"?"🟡 Floor":it.zone==="N2"?"🟨 Happy":it.zone==="N3"?"🟩 Super Happy":it.zone)}
-                            </span>
-                          </td>
-                          <td style={{padding:"7px 8px",textAlign:"center",fontSize:10,color:"#f97316"}}>₹{it.floor}</td>
-                          <td style={{padding:"7px 8px",textAlign:"center",fontSize:10,color:"#f59e0b"}}>₹{it.happy}</td>
-                        </tr>
+              <div style={{overflowX:"auto"}}>
+                <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+                  <thead>
+                    <tr style={{background:"var(--card2)"}}>
+                      {["Product","Total Pieces","Total MH","Monthly T/hr","Zone","Days Active","Action"].map(h=>(
+                        <th key={h} style={{padding:"8px 10px",fontSize:10,color:"var(--mut)",textAlign:h==="Product"?"left":"center"}}>{h}</th>
                       ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            );
-          })()}
-
-          {/* Daily table */}
-          <div className="card" style={{padding:0}}>
-            <div className="tw"><table>
-              <thead><tr>
-                <th>Date</th><th>Machines</th><th>Total MH</th>
-                <th>Throughput</th><th>Avg T/hr</th><th>Zone</th>
-                <th>vs N2 Gap</th>
-              </tr></thead>
-              <tbody>
-                {(prodData.daily||[]).map(d=>(
-                  <tr key={d.date}>
-                    <td style={{fontWeight:600}}>{new Date(d.date).toLocaleDateString("en-IN",{day:"2-digit",month:"short"})}</td>
-                    <td style={{textAlign:"center"}}>{d.machine_count||"—"}</td>
-                    <td style={{textAlign:"center"}}>{d.total_mh}h</td>
-                    <td style={{fontWeight:700,color:"#10b981"}}>₹{Number(d.total_throughput).toLocaleString("en-IN")}</td>
-                    <td style={{fontWeight:800,color:zc(d.zone).c}}>₹{d.avg_t_hr}</td>
-                    <td><span className="bdg" style={{background:zc(d.zone).bg,color:zc(d.zone).c}}>{d.zone==="RED"?"LOSS":d.zone}</span></td>
-                    <td style={{fontSize:11,color:d.avg_t_hr>=N2?"#10b981":"#ef4444",fontWeight:600}}>
-                      {d.avg_t_hr>=N2?`+₹${d.avg_t_hr-N2} above N2`:`-₹${N2-d.avg_t_hr} to N2`}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table></div>
-          </div>
-
-          {/* Today's item breakdown */}
-          {prodData.daily?.[0]&&(
-            <div className="card" style={{marginTop:14}}>
-              <div style={{fontSize:11,fontWeight:800,color:"var(--mut)",textTransform:"uppercase",letterSpacing:".08em",marginBottom:12}}>
-                Today's Item Breakdown — {new Date(prodData.daily[0].date).toLocaleDateString("en-IN",{day:"2-digit",month:"short"})}
-              </div>
-              <div className="tw"><table>
-                <thead><tr><th>Product</th><th>Plant</th><th>Pieces</th><th>MH</th><th>T/hr</th><th>Zone</th><th>Floor(N1)</th><th>Happy(N2)</th></tr></thead>
-                <tbody>
-                  {(prodData.daily[0].items||[]).map((it,i)=>(
-                    <tr key={i}>
-                      <td style={{fontWeight:600,fontSize:12}}>{it.product}</td>
-                      <td style={{fontSize:11,color:"var(--mut)"}}>{it.plant?.replace("Plant ","P")}</td>
-                      <td style={{textAlign:"center"}}>{Number(it.good_parts).toLocaleString()}</td>
-                      <td style={{textAlign:"center",fontSize:11}}>{it.mh?.toFixed(1)}h</td>
-                      <td style={{fontWeight:700,color:zc(it.zone).c}}>₹{Math.round(it.t_hr)}</td>
-                      <td><span className="bdg" style={{background:zc(it.zone).bg,color:zc(it.zone).c}}>{(it.zone==="RED"?"🔴 LOSS":it.zone==="N1"?"🟡 Floor":it.zone==="N2"?"🟨 Happy":it.zone==="N3"?"🟩 Super Happy":it.zone)}</span></td>
-                      <td style={{fontSize:11}}>₹{it.floor}</td>
-                      <td style={{fontSize:11,color:"var(--mut)"}}>₹{it.happy}</td>
                     </tr>
-                  ))}
-                </tbody>
-              </table></div>
+                  </thead>
+                  <tbody>
+                    {itemMonthly.map((it,i)=>(
+                      <tr key={i} style={{borderBottom:"1px solid var(--bdr)",
+                        background:it.zone==="RED"?"rgba(239,68,68,.04)":"transparent"}}>
+                        <td style={{padding:"8px 10px",fontWeight:600,fontSize:12}}>{it.product?.replace(" Container","")}</td>
+                        <td style={{padding:"8px",textAlign:"center"}}>{Number(it.good_parts).toLocaleString()}</td>
+                        <td style={{padding:"8px",textAlign:"center",color:"var(--mut)"}}>{it.total_mh.toFixed(1)}h</td>
+                        <td style={{padding:"8px",textAlign:"center",fontWeight:700,color:zc2(it.zone).c,fontSize:13}}>
+                          ₹{it.avg_t_hr}
+                        </td>
+                        <td style={{padding:"8px",textAlign:"center"}}>
+                          <span style={{padding:"2px 10px",borderRadius:10,fontSize:10,fontWeight:700,
+                            background:zc2(it.zone).bg,color:zc2(it.zone).c}}>
+                            {zoneName(it.zone)}
+                          </span>
+                        </td>
+                        <td style={{padding:"8px",textAlign:"center",color:"var(--mut)",fontSize:11}}>
+                          {(it.zone_counts.N3||0)+(it.zone_counts.N2||0)} good / {Object.values(it.zone_counts).reduce((a,b)=>a+b,0)} days
+                        </td>
+                        <td style={{padding:"8px",textAlign:"center",fontSize:11,fontWeight:600,
+                          color:it.zone==="RED"?"#ef4444":it.zone==="N1"?"#f97316":"#10b981"}}>
+                          {it.zone==="RED"?"🔴 Price fix karo":it.zone==="N1"?"🟡 Price badhao":it.zone==="N2"?"🟨 Push sales":"🟩 Zyada chalao!"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
-          )}
 
-          {prodData.updated_at&&<div style={{fontSize:10,color:"var(--mut)",marginTop:8,textAlign:"right"}}>
-            Last updated: {new Date(prodData.updated_at).toLocaleString("en-IN")}
-          </div>}
-        </div>}
+            {/* Daily trend — simplified, just MH */}
+            <div className="card" style={{marginTop:14,padding:0}}>
+              <div style={{padding:"12px 16px",fontWeight:700,fontSize:13,borderBottom:"1px solid var(--bdr)"}}>
+                Daily MH Trend
+                <span style={{fontSize:10,color:"var(--mut)",marginLeft:8,fontWeight:400}}>
+                  T/hr daily unreliable (WIP) — sirf MH dekho
+                </span>
+              </div>
+              <div style={{overflowX:"auto"}}>
+                <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+                  <thead>
+                    <tr style={{background:"var(--card2)"}}>
+                      {["Date","Day","Actual MH","Target (345h)","Gap","Utilization"].map(h=>(
+                        <th key={h} style={{padding:"7px 10px",fontSize:10,color:"var(--mut)",textAlign:h==="Date"?"left":"center"}}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[...(prodData?.daily||[])].sort((a,b)=>b.date.localeCompare(a.date)).map((d,i)=>{
+                      const mh=Math.round(d.total_mh*10)/10;
+                      const util=Math.round(mh/345*100);
+                      const gap=Math.round(345-mh);
+                      const dayName=new Date(d.date).toLocaleDateString("en-IN",{weekday:"short"});
+                      return (
+                        <tr key={i} style={{borderBottom:"1px solid var(--bdr)",
+                          background:util<60?"rgba(239,68,68,.04)":util>=95?"rgba(16,185,129,.04)":"transparent"}}>
+                          <td style={{padding:"7px 10px",fontWeight:600}}>{d.date.slice(5)}</td>
+                          <td style={{padding:"7px 10px",color:"var(--mut)",fontSize:11}}>{dayName}</td>
+                          <td style={{padding:"7px 10px",textAlign:"center",fontWeight:700,
+                            color:mh>=300?"#10b981":mh>=200?"#f59e0b":"#ef4444"}}>{mh}h</td>
+                          <td style={{padding:"7px 10px",textAlign:"center",color:"var(--mut)"}}>345h</td>
+                          <td style={{padding:"7px 10px",textAlign:"center",
+                            color:gap>100?"#ef4444":gap>50?"#f59e0b":"#10b981"}}>
+                            {gap>0?"-"+gap:"+"+(Math.abs(gap))}h
+                          </td>
+                          <td style={{padding:"7px 10px",textAlign:"center"}}>
+                            <div style={{display:"flex",alignItems:"center",gap:6}}>
+                              <div style={{flex:1,background:"var(--card2)",borderRadius:4,height:14,overflow:"hidden"}}>
+                                <div style={{height:"100%",width:`${Math.min(util,100)}%`,
+                                  background:util>=95?"#10b981":util>=80?"#f59e0b":"#ef4444"}}/>
+                              </div>
+                              <span style={{fontSize:10,fontWeight:700,width:32}}>{util}%</span>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </>
+        )}
       </div>
     );
   };
 
-
-  // ══════════════════════════════════════════════
-  // ANALYTICS TAB
-  // ══════════════════════════════════════════════
   const Analytics = () => {
     const [anTab, setAnTab] = useState("model");
     const [anProd, setAnProd] = useState(null);
