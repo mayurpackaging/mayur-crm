@@ -2141,14 +2141,29 @@ export default function CRM({ currentUser, onLogout }) {
   // ANALYTICS TAB
   // ══════════════════════════════════════════════
   const Analytics = () => {
-    const [anTab, setAnTab] = useState("model"); // model | throughput | floor | whatif
+    const [anTab, setAnTab] = useState("model");
     const [anProd, setAnProd] = useState(null);
     const [anLoad, setAnLoad] = useState(false);
     const [wiItem, setWiItem] = useState(null);
     const [wiPcs, setWiPcs] = useState(0);
     const [selDate, setSelDate] = useState(new Date(Date.now()-86400000).toISOString().slice(0,10));
-    // Auto-load pricing data if not loaded
+    const [monthlyMH, setMonthlyMH] = useState(null);
+    // Lid balance state — moved here to avoid IIFE useState error
+    const [lidPlan, setLidPlan] = useState({});
+    const [lidM, setLidM] = useState({
+      "Common Lid":2,"100ml Lid":1,"175ml Lid":1,"250ml Lid":1,
+      "Big Common Lid":1,"Oval Lid":1,"2000ml Lid":1,"Rectangle Lid":1,"SSRE Lid":1
+    });
+    const [utilData, setUtilData] = useState([]);
+    const [utilLoad, setUtilLoad] = useState(false);
     useEffect(()=>{ if(pxRows.length===0) loadPricing(); },[]);
+    useEffect(()=>{
+      setUtilLoad(true);
+      fetch("https://mayur-mos.vercel.app/api/throughput?days=30")
+        .then(r=>r.json())
+        .then(d=>{ if(d?.daily) setUtilData(d.daily); setUtilLoad(false); })
+        .catch(()=>setUtilLoad(false));
+    },[]);
 
     const HOMO=Number(pxDaana.homo)||146, CP=Number(pxDaana.cp)||146, RAND=Number(pxDaana.random)||152;
     const MB_B=180, MB_M=225, POLY=225, TAPE=10;
@@ -2189,7 +2204,6 @@ export default function CRM({ currentUser, onLogout }) {
     };
 
     // Load production for throughput tab
-    const [monthlyMH, setMonthlyMH] = useState(null);
     const loadAnProd = async(date) => {
       setAnLoad(true);
       try {
@@ -2542,18 +2556,7 @@ export default function CRM({ currentUser, onLogout }) {
 
         {/* ── TAB 3: Machine Utilization ── */}
         {anTab==="utilization"&&(()=>{
-          const [utilData,setUtilData]=useState([]);
-          const [utilLoad,setUtilLoad]=useState(false);
-          useEffect(()=>{
-            setUtilLoad(true);
-            fetch("https://mayur-mos.vercel.app/api/throughput?days=30")
-              .then(r=>r.json())
-              .then(d=>{
-                if(d?.daily) setUtilData(d.daily);
-                setUtilLoad(false);
-              })
-              .catch(()=>setUtilLoad(false));
-          },[]);
+          // utilData and utilLoad state is at Analytics component level
           const TARGET=345;
           const avgMH=utilData.length?Math.round(utilData.reduce((a,d)=>a+d.total_mh,0)/utilData.length):0;
           const avgUtil=utilData.length?Math.round(avgMH/TARGET*100):0;
@@ -2940,8 +2943,7 @@ export default function CRM({ currentUser, onLogout }) {
             {n:"SSRE 1000",          lid:"SSRE Lid",       bph:Math.round((3600/6.5)*2)},
           ];
 
-          const [plan, setPlan] = useState({});
-          const [lidM, setLidM] = useState({"Common Lid":2,"100ml Lid":1,"175ml Lid":1,"250ml Lid":1,"Big Common Lid":1,"Oval Lid":1,"2000ml Lid":1,"Rectangle Lid":1,"SSRE Lid":1});
+          // plan and lidM state is at Analytics component level
 
           const demand = ITEMS.reduce((acc,it)=>{
             const m=plan[it.n]||0;
