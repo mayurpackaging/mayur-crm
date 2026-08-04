@@ -2602,8 +2602,8 @@ export default function CRM({ currentUser, onLogout }) {
                       const date=d.date;
                       const actual=Math.round(d.total_mh*10)/10;
                       const dayName=new Date(date).toLocaleDateString("en-IN",{weekday:"short"});
-                      const target=15*23; // Always 15 machines × 23 hrs
-                      const notRunning=15-mach;
+                      const target=15*23;
+                      const notRunning=0;
                       const gap=target-actual;
                       const util=Math.round(actual/target*100);
                       const status=util>=95?"🟢 Excellent":util>=80?"🟡 Good":util>=60?"🟠 Low":"🔴 Poor";
