@@ -1925,9 +1925,13 @@ export default function CRM({ currentUser, onLogout }) {
 
     const dynN1 = curr ? Math.round(FIXED/curr.total_mh) : N1;
     const dynN2 = curr ? Math.round((FIXED+5000000)/curr.total_mh) : N2;
-    const currZone = curr?.avg_t_hr < dynN1 ? "RED" : curr?.avg_t_hr < dynN2 ? "N1" : curr?.avg_t_hr < dynN2*1.2 ? "N2" : "N3";
+    const currZone = curr?.avg_t_hr < actN1 ? "RED" : curr?.avg_t_hr < actN2 ? "N1" : curr?.avg_t_hr < actN3 ? "N2" : "N3";
 
     // Item-wise monthly aggregation — use MOS t_per_hour directly
+    // dynN1/dynN2 based on actual monthly MH
+    const actN1 = curr?.total_mh>0 ? Math.round(FIXED/curr.total_mh) : 1097;
+    const actN2 = curr?.total_mh>0 ? Math.round((FIXED+5000000)/curr.total_mh) : 1615;
+    const actN3 = Math.round(actN2*1.20);
     const itemMonthly = prodData?.daily ? (() => {
       const map = {};
       prodData.daily.forEach(day => {
@@ -1952,9 +1956,9 @@ export default function CRM({ currentUser, onLogout }) {
         ...it,
         avg_t_hr: it.total_mh>0 ? Math.round(it.weighted_thr/it.total_mh) : 0,
         zone: it.total_mh>0 ? (
-          it.weighted_thr/it.total_mh<dynN1?"RED":
-          it.weighted_thr/it.total_mh<dynN2?"N1":
-          it.weighted_thr/it.total_mh<dynN2*1.2?"N2":"N3"
+          it.weighted_thr/it.total_mh<actN1?"RED":
+          it.weighted_thr/it.total_mh<actN2?"N1":
+          it.weighted_thr/it.total_mh<actN3?"N2":"N3"
         ) : "RED"
       })).sort((a,b)=>b.avg_t_hr-a.avg_t_hr);
     })() : [];
@@ -1995,12 +1999,12 @@ export default function CRM({ currentUser, onLogout }) {
             <div className="card" style={{marginBottom:14}}>
               <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
                 <span style={{fontWeight:700,fontSize:13}}>Monthly Zone — {zoneName(currZone)}</span>
-                <span style={{fontSize:12,color:"var(--mut)"}}>Dynamic N1=₹{dynN1} N2=₹{dynN2} (actual MH based)</span>
+                <span style={{fontSize:12,color:"var(--mut)"}}>Actual N1=₹{actN1} N2=₹{actN2} N3=₹{actN3} (is mahine ki actual MH se)</span>
               </div>
               <div style={{background:"var(--card2)",borderRadius:8,height:20,position:"relative",overflow:"hidden"}}>
                 <div style={{
                   height:"100%",
-                  width:`${Math.min(curr.avg_t_hr/dynN2*100,100)}%`,
+                  width:`${Math.min(curr.avg_t_hr/actN2*100,100)}%`,
                   background:zc2(currZone).c,
                   borderRadius:8,transition:"width .5s"
                 }}/>
@@ -2010,9 +2014,9 @@ export default function CRM({ currentUser, onLogout }) {
               </div>
               <div style={{display:"flex",justifyContent:"space-between",fontSize:10,color:"var(--mut)",marginTop:4}}>
                 <span>₹0</span>
-                <span>Floor ₹{dynN1}</span>
-                <span>Happy ₹{dynN2}</span>
-                <span>Super ₹{Math.round(dynN2*1.2)}</span>
+                <span>Floor ₹{actN1}</span>
+                <span>Happy ₹{actN2}</span>
+                <span>Super ₹{actN3}</span>
               </div>
             </div>
 
