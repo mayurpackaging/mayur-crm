@@ -1592,6 +1592,19 @@ export default function CRM({ currentUser, onLogout }) {
     );
   };
 
+  // ── Global helpers ──
+  const normP = (s) => (s||"").toLowerCase().replace(/\s+/g,"").replace(/ml/g,"ml").trim();
+  const findPxRow = (mosProduct) => {
+    if(!mosProduct) return null;
+    const np = normP(mosProduct);
+    return pxRows.find(r=>
+      normP(r.crm_product_name)===np ||
+      normP(r.item_name)===np ||
+      normP(r.crm_product_name).includes(np) ||
+      np.includes(normP(r.crm_product_name))
+    )||null;
+  };
+
   const Pricing = () => {
     const [pxModel, setPxModel] = useState("both"); // m1 | m2 | both
     const [pxThis, setPxThis] = useState({fixed:9800000, elecBill:2452659, salesKg:164297, scu:9660, happy:5000000});
@@ -1687,18 +1700,6 @@ export default function CRM({ currentUser, onLogout }) {
 
     const list = pxRows.filter(r=>!pxQ||r.item_name.toLowerCase().includes(pxQ.toLowerCase()));
     const fr2 = (v) => v ? "₹"+Math.round(v).toLocaleString("en-IN") : "—";
-    // Normalize product name for matching
-    const normP = (s) => (s||"").toLowerCase().replace(/\s+/g,"").replace(/ml/g,"ml").trim();
-    const findPxRow = (mosProduct) => {
-      if(!mosProduct) return null;
-      const np = normP(mosProduct);
-      return pxRows.find(r=>
-        normP(r.crm_product_name)===np ||
-        normP(r.item_name)===np ||
-        normP(r.crm_product_name).includes(np) ||
-        np.includes(normP(r.crm_product_name))
-      )||null;
-    };
 
     return (
       <div>
