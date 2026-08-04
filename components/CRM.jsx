@@ -2665,13 +2665,14 @@ export default function CRM({ currentUser, onLogout }) {
                 <div>
                   <div style={{fontSize:11,color:"var(--mut)",marginBottom:6}}>Item select karo</div>
                   <select className="inp" value={wiItem?.id||""} onChange={e=>{
-                    const r=pxRows.find(p=>p.id===Number(e.target.value));
+                    const val=e.target.value;
+                    const r=pxRows.find(p=>String(p.id)===String(val));
                     setWiItem(r||null);
-                    setWiPcs(r?.pcs_per_carton*10||0);
+                    setWiPcs(r?.pcs_per_carton||500);
                   }}>
                     <option value="">-- Item chuniye --</option>
-                    {pxRows.length===0&&<option disabled>Loading... pehle Pricing tab kholo</option>}
-                    {pxRows.map(r=><option key={r.id} value={r.id}>{r.item_name}</option>)}
+                    {pxRows.length===0&&<option disabled>Loading...</option>}
+                    {pxRows.map(r=><option key={r.id} value={String(r.id)}>{r.item_name}</option>)}
                   </select>
                 </div>
                 <div>
