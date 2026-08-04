@@ -1805,7 +1805,7 @@ export default function CRM({ currentUser, onLogout }) {
                   const zBadge=(z,model)=>{
                     const colors={N3:{c:"#10b981",bg:"rgba(16,185,129,.1)"},N2:{c:"#f59e0b",bg:"rgba(245,158,11,.1)"},N1:{c:"#f97316",bg:"rgba(249,115,22,.1)"},RED:{c:"#ef4444",bg:"rgba(239,68,68,.1)"}};
                     const cl=colors[z]||colors.N1;
-                    return <span style={{padding:"2px 8px",borderRadius:10,fontSize:10,fontWeight:700,background:cl.bg,color:cl.c}}>{z==="RED"?"LOSS":z}</span>;
+                    return <span style={{padding:"2px 8px",borderRadius:10,fontSize:10,fontWeight:700,background:cl.bg,color:cl.c}}>{(z==="RED"?"🔴 LOSS":z==="N1"?"🟡 Floor":z==="N2"?"🟨 Happy":z==="N3"?"🟩 Super Happy":z)}</span>;
                   };
                   return (
                     <tr key={row.id} style={{borderBottom:"1px solid var(--bdr)"}}>
@@ -1921,7 +1921,7 @@ export default function CRM({ currentUser, onLogout }) {
                     </div>
                   </div>
                   <div style={{background:"rgba(255,255,255,.06)",borderRadius:10,padding:12}}>
-                    <div style={{fontSize:10,color:"#9fb3c0",textTransform:"uppercase",letterSpacing:.8,marginBottom:4}}>Happy (N2) — ₹50L/month</div>
+                    <div style={{fontSize:10,color:"#9fb3c0",textTransform:"uppercase",letterSpacing:.8,marginBottom:4}}>Happy (N2) — ₹50L/month profit</div>
                     <div style={{fontSize:22,fontWeight:800,color:"#f59e0b"}}>₹{Number(happyAmt).toLocaleString("en-IN")}</div>
                     <div style={{fontSize:10,color:aboveHappy>=0?"#10b981":"#ef4444",marginTop:2,fontWeight:700}}>
                       {aboveHappy>=0?`+₹${Number(aboveHappy).toLocaleString("en-IN")} above target`:`₹${Number(-aboveHappy).toLocaleString("en-IN")} below target`}
@@ -1975,7 +1975,7 @@ export default function CRM({ currentUser, onLogout }) {
               const cnt=(prodData.daily||[]).filter(d=>d.zone===z).length;
               return <div key={z} style={{textAlign:"center",padding:12,borderRadius:10,background:zc(z).bg,border:`1px solid ${zc(z).c}`}}>
                 <div style={{fontSize:22,fontWeight:800,color:zc(z).c}}>{cnt}</div>
-                <div style={{fontSize:10,color:zc(z).c,fontWeight:700}}>{z==="RED"?"LOSS":z} days</div>
+                <div style={{fontSize:10,color:zc(z).c,fontWeight:700}}>{(z==="RED"?"🔴 LOSS":z==="N1"?"🟡 Floor":z==="N2"?"🟨 Happy":z==="N3"?"🟩 Super Happy":z)} days</div>
               </div>;
             })}
           </div>
@@ -2004,7 +2004,7 @@ export default function CRM({ currentUser, onLogout }) {
                   <div style={{background:ZC2(yd.zone).bg,border:`1px solid ${ZC2(yd.zone).c}`,borderRadius:8,padding:12}}>
                     <div style={{fontSize:9,color:ZC2(yd.zone).c,textTransform:"uppercase",marginBottom:4}}>Avg T/hr</div>
                     <div style={{fontSize:24,fontWeight:800,color:ZC2(yd.zone).c}}>₹{yd.avg_t_hr}</div>
-                    <div style={{fontSize:12,fontWeight:700,color:ZC2(yd.zone).c,marginTop:2}}>{yd.zone==="RED"?"LOSS":yd.zone}</div>
+                    <div style={{fontSize:12,fontWeight:700,color:ZC2(yd.zone).c,marginTop:2}}>{(yd.zone==="RED"?"🔴 LOSS":yd.zone==="N1"?"🟡 Floor":yd.zone==="N2"?"🟨 Happy":yd.zone==="N3"?"🟩 Super Happy":yd.zone)}</div>
                   </div>
                 </div>
                 {/* Item-wise yesterday */}
@@ -2035,7 +2035,7 @@ export default function CRM({ currentUser, onLogout }) {
                           <td style={{padding:"7px 8px",textAlign:"center",fontWeight:700,color:ZC2(it.zone).c}}>₹{Math.round(it.t_hr)}</td>
                           <td style={{padding:"7px 8px",textAlign:"center"}}>
                             <span style={{padding:"2px 8px",borderRadius:10,fontSize:10,fontWeight:700,background:ZC2(it.zone).bg,color:ZC2(it.zone).c}}>
-                              {it.zone==="RED"?"LOSS":it.zone}
+                              {(it.zone==="RED"?"🔴 LOSS":it.zone==="N1"?"🟡 Floor":it.zone==="N2"?"🟨 Happy":it.zone==="N3"?"🟩 Super Happy":it.zone)}
                             </span>
                           </td>
                           <td style={{padding:"7px 8px",textAlign:"center",fontSize:10,color:"#f97316"}}>₹{it.floor}</td>
@@ -2091,7 +2091,7 @@ export default function CRM({ currentUser, onLogout }) {
                       <td style={{textAlign:"center"}}>{Number(it.good_parts).toLocaleString()}</td>
                       <td style={{textAlign:"center",fontSize:11}}>{it.mh?.toFixed(1)}h</td>
                       <td style={{fontWeight:700,color:zc(it.zone).c}}>₹{Math.round(it.t_hr)}</td>
-                      <td><span className="bdg" style={{background:zc(it.zone).bg,color:zc(it.zone).c}}>{it.zone==="RED"?"LOSS":it.zone}</span></td>
+                      <td><span className="bdg" style={{background:zc(it.zone).bg,color:zc(it.zone).c}}>{(it.zone==="RED"?"🔴 LOSS":it.zone==="N1"?"🟡 Floor":it.zone==="N2"?"🟨 Happy":it.zone==="N3"?"🟩 Super Happy":it.zone)}</span></td>
                       <td style={{fontSize:11}}>₹{it.floor}</td>
                       <td style={{fontSize:11,color:"var(--mut)"}}>₹{it.happy}</td>
                     </tr>
@@ -2272,13 +2272,13 @@ export default function CRM({ currentUser, onLogout }) {
                           <td style={{padding:"8px 8px",textAlign:"center",color:"var(--mut)",fontSize:11}}>{f1.mh.toFixed(3)}</td>
                           <td style={{padding:"8px 8px",textAlign:"center",fontWeight:700,color:"#b71c1c",background:"#fff5f5"}}>{fr3(f1.floor)}</td>
                           <td style={{padding:"8px 8px",textAlign:"center",background:"#fff5f5"}}>
-                            <span style={{padding:"2px 8px",borderRadius:10,fontSize:10,fontWeight:700,background:zc(z1).bg,color:zc(z1).c}}>{z1==="RED"?"LOSS":z1}</span>
+                            <span style={{padding:"2px 8px",borderRadius:10,fontSize:10,fontWeight:700,background:zc(z1).bg,color:zc(z1).c}}>{z1==="RED"?"🔴 LOSS":z1==="N1"?"🟡 Floor":z1==="N2"?"🟨 Happy":"🟩 Super Happy"}</span>
                           </td>
                           <td style={{padding:0,background:"#f0f0f0"}}/>
                           <td style={{padding:"8px 8px",textAlign:"center",color:"#1565c0",background:"#f5fff5",fontSize:11}}>{fr3(f2.elec)}</td>
                           <td style={{padding:"8px 8px",textAlign:"center",fontWeight:700,color:"#1b5e20",background:"#f5fff5"}}>{fr3(f2.floor)}</td>
                           <td style={{padding:"8px 8px",textAlign:"center",background:"#f5fff5"}}>
-                            <span style={{padding:"2px 8px",borderRadius:10,fontSize:10,fontWeight:700,background:zc(z2).bg,color:zc(z2).c}}>{z2==="RED"?"LOSS":z2}</span>
+                            <span style={{padding:"2px 8px",borderRadius:10,fontSize:10,fontWeight:700,background:zc(z2).bg,color:zc(z2).c}}>{z2==="RED"?"🔴 LOSS":z2==="N1"?"🟡 Floor":z2==="N2"?"🟨 Happy":"🟩 Super Happy"}</span>
                           </td>
                           <td style={{padding:"8px 8px",textAlign:"center",fontSize:11,
                             color:fark>0?"#ef4444":fark<0?"#10b981":"var(--mut)",fontWeight:fark!==0?700:400}}>
@@ -2372,7 +2372,7 @@ export default function CRM({ currentUser, onLogout }) {
                                 <td style={{padding:"7px 8px",textAlign:"center",fontWeight:600}}>{it.total_mh?.toFixed(2)}h</td>
                                 <td style={{padding:"7px 8px",textAlign:"center",fontWeight:700,color:zc(z).c}}>₹{Math.round(it.t_hr)}</td>
                                 <td style={{padding:"7px 8px",textAlign:"center"}}>
-                                  <span style={{padding:"2px 6px",borderRadius:8,fontSize:10,fontWeight:700,background:zc(z).bg,color:zc(z).c}}>{z==="RED"?"LOSS":z}</span>
+                                  <span style={{padding:"2px 6px",borderRadius:8,fontSize:10,fontWeight:700,background:zc(z).bg,color:zc(z).c}}>{(z==="RED"?"🔴 LOSS":z==="N1"?"🟡 Floor":z==="N2"?"🟨 Happy":z==="N3"?"🟩 Super Happy":z)}</span>
                                 </td>
                                 <td style={{padding:"7px 8px",textAlign:"center",fontSize:10,color:"#f97316"}}>{fr3(it.floor_price)}</td>
                                 <td style={{padding:"7px 8px",textAlign:"center",fontSize:10,color:"#f59e0b"}}>{fr3(it.happy_price)}</td>
@@ -2544,7 +2544,7 @@ export default function CRM({ currentUser, onLogout }) {
                             <td style={{padding:"8px",textAlign:"center"}}>
                               <span style={{padding:"2px 8px",borderRadius:8,fontSize:10,fontWeight:700,
                                 background:zc(s.zone).bg,color:zc(s.zone).c}}>
-                                {s.zone==="RED"?"LOSS":s.zone}
+                                {s.zone==="RED"?"🔴 LOSS":s.zone==="N1"?"🟡 Floor":s.zone==="N2"?"🟨 Happy":"🟩 Super Happy"}
                               </span>
                             </td>
                             <td style={{padding:"8px",textAlign:"center"}}>₹{s.tt.toLocaleString()}</td>
