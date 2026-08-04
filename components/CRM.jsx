@@ -2173,15 +2173,29 @@ export default function CRM({ currentUser, onLogout }) {
     };
 
     // Load production for throughput tab
+    const [monthlyMH, setMonthlyMH] = useState(null);
     const loadAnProd = async(date) => {
       setAnLoad(true);
       try {
+        // Load selected date data
         const res = await fetch(`https://mayur-mos.vercel.app/api/throughput?date=${date}`);
         const data = await res.json();
         setAnProd(data);
+        // Also load last 30 days for avg MH
+        const res30 = await fetch(`https://mayur-mos.vercel.app/api/throughput?days=30`);
+        const data30 = await res30.json();
+        if(data30?.daily?.length>0){
+          const totalMH = data30.daily.reduce((a,d)=>a+d.total_mh,0);
+          const avgMH = totalMH / data30.daily.length;
+          setMonthlyMH({total:Math.round(totalMH), avg:Math.round(avgMH), days:data30.daily.length});
+        }
       } catch(e) {}
       setAnLoad(false);
     };
+    // Dynamic N1 based on actual monthly MH
+    const dynN1 = monthlyMH ? Math.round(FIXED/(monthlyMH.total)) : Math.round(FIXED/SCU);
+    const dynN2 = monthlyMH ? Math.round((FIXED+HAPPY)/(monthlyMH.total)) : Math.round((FIXED+HAPPY)/SCU);
+    const dynN3 = Math.round(dynN2*1.20);
 
     const TABS = [
       {id:"model", lbl:"📊 Model 1 vs 2"},
@@ -2328,6 +2342,21 @@ export default function CRM({ currentUser, onLogout }) {
                     <div style={{fontSize:11,color:"#9fb3c0",textTransform:"uppercase",letterSpacing:1,marginBottom:10}}>
                       ⚙️ Throughput Kaise Calculate Hua — {new Date(day.date).toLocaleDateString("en-IN",{day:"2-digit",month:"short"})}
                     </div>
+                    {monthlyMH&&(
+                      <div style={{display:"flex",gap:10,marginBottom:10}}>
+                        {[
+                          ["30-Day Total MH",monthlyMH.total+"h","#E3F2FD","#1565C0"],
+                          ["30-Day Avg MH/day",monthlyMH.avg+"h/day","#E8F5E9","#1B5E20"],
+                          ["Dynamic N1 (actual MH)","₹"+dynN1+"/hr","#FFE0E0","#B71C1C"],
+                          ["Dynamic N2 (actual MH)","₹"+dynN2+"/hr","#FFF9C4","#7B5800"],
+                        ].map(([lbl,val,bg,c])=>(
+                          <div key={lbl} style={{flex:1,background:bg,borderRadius:8,padding:10,textAlign:"center"}}>
+                            <div style={{fontSize:9,color:c,fontWeight:700,marginBottom:4}}>{lbl}</div>
+                            <div style={{fontSize:16,fontWeight:800,color:c}}>{val}</div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:10,marginBottom:12}}>
                       {[
                         ["Total Cartons","Pieces ÷ Pcs/ctn",Math.round(day.items?.reduce((a,i)=>a+(i.good_parts/(findPxRow(i.product)?.pcs_per_carton||500)),0)||0)+" ctns"],
@@ -2391,8 +2420,8 @@ export default function CRM({ currentUser, onLogout }) {
                                 <td style={{padding:"7px 8px",textAlign:"center",fontSize:10,color:"#f97316"}}>{fr3(it.floor_price)}</td>
                                 <td style={{padding:"7px 8px",textAlign:"center",fontSize:10,color:"#f59e0b"}}>{fr3(it.happy_price)}</td>
                                 <td style={{padding:"7px 8px",textAlign:"center",fontSize:11,fontWeight:700,
-                                  color:vsFloor>=0?"#10b981":"#ef4444"}}>
-                                  {vsFloor>=0?"+":""}{Math.round(vsFloor)}
+                                  color:(it.t_hr-dynN1)>=0?"#10b981":"#ef4444"}}>
+                                  {(it.t_hr-dynN1)>=0?"+":""}{Math.round(it.t_hr-dynN1)}
                                 </td>
                               </tr>
                             );
