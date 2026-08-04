@@ -2440,7 +2440,7 @@ export default function CRM({ currentUser, onLogout }) {
                 <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
                   <thead>
                     <tr style={{background:"var(--card2)"}}>
-                      {["Date","Day","Running","Not Running","Actual MH","Target (345h)","Gap","Utilization","Status"].map(h=>(
+                      {["Date","Day","Actual MH","Target (345h)","Gap (hrs)","Utilization %","Status","Note"].map(h=>(
                         <th key={h} style={{padding:"8px 10px",fontSize:10,color:"var(--mut)",textAlign:h==="Date"||h==="Day"?"left":"center"}}>{h}</th>
                       ))}
                     </tr>
@@ -2474,12 +2474,8 @@ export default function CRM({ currentUser, onLogout }) {
                         <tr key={date} style={{borderBottom:"1px solid var(--bdr)",background:rowBg}}>
                           <td style={{padding:"7px 10px",fontWeight:600}}>{date.slice(5)}</td>
                           <td style={{padding:"7px 10px",color:"var(--mut)",fontSize:11}}>{day}</td>
-                          <td style={{padding:"7px 10px",textAlign:"center",color:"#10b981",fontWeight:700}}>{mach} ✓</td>
-                          <td style={{padding:"7px 10px",textAlign:"center",
-                            color:"#10b981",fontSize:11}}>
-                            All 15 ✓
-                          </td>
-                          <td style={{padding:"7px 10px",textAlign:"center",fontWeight:700}}>{actual}h</td>
+                          <td style={{padding:"7px 10px",textAlign:"center",fontWeight:700,
+                            color:actual>=300?"#10b981":actual>=200?"#f59e0b":"#ef4444"}}>{actual}h</td>
                           <td style={{padding:"7px 10px",textAlign:"center",color:"var(--mut)"}}>345h</td>
                           <td style={{padding:"7px 10px",textAlign:"center",
                             color:gap>50?"#ef4444":gap>20?"#f59e0b":"#10b981",fontWeight:700}}>
@@ -2496,6 +2492,9 @@ export default function CRM({ currentUser, onLogout }) {
                             </div>
                           </td>
                           <td style={{padding:"7px 10px",textAlign:"center",fontSize:11}}>{status}</td>
+                          <td style={{padding:"7px 10px",fontSize:10,color:"var(--mut)"}}>
+                            {util<60?"⚠️ Low — investigate":util>=95?"✅ Full production":""}
+                          </td>
                         </tr>
                       );
                     })}
