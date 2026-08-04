@@ -2141,6 +2141,8 @@ export default function CRM({ currentUser, onLogout }) {
     const [wiItem, setWiItem] = useState(null);
     const [wiPcs, setWiPcs] = useState(0);
     const [selDate, setSelDate] = useState(new Date(Date.now()-86400000).toISOString().slice(0,10));
+    // Auto-load pricing data if not loaded
+    useEffect(()=>{ if(pxRows.length===0) loadPricing(); },[]);
 
     const HOMO=Number(pxDaana.homo)||146, CP=Number(pxDaana.cp)||146, RAND=Number(pxDaana.random)||152;
     const MB_B=180, MB_M=225, POLY=225, TAPE=10;
