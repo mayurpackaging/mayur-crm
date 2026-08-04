@@ -2804,6 +2804,162 @@ export default function CRM({ currentUser, onLogout }) {
             </div>
           </div>
         )}
+
+        {/* ── TAB 6: Lid Balance ── */}
+        {anTab==="lid"&&(()=>{
+          const LID_TYPES = {
+            "Common Lid":     {cav:4, cyc:5.0, pps:Math.round((3600/5.0)*4)},
+            "100ml Lid":      {cav:12,cyc:6.1, pps:Math.round((3600/6.1)*12)},
+            "175ml Lid":      {cav:4, cyc:4.9, pps:Math.round((3600/4.9)*4)},
+            "250ml Lid":      {cav:3, cyc:4.5, pps:Math.round((3600/4.5)*3)},
+            "Big Common Lid": {cav:2, cyc:5.0, pps:Math.round((3600/5.0)*2)},
+            "Oval Lid":       {cav:2, cyc:5.8, pps:Math.round((3600/5.8)*2)},
+            "2000ml Lid":     {cav:2, cyc:6.3, pps:Math.round((3600/6.3)*2)},
+            "Rectangle Lid":  {cav:2, cyc:4.5, pps:Math.round((3600/4.5)*2)},
+            "SSRE Lid":       {cav:4, cyc:6.5, pps:Math.round((3600/6.5)*4)},
+          };
+          const ITEMS = [
+            {n:"100ml Black/Milky",  lid:"100ml Lid",      bph:Math.round((3600/6.0)*6)},
+            {n:"50ml",               lid:"100ml Lid",      bph:Math.round((3600/5.3)*8)},
+            {n:"175ml",              lid:"175ml Lid",      bph:Math.round((3600/5.1)*4)},
+            {n:"250ml 1000pc",       lid:"250ml Lid",      bph:Math.round((3600/5.4)*4)},
+            {n:"300ml",              lid:"Common Lid",     bph:Math.round((3600/4.75)*2)},
+            {n:"400ml",              lid:"Common Lid",     bph:Math.round((3600/5.3)*2)},
+            {n:"500ml Black",        lid:"Common Lid",     bph:Math.round((3600/6.2)*4)},
+            {n:"500ml Milky",        lid:"Common Lid",     bph:Math.round((3600/7.3)*6)},
+            {n:"750ml",              lid:"Common Lid",     bph:Math.round((3600/5.6)*2)},
+            {n:"1000ml",             lid:"Common Lid",     bph:Math.round((3600/6.6)*2)},
+            {n:"1200ml",             lid:"Big Common Lid", bph:Math.round((3600/5.2)*1)},
+            {n:"1500ml",             lid:"Big Common Lid", bph:Math.round((3600/5.5)*1)},
+            {n:"500ml Oval",         lid:"Oval Lid",       bph:Math.round((3600/6.0)*2)},
+            {n:"750ml Oval",         lid:"Oval Lid",       bph:Math.round((3600/6.9)*1)},
+            {n:"1000ml Oval",        lid:"Oval Lid",       bph:Math.round((3600/6.6)*1)},
+            {n:"2000ml/2500ml",      lid:"2000ml Lid",     bph:Math.round((3600/9.5)*1)},
+            {n:"RCT 500",            lid:"Rectangle Lid",  bph:Math.round((3600/5.5)*1)},
+            {n:"RCT 750",            lid:"Rectangle Lid",  bph:Math.round((3600/5.55)*1)},
+            {n:"RCT 1000",           lid:"Rectangle Lid",  bph:Math.round((3600/5.75)*1)},
+            {n:"SSRE 500",           lid:"SSRE Lid",       bph:Math.round((3600/6.5)*2)},
+            {n:"SSRE 750",           lid:"SSRE Lid",       bph:Math.round((3600/6.5)*2)},
+            {n:"SSRE 1000",          lid:"SSRE Lid",       bph:Math.round((3600/6.5)*2)},
+          ];
+
+          const [plan, setPlan] = useState({});
+          const [lidM, setLidM] = useState({"Common Lid":2,"100ml Lid":1,"175ml Lid":1,"250ml Lid":1,"Big Common Lid":1,"Oval Lid":1,"2000ml Lid":1,"Rectangle Lid":1,"SSRE Lid":1});
+
+          const demand = ITEMS.reduce((acc,it)=>{
+            const m=plan[it.n]||0;
+            if(m>0) acc[it.lid]=(acc[it.lid]||0)+it.bph*m;
+            return acc;
+          },{});
+
+          const groups = ITEMS.reduce((g,it)=>{g[it.lid]=[...(g[it.lid]||[]),it];return g;},{});
+
+          return (
+            <div>
+              <div style={{fontWeight:700,fontSize:14,marginBottom:4}}>🔵 Lid Balance Calculator</div>
+              <div style={{fontSize:11,color:"var(--mut)",marginBottom:14}}>
+                Box machines daalo → lid bottleneck instantly pata chalega
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
+                {/* Left: Plan input */}
+                <div className="card" style={{maxHeight:600,overflowY:"auto"}}>
+                  <div style={{fontWeight:700,fontSize:12,marginBottom:10}}>📋 Aaj Ka Plan — Box Machines</div>
+                  {Object.entries(groups).map(([lt,items])=>(
+                    <div key={lt} style={{marginBottom:12}}>
+                      <div style={{fontSize:10,fontWeight:700,color:"#1565C0",background:"#E3F2FD",
+                        padding:"3px 8px",borderRadius:4,marginBottom:6}}>{lt}</div>
+                      {items.map(it=>(
+                        <div key={it.n} style={{display:"flex",alignItems:"center",gap:8,marginBottom:5}}>
+                          <div style={{flex:1,fontSize:12}}>{it.n}</div>
+                          <div style={{fontSize:10,color:"var(--mut)",width:60}}>{it.bph}/hr</div>
+                          <select style={{width:70,padding:"3px 6px",borderRadius:6,border:"1px solid var(--bdr)",
+                            fontSize:12,background:"var(--bg)",color:"inherit"}}
+                            value={plan[it.n]||0}
+                            onChange={e=>setPlan(p=>({...p,[it.n]:Number(e.target.value)}))}>
+                            {[0,1,2,3,4,5,6,7].map(n=>(
+                              <option key={n} value={n}>{n===0?"OFF":n+" mach"}</option>
+                            ))}
+                          </select>
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+
+                {/* Right: Result */}
+                <div>
+                  <div className="card" style={{marginBottom:12}}>
+                    <div style={{fontWeight:700,fontSize:12,marginBottom:8}}>🔵 Lid Machines Available</div>
+                    {Object.entries(LID_TYPES).map(([lt,ld])=>(
+                      <div key={lt} style={{display:"flex",alignItems:"center",gap:8,marginBottom:5}}>
+                        <div style={{flex:1,fontSize:11}}>{lt}</div>
+                        <div style={{fontSize:10,color:"var(--mut)",width:65}}>{ld.pps}/hr</div>
+                        <select style={{width:70,padding:"3px 6px",borderRadius:6,border:"1px solid var(--bdr)",
+                          fontSize:12,background:"var(--bg)",color:"inherit"}}
+                          value={lidM[lt]||0}
+                          onChange={e=>setLidM(p=>({...p,[lt]:Number(e.target.value)}))}>
+                          {[0,1,2,3,4].map(n=><option key={n} value={n}>{n} mach</option>)}
+                        </select>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="card">
+                    <div style={{fontWeight:700,fontSize:12,marginBottom:10}}>⚖️ Balance Result</div>
+                    {Object.keys(demand).length===0?(
+                      <div style={{textAlign:"center",padding:16,color:"var(--mut)",fontSize:12}}>
+                        Left mein plan fill karo
+                      </div>
+                    ):Object.entries(LID_TYPES).map(([lt,ld])=>{
+                      const dem=demand[lt]||0;
+                      const sup=ld.pps*(lidM[lt]||0);
+                      const gap=sup-dem;
+                      if(!dem&&!sup) return null;
+                      const ok=gap>=0;
+                      const maxBox=dem>0?Math.floor(sup/dem*100)/100:0;
+                      return (
+                        <div key={lt} style={{marginBottom:10,padding:10,borderRadius:8,
+                          background:ok?"rgba(16,185,129,.08)":"rgba(239,68,68,.08)",
+                          border:`1px solid ${ok?"#10b981":"#ef4444"}`}}>
+                          <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
+                            <div style={{fontWeight:700,fontSize:12}}>{lt}</div>
+                            <span style={{padding:"2px 10px",borderRadius:10,fontSize:11,fontWeight:700,
+                              background:ok?"#10b981":"#ef4444",color:"#fff"}}>
+                              {ok?"✅ OK":"🔴 BOTTLENECK"}
+                            </span>
+                          </div>
+                          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:4,fontSize:11,marginBottom:ok?0:6}}>
+                            <div style={{textAlign:"center",background:"rgba(239,68,68,.1)",borderRadius:4,padding:4}}>
+                              <div style={{fontSize:9,color:"var(--mut)"}}>Box Demand</div>
+                              <div style={{fontWeight:700}}>{dem.toLocaleString()}/hr</div>
+                            </div>
+                            <div style={{textAlign:"center",background:"rgba(16,185,129,.1)",borderRadius:4,padding:4}}>
+                              <div style={{fontSize:9,color:"var(--mut)"}}>Lid Supply</div>
+                              <div style={{fontWeight:700}}>{sup.toLocaleString()}/hr</div>
+                            </div>
+                            <div style={{textAlign:"center",background:ok?"rgba(16,185,129,.1)":"rgba(239,68,68,.1)",borderRadius:4,padding:4}}>
+                              <div style={{fontSize:9,color:"var(--mut)"}}>Gap</div>
+                              <div style={{fontWeight:700,color:ok?"#10b981":"#ef4444"}}>
+                                {gap>=0?"+":""}{gap.toLocaleString()}/hr
+                              </div>
+                            </div>
+                          </div>
+                          {!ok&&(
+                            <div style={{fontSize:10,color:"#ef4444",fontWeight:600,marginTop:6}}>
+                              💡 Fix: {lidM[lt]} lid se max {Math.floor(sup/ITEMS.find(i=>i.lid===lt)?.bph||1)} box machines support hongi.
+                              Ya ek aur lid machine lagao.
+                            </div>
+                          )}
+                        </div>
+                      );
+                    }).filter(Boolean)}
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
       </div>
     );
   };
