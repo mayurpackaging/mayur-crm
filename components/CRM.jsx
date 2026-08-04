@@ -2660,112 +2660,145 @@ export default function CRM({ currentUser, onLogout }) {
         {anTab==="whatif"&&(
           <div>
             <div className="card" style={{marginBottom:12}}>
-              <div style={{fontWeight:700,fontSize:13,marginBottom:12}}>🔮 What-If Calculator — Agar Itne Pcs Nikalte Toh?</div>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}}>
-                <div>
-                  <div style={{fontSize:11,color:"var(--mut)",marginBottom:6}}>Item select karo</div>
-                  <select className="inp" value={wiItem?.id||""} onChange={e=>{
-                    const val=e.target.value;
-                    const r=pxRows.find(p=>String(p.id)===String(val));
-                    setWiItem(r||null);
-                    setWiPcs(r?.pcs_per_carton||500);
-                  }}>
-                    <option value="">-- Item chuniye --</option>
-                    {pxRows.length===0&&<option disabled>Loading...</option>}
-                    {pxRows.map(r=><option key={r.id} value={String(r.id)}>{r.item_name}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <div style={{fontSize:11,color:"var(--mut)",marginBottom:6}}>Pieces (good parts) daalo</div>
-                  <input type="number" className="inp" value={wiPcs}
-                    onChange={e=>setWiPcs(Number(e.target.value))}
-                    placeholder="e.g. 31488"/>
-                </div>
+              <div style={{fontWeight:700,fontSize:13,marginBottom:4}}>🔮 What-If Calculator</div>
+              <div style={{fontSize:11,color:"var(--mut)",marginBottom:12}}>
+                💡 T/hr pieces se nahi badlta — sirf <b>Price</b>, <b>Cavity</b> ya <b>Cycle Time</b> change karne se badlta hai. Neeche try karo.
               </div>
 
-              {wiItem&&wiPcs>0&&(()=>{
+              {/* Item select */}
+              <div style={{marginBottom:12}}>
+                <div style={{fontSize:11,color:"var(--mut)",marginBottom:6}}>Item select karo</div>
+                <select className="inp" value={wiItem?.id||""} onChange={e=>{
+                  const val=e.target.value;
+                  const r=pxRows.find(p=>String(p.id)===String(val));
+                  setWiItem(r?{...r,wi_price:r.list_price,wi_bcav:r.box_cav,wi_bcyc:r.box_cyc,wi_lcav:r.lid_cav,wi_lcyc:r.lid_cyc}:null);
+                  setWiPcs(0);
+                }}>
+                  <option value="">-- Item chuniye --</option>
+                  {pxRows.length===0&&<option disabled>Loading...</option>}
+                  {pxRows.map(r=><option key={r.id} value={String(r.id)}>{r.item_name}</option>)}
+                </select>
+              </div>
+
+              {wiItem&&(()=>{
+                const HOMO=Number(pxDaana.homo)||146,CP=Number(pxDaana.cp)||146,RAND=Number(pxDaana.random)||152;
                 const pcs=wiItem.pcs_per_carton||500;
-                const ctns=wiPcs/pcs;
-                const f1=getFloor(wiItem,"m1");
-                const f2=getFloor(wiItem,"m2");
-                if(!f1||!f2) return <div>Data nahi hai is item ka</div>;
-                const thru=wiItem.list_price-(f1.daana/pcs*(pcs/wiItem.pcs_per_carton||1));
-                const totalThru=(wiItem.list_price-f1.daana/pcs*pcs)*ctns;
-                const boxMH=(wiItem.box_cav>0&&wiItem.box_cyc>0)?wiPcs/((3600/wiItem.box_cyc)*wiItem.box_cav):0;
-                const lidMH=(wiItem.lid_cav>0&&wiItem.lid_cyc>0)?wiPcs/((3600/wiItem.lid_cyc)*wiItem.lid_cav):0;
-                const totalMH=boxMH+lidMH;
-                const thr=totalMH>0?(wiItem.list_price-f1.daana/pcs*pcs)*ctns/totalMH:0;
-                // Scenarios
-                const scenarios=[0.7,0.85,1.0,1.15,1.3].map(mult=>{
-                  const p2=Math.round(wiPcs*mult);
-                  const c2=p2/pcs;
-                  const bm=(wiItem.box_cav>0&&wiItem.box_cyc>0)?p2/((3600/wiItem.box_cyc)*wiItem.box_cav):0;
-                  const lm=(wiItem.lid_cav>0&&wiItem.lid_cyc>0)?p2/((3600/wiItem.lid_cyc)*wiItem.lid_cav):0;
-                  const mh2=bm+lm;
-                  const tt=(wiItem.list_price-f1.daana/pcs*pcs)*c2;
-                  const thr2=mh2>0?tt/mh2:0;
-                  const z=thr2<1097?"RED":thr2<1615?"N1":thr2<1938?"N2":"N3";
-                  return {mult,pcs:p2,ctns:c2.toFixed(1),mh:mh2.toFixed(2),thr:Math.round(thr2),zone:z,tt:Math.round(tt)};
-                });
+
+                // Daana per carton
+                const daana=((wiItem.box_homo||0)*HOMO+(wiItem.box_cp||0)*CP+(wiItem.box_random||0)*RAND+
+                             (wiItem.lid_homo||0)*HOMO+(wiItem.lid_cp||0)*CP+(wiItem.lid_random||0)*RAND)/1000*pcs;
+
+                // Calculate T/hr from given params
+                const calcThr=(price,bcav,bcyc,lcav,lcyc)=>{
+                  const bMH=(bcav>0&&bcyc>0)?pcs/((3600/bcyc)*bcav):0;
+                  const lMH=(lcav>0&&lcyc>0)?pcs/((3600/lcyc)*lcav):0;
+                  const mh=bMH+lMH;
+                  if(!mh) return {thr:0,mh:0,zone:"RED"};
+                  const thr=(price-daana)/mh;
+                  const z=thr<1097?"RED":thr<1615?"N1":thr<1938?"N2":"N3";
+                  return {thr:Math.round(thr),mh:mh.toFixed(3),zone:z,margin:Math.round(price-daana)};
+                };
+
+                // Current actual
+                const curr=calcThr(wiItem.list_price,wiItem.box_cav,wiItem.box_cyc,wiItem.lid_cav,wiItem.lid_cyc);
+
+                // Scenarios — price/cavity/cycle changes
+                const scenarios=[
+                  {label:"📍 Current",price:wiItem.list_price,bcav:wiItem.box_cav,bcyc:wiItem.box_cyc,lcav:wiItem.lid_cav,lcyc:wiItem.lid_cyc,note:"Abhi ka"},
+                  {label:"💰 Price +10%",price:Math.round(wiItem.list_price*1.1),bcav:wiItem.box_cav,bcyc:wiItem.box_cyc,lcav:wiItem.lid_cav,lcyc:wiItem.lid_cyc,note:"Price 10% badhao"},
+                  {label:"💰 Price +20%",price:Math.round(wiItem.list_price*1.2),bcav:wiItem.box_cav,bcyc:wiItem.box_cyc,lcav:wiItem.lid_cav,lcyc:wiItem.lid_cyc,note:"Price 20% badhao"},
+                  {label:"⚡ Cycle -10%",price:wiItem.list_price,bcav:wiItem.box_cav,bcyc:+(wiItem.box_cyc*0.9).toFixed(1),lcav:wiItem.lid_cav,lcyc:wiItem.lid_cyc,note:"Cycle time 10% kam karo"},
+                  {label:"🔧 Cavity ×2",price:wiItem.list_price,bcav:(wiItem.box_cav||1)*2,bcyc:wiItem.box_cyc,lcav:wiItem.lid_cav,lcyc:wiItem.lid_cyc,note:"Double cavity mould"},
+                  {label:"🚀 Price+10% + Cycle-10%",price:Math.round(wiItem.list_price*1.1),bcav:wiItem.box_cav,bcyc:+(wiItem.box_cyc*0.9).toFixed(1),lcav:wiItem.lid_cav,lcyc:wiItem.lid_cyc,note:"Dono improve"},
+                ];
+
                 return (
                   <div>
-                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:10,marginBottom:14}}>
+                    {/* Current stats */}
+                    <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:8,marginBottom:14}}>
                       {[
-                        ["Pieces",wiPcs.toLocaleString()],
-                        ["Cartons",ctns.toFixed(1)],
-                        ["Total MH",totalMH.toFixed(2)+"h"],
-                        ["T/hr","₹"+Math.round(thr)],
-                      ].map(([l,v])=>(
-                        <div key={l} style={{background:"var(--card2)",borderRadius:8,padding:12,textAlign:"center"}}>
-                          <div style={{fontSize:10,color:"var(--mut)"}}>{l}</div>
-                          <div style={{fontSize:18,fontWeight:800,marginTop:4}}>{v}</div>
+                        ["List Price","₹"+wiItem.list_price,"#DDEEFF"],
+                        ["Daana/ctn","₹"+Math.round(daana),"#E8F5E9"],
+                        ["Margin/ctn","₹"+Math.round(wiItem.list_price-daana),"#FFF9C4"],
+                        ["MH/ctn",curr.mh+"h","#F3E5F5"],
+                        ["T/hr","₹"+curr.thr,"#FFE0E0"],
+                      ].map(([l,v,bg])=>(
+                        <div key={l} style={{background:bg,borderRadius:8,padding:10,textAlign:"center"}}>
+                          <div style={{fontSize:9,color:"var(--mut)",marginBottom:3}}>{l}</div>
+                          <div style={{fontSize:15,fontWeight:800}}>{v}</div>
                         </div>
                       ))}
                     </div>
-                    <div style={{fontWeight:600,fontSize:12,marginBottom:8}}>Agar production change hoti — T/hr kya hota?</div>
+
+                    {/* Current details */}
+                    <div style={{background:"var(--card2)",borderRadius:8,padding:10,marginBottom:14,fontSize:11}}>
+                      <b>Current:</b> Box {wiItem.box_cav} cav × {wiItem.box_cyc}s
+                      {wiItem.lid_cav>0&&` | Lid ${wiItem.lid_cav} cav × ${wiItem.lid_cyc}s`}
+                      {" | Zone: "}<span style={{fontWeight:700,color:({N3:"#10b981",N2:"#f59e0b",N1:"#f97316",RED:"#ef4444"})[curr.zone]}}>
+                        {curr.zone==="N1"?"🟡 Floor":curr.zone==="N2"?"🟨 Happy":curr.zone==="N3"?"🟩 Super Happy":"🔴 LOSS"}
+                      </span>
+                    </div>
+
+                    {/* Scenarios table */}
+                    <div style={{fontWeight:600,fontSize:12,marginBottom:8}}>Agar ye change karein — T/hr kya hoga?</div>
                     <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
                       <thead>
                         <tr style={{background:"var(--card2)"}}>
-                          {["Scenario","Pieces","Cartons","MH","T/hr","Zone","Throughput"].map(h=>(
-                            <th key={h} style={{padding:"8px",fontSize:10,color:"var(--mut)"}}>{h}</th>
+                          {["Scenario","Price","Box Cav","Box Cyc","Margin/ctn","T/hr","Zone","Gain vs Now"].map(h=>(
+                            <th key={h} style={{padding:"8px",fontSize:10,color:"var(--mut)",textAlign:"center"}}>{h}</th>
                           ))}
                         </tr>
                       </thead>
                       <tbody>
-                        {scenarios.map((s,i)=>(
-                          <tr key={i} style={{borderBottom:"1px solid var(--bdr)",
-                            background:s.mult===1?"var(--card2)":"transparent"}}>
-                            <td style={{padding:"8px",textAlign:"center",fontWeight:s.mult===1?700:400}}>
-                              {s.mult===1?"📍 Actual":`${Math.round((s.mult-1)*100)}${s.mult>1?"%+":"%"}`}
-                            </td>
-                            <td style={{padding:"8px",textAlign:"center"}}>{s.pcs.toLocaleString()}</td>
-                            <td style={{padding:"8px",textAlign:"center"}}>{s.ctns}</td>
-                            <td style={{padding:"8px",textAlign:"center"}}>{s.mh}h</td>
-                            <td style={{padding:"8px",textAlign:"center",fontWeight:700,
-                              color:({N3:"#10b981",N2:"#f59e0b",N1:"#f97316",RED:"#ef4444"})[s.zone]}}>
-                              ₹{s.thr}
-                            </td>
-                            <td style={{padding:"8px",textAlign:"center"}}>
-                              <span style={{padding:"2px 8px",borderRadius:8,fontSize:10,fontWeight:700,
-                                background:zc(s.zone).bg,color:zc(s.zone).c}}>
-                                {s.zone==="RED"?"🔴 LOSS":s.zone==="N1"?"🟡 Floor":s.zone==="N2"?"🟨 Happy":"🟩 Super Happy"}
-                              </span>
-                            </td>
-                            <td style={{padding:"8px",textAlign:"center"}}>₹{s.tt.toLocaleString()}</td>
-                          </tr>
-                        ))}
+                        {scenarios.map((s,i)=>{
+                          const res=calcThr(s.price,s.bcav,s.bcyc,s.lcav,s.lcyc);
+                          const gain=res.thr-curr.thr;
+                          const isBase=i===0;
+                          return (
+                            <tr key={i} style={{borderBottom:"1px solid var(--bdr)",
+                              background:isBase?"var(--card2)":"transparent"}}>
+                              <td style={{padding:"8px",fontWeight:isBase?700:400}}>
+                                <div>{s.label}</div>
+                                <div style={{fontSize:9,color:"var(--mut)"}}>{s.note}</div>
+                              </td>
+                              <td style={{padding:"8px",textAlign:"center",
+                                color:s.price>wiItem.list_price?"#10b981":"inherit",fontWeight:s.price>wiItem.list_price?700:400}}>
+                                ₹{s.price}
+                              </td>
+                              <td style={{padding:"8px",textAlign:"center",
+                                color:s.bcav>wiItem.box_cav?"#10b981":"inherit",fontWeight:s.bcav>wiItem.box_cav?700:400}}>
+                                {s.bcav}
+                              </td>
+                              <td style={{padding:"8px",textAlign:"center",
+                                color:s.bcyc<wiItem.box_cyc?"#10b981":"inherit",fontWeight:s.bcyc<wiItem.box_cyc?700:400}}>
+                                {s.bcyc}s
+                              </td>
+                              <td style={{padding:"8px",textAlign:"center"}}>₹{Math.round(s.price-daana)}</td>
+                              <td style={{padding:"8px",textAlign:"center",fontWeight:700,fontSize:13,
+                                color:({N3:"#10b981",N2:"#f59e0b",N1:"#f97316",RED:"#ef4444"})[res.zone]}}>
+                                ₹{res.thr}
+                              </td>
+                              <td style={{padding:"8px",textAlign:"center"}}>
+                                <span style={{padding:"2px 8px",borderRadius:8,fontSize:10,fontWeight:700,
+                                  background:zc(res.zone).bg,color:zc(res.zone).c}}>
+                                  {res.zone==="RED"?"🔴 LOSS":res.zone==="N1"?"🟡 Floor":res.zone==="N2"?"🟨 Happy":"🟩 Super Happy"}
+                                </span>
+                              </td>
+                              <td style={{padding:"8px",textAlign:"center",fontWeight:700,
+                                color:gain>0?"#10b981":gain<0?"#ef4444":"var(--mut)"}}>
+                                {isBase?"—":gain>0?"+₹"+gain:"₹"+gain}
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
-                    <div style={{marginTop:10,padding:10,background:"var(--card2)",borderRadius:8,fontSize:11,color:"var(--mut)"}}>
-                      💡 T/hr production se nahi badlta — zyada pieces = zyada cartons = zyada throughput, 
-                      par MH bhi proportionally badh jaata hai. T/hr sirf price aur cycle time se badlta hai.
-                    </div>
                   </div>
                 );
               })()}
-              {(!wiItem||wiPcs===0)&&(
+              {!wiItem&&(
                 <div style={{textAlign:"center",padding:20,color:"var(--mut)"}}>
-                  Item aur pieces daalo upar — what-if analysis dikhega
+                  Upar se item select karo — scenarios dikhenge
                 </div>
               )}
             </div>
