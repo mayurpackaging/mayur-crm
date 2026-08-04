@@ -1687,6 +1687,18 @@ export default function CRM({ currentUser, onLogout }) {
 
     const list = pxRows.filter(r=>!pxQ||r.item_name.toLowerCase().includes(pxQ.toLowerCase()));
     const fr2 = (v) => v ? "₹"+Math.round(v).toLocaleString("en-IN") : "—";
+    // Normalize product name for matching
+    const normP = (s) => (s||"").toLowerCase().replace(/\s+/g,"").replace(/ml/g,"ml").trim();
+    const findPxRow = (mosProduct) => {
+      if(!mosProduct) return null;
+      const np = normP(mosProduct);
+      return pxRows.find(r=>
+        normP(r.crm_product_name)===np ||
+        normP(r.item_name)===np ||
+        normP(r.crm_product_name).includes(np) ||
+        np.includes(normP(r.crm_product_name))
+      )||null;
+    };
 
     return (
       <div>
@@ -2316,7 +2328,7 @@ export default function CRM({ currentUser, onLogout }) {
                     </div>
                     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:10,marginBottom:12}}>
                       {[
-                        ["Total Cartons","Pieces ÷ Pcs/ctn",Math.round(day.items?.reduce((a,i)=>a+(i.good_parts/(pxRows.find(r=>r.crm_product_name===i.product)?.pcs_per_carton||500)),0)||0)+" ctns"],
+                        ["Total Cartons","Pieces ÷ Pcs/ctn",Math.round(day.items?.reduce((a,i)=>a+(i.good_parts/(findPxRow(i.product)?.pcs_per_carton||500)),0)||0)+" ctns"],
                         ["Price − Daana","Per carton margin","Avg ₹"+(day.items?.length?Math.round(day.items.reduce((a,i)=>a+(i.throughput_per_carton||0),0)/day.items.length):0)+"/ctn"],
                         ["Total MH","Box MH + Lid MH",day.total_mh+"h"],
                         ["T/hr","Total Throughput ÷ MH","₹"+day.avg_t_hr+"/hr"],
@@ -2353,7 +2365,7 @@ export default function CRM({ currentUser, onLogout }) {
                         </thead>
                         <tbody>
                           {(day.items||[]).sort((a,b)=>b.t_hr-a.t_hr).map((it,i)=>{
-                            const pxR=pxRows.find(r=>r.crm_product_name===it.product||r.item_name===it.product);
+                            const pxR=findPxRow(it.product);
                             const pcs=pxR?.pcs_per_carton||500;
                             const ctns=it.good_parts/pcs;
                             const vsFloor=it.t_hr-it.floor;
@@ -2468,6 +2480,7 @@ export default function CRM({ currentUser, onLogout }) {
                     setWiPcs(r?.pcs_per_carton*10||0);
                   }}>
                     <option value="">-- Item chuniye --</option>
+                    {pxRows.length===0&&<option disabled>Loading... pehle Pricing tab kholo</option>}
                     {pxRows.map(r=><option key={r.id} value={r.id}>{r.item_name}</option>)}
                   </select>
                 </div>
