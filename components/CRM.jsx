@@ -2172,19 +2172,19 @@ export default function CRM({ currentUser, onLogout }) {
                   <thead>
                     <tr style={{background:"var(--card2)"}}>
                       <tr style={{background:"var(--card2)"}}>
-                        <th style={{padding:"8px 10px",fontSize:10,color:"var(--mut)",textAlign:"left"}}>Product</th>
-                        <th style={{padding:"8px 8px",fontSize:10,color:"var(--mut)"}}>Pieces</th>
-                        <th style={{padding:"8px 8px",fontSize:10,color:"var(--mut)"}}>MH</th>
-                        <th style={{padding:"8px 8px",fontSize:10,color:"var(--mut)"}}>T/hr</th>
-                        <th style={{padding:"8px 8px",fontSize:10,color:"var(--mut)"}}>T/hr Zone</th>
-                        <th style={{padding:"8px 8px",fontSize:10,color:"#b71c1c",background:"#fff5f5"}}>M1 Floor</th>
-                        <th style={{padding:"8px 8px",fontSize:10,color:"#b71c1c",background:"#fff5f5"}}>M1 Happy</th>
-                        <th style={{padding:"8px 8px",fontSize:10,color:"#b71c1c",background:"#fff5f5"}}>M1 Zone</th>
-                        <th style={{padding:"8px 4px",background:"#f0f0f0",width:6}}/>
-                        <th style={{padding:"8px 8px",fontSize:10,color:"#1b5e20",background:"#f5fff5"}}>M2 Floor</th>
-                        <th style={{padding:"8px 8px",fontSize:10,color:"#1b5e20",background:"#f5fff5"}}>M2 Happy</th>
-                        <th style={{padding:"8px 8px",fontSize:10,color:"#1b5e20",background:"#f5fff5"}}>M2 Zone</th>
-                        <th style={{padding:"8px 8px",fontSize:10,color:"var(--mut)"}}>Action</th>
+                        <th style={{padding:"6px 8px",fontSize:10,color:"var(--mut)",textAlign:"left"}}>Product</th>
+                        <th style={{padding:"6px 6px",fontSize:10,color:"var(--mut)"}}>Pcs</th>
+                        <th style={{padding:"6px 6px",fontSize:10,color:"var(--mut)"}}>MH</th>
+                        <th style={{padding:"6px 6px",fontSize:10,color:"var(--mut)"}}>T/hr</th>
+                        <th style={{padding:"6px 6px",fontSize:10,color:"var(--mut)"}}>Eff Zone</th>
+                        <th style={{padding:"6px 6px",fontSize:10,color:"#b71c1c",background:"#fff5f5"}}>M1 Floor</th>
+                        <th style={{padding:"6px 6px",fontSize:10,color:"#b71c1c",background:"#fff5f5"}}>M1 Happy</th>
+                        <th style={{padding:"6px 6px",fontSize:10,color:"#b71c1c",background:"#fff5f5"}}>M1 Zone</th>
+                        <th style={{padding:"6px 4px",background:"#f0f0f0",width:4}}/>
+                        <th style={{padding:"6px 6px",fontSize:10,color:"#1b5e20",background:"#f5fff5"}}>M2 Floor</th>
+                        <th style={{padding:"6px 6px",fontSize:10,color:"#1b5e20",background:"#f5fff5"}}>M2 Happy</th>
+                        <th style={{padding:"6px 6px",fontSize:10,color:"#1b5e20",background:"#f5fff5"}}>M2 Zone</th>
+                        <th style={{padding:"6px 6px",fontSize:10,color:"var(--mut)"}}>Action</th>
                       </tr>
                     </tr>
                   </thead>
@@ -2227,47 +2227,42 @@ export default function CRM({ currentUser, onLogout }) {
                       return (
                       <tr key={i} style={{borderBottom:"1px solid var(--bdr)",
                         background:it.zone==="RED"?"rgba(239,68,68,.04)":"transparent"}}>
-                        <td style={{padding:"8px 10px",fontWeight:600,fontSize:11}}>{it.product?.replace(" Container","")}</td>
-                        <td style={{padding:"8px",textAlign:"center",fontSize:11}}>{Number(it.good_parts).toLocaleString()}</td>
-                        <td style={{padding:"8px",textAlign:"center",color:"var(--mut)",fontSize:11}}>{it.total_mh.toFixed(0)}h</td>
-                        <td style={{padding:"8px",textAlign:"center",fontWeight:700,color:zc2(it.zone).c,fontSize:13}}>
-                          ₹{it.avg_t_hr}
-                        </td>
-                        <td style={{padding:"8px",textAlign:"center"}}>
-                          <span style={{padding:"2px 8px",borderRadius:10,fontSize:10,fontWeight:700,
+                        <td style={{padding:"6px 8px",fontWeight:600,fontSize:11}}>{it.product?.replace(" Container","").replace(" Tamper Evident","").replace(" Rectangle","")}</td>
+                        <td style={{padding:"6px",textAlign:"center",fontSize:10}}>{(it.good_parts/1000).toFixed(1)}K</td>
+                        <td style={{padding:"6px",textAlign:"center",color:"var(--mut)",fontSize:10}}>{it.total_mh.toFixed(0)}h</td>
+                        <td style={{padding:"6px",textAlign:"center",fontWeight:700,color:zc2(it.zone).c,fontSize:12}}>₹{it.avg_t_hr}</td>
+                        <td style={{padding:"6px",textAlign:"center"}}>
+                          <span style={{padding:"2px 6px",borderRadius:8,fontSize:9,fontWeight:700,
                             background:zc2(it.zone).bg,color:zc2(it.zone).c}}>
-                            {zoneName(it.zone)}
+                            {it.zone==="RED"?"LOSS":it.zone==="N1"?"Floor":it.zone==="N2"?"Happy":"Super"}
                           </span>
                         </td>
                         {f1?(
                           <>
-                            <td style={{padding:"8px",textAlign:"center",fontSize:11,fontWeight:700,color:"#b71c1c",background:"#fff5f5"}}>₹{f1.m1floor}</td>
-                            <td style={{padding:"8px",textAlign:"center",fontSize:11,color:"#b71c1c",background:"#fff5f5"}}>₹{f1.m1happy}</td>
+                            <td style={{padding:"6px",textAlign:"center",fontSize:10,fontWeight:700,color:"#b71c1c",background:"#fff5f5"}}>₹{f1.m1floor}</td>
+                            <td style={{padding:"6px",textAlign:"center",fontSize:10,color:"#b71c1c",background:"#fff5f5"}}>₹{f1.m1happy}</td>
                             <td style={{padding:"8px",textAlign:"center",background:"#fff5f5"}}>
-                              <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
-                                <span style={{padding:"2px 8px",borderRadius:10,fontSize:10,fontWeight:700,
-                                  background:zc2(f1.m1zone).bg,color:zc2(f1.m1zone).c}}>
-                                  {zoneName(f1.m1zone)}
-                                </span>
-                                <span style={{fontSize:9,color:"var(--mut)"}}>₹{f1.list_price} list</span>
-                              </div>
+                              <span style={{padding:"2px 8px",borderRadius:10,fontSize:10,fontWeight:700,
+                                background:zc2(f1.m1zone).bg,color:zc2(f1.m1zone).c}}>
+                                {zoneName(f1.m1zone)}
+                              </span>
                             </td>
                             <td style={{padding:0,background:"#f0f0f0",width:6}}/>
-                            <td style={{padding:"8px",textAlign:"center",fontSize:11,fontWeight:700,color:"#1b5e20",background:"#f5fff5"}}>₹{f1.m2floor}</td>
-                            <td style={{padding:"8px",textAlign:"center",fontSize:11,color:"#1b5e20",background:"#f5fff5"}}>₹{f1.m2happy}</td>
-                            <td style={{padding:"8px",textAlign:"center",background:"#f5fff5"}}>
-                              <span style={{padding:"2px 8px",borderRadius:10,fontSize:10,fontWeight:700,
+                            <td style={{padding:"6px",textAlign:"center",fontSize:10,fontWeight:700,color:"#1b5e20",background:"#f5fff5"}}>₹{f1.m2floor}</td>
+                            <td style={{padding:"6px",textAlign:"center",fontSize:10,color:"#1b5e20",background:"#f5fff5"}}>₹{f1.m2happy}</td>
+                            <td style={{padding:"6px",textAlign:"center",background:"#f5fff5"}}>
+                              <span style={{padding:"2px 6px",borderRadius:8,fontSize:9,fontWeight:700,
                                 background:zc2(f1.m2zone).bg,color:zc2(f1.m2zone).c}}>
-                                {zoneName(f1.m2zone)}
+                                {f1.m2zone==="RED"?"LOSS":f1.m2zone==="N1"?"Floor":f1.m2zone==="N2"?"Happy":"Super"}
                               </span>
                             </td>
                           </>
                         ):(
                           <><td colSpan={7} style={{padding:"8px",textAlign:"center",color:"var(--mut)",fontSize:10}}>—</td></>
                         )}
-                        <td style={{padding:"8px",textAlign:"center",fontSize:11,fontWeight:600,
+                        <td style={{padding:"6px",textAlign:"center",fontSize:10,fontWeight:600,
                           color:it.zone==="RED"?"#ef4444":it.zone==="N1"?"#f97316":"#10b981"}}>
-                          {it.zone==="RED"?"🔴 Price fix":it.zone==="N1"?"🟡 Badhao":it.zone==="N2"?"🟨 Push":"🟩 Chalao!"}
+                          {it.zone==="RED"?"🔴 Fix":it.zone==="N1"?"🟡 Badhao":it.zone==="N2"?"🟨 Push":"🟩 Chalao!"}
                         </td>
                       </tr>
                       );
