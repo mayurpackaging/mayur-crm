@@ -1596,6 +1596,13 @@ export default function CRM({ currentUser, onLogout }) {
     );
   };
 
+  // ── Global state — shared across tabs ──
+  const [pxThis, setPxThis] = useState(()=>{
+    try{const s=localStorage.getItem("mayur_px");if(s)return JSON.parse(s);}catch(e){}
+    return {fixed:9800000,elecBill:2452659,salesKg:164297,scu:9660,happy:5000000};
+  });
+  useEffect(()=>{try{localStorage.setItem("mayur_px",JSON.stringify(pxThis));}catch(e){}},[pxThis]);
+
   // ── Global helpers ──
   const normP = (s) => (s||"").toLowerCase().replace(/\s+/g,"").replace(/ml/g,"ml").trim();
   const findPxRow = (mosProduct) => {
@@ -1617,11 +1624,6 @@ export default function CRM({ currentUser, onLogout }) {
 
   const Pricing = () => {
     const [pxModel, setPxModel] = useState("both"); // m1 | m2 | both
-    const [pxThis, setPxThis] = useState(()=>{
-      try{const s=localStorage.getItem("mayur_px");if(s)return JSON.parse(s);}catch(e){}
-      return {fixed:9800000,elecBill:2452659,salesKg:164297,scu:9660,happy:5000000};
-    });
-    useEffect(()=>{try{localStorage.setItem("mayur_px",JSON.stringify(pxThis));}catch(e){}},[pxThis]);
 
     // Machine electricity ₹/hr (actual + 5% buffer)
     const MELEC = {
@@ -2182,7 +2184,7 @@ export default function CRM({ currentUser, onLogout }) {
                       const px = findPxRow(it.product);
                       const f1 = px ? (() => {
                         const HOMO=Number(pxDaana.homo)||146,CP=Number(pxDaana.cp)||146,RAND=Number(pxDaana.random)||152;
-                        const FIXED_TOTAL=9800000,ELEC_BILL=2452659,SALES_KG=164297,SCU=9660,HAPPY_T=5000000;
+                        const FIXED_TOTAL=pxThis.fixed||9800000,ELEC_BILL=pxThis.elecBill||2452659,SALES_KG=pxThis.salesKg||164297,SCU=pxThis.scu||9660,HAPPY_T=pxThis.happy||5000000;
                         const EPK=(ELEC_BILL/SALES_KG)*1.05;
                         const TRUE_FIXED=FIXED_TOTAL-ELEC_BILL;
                         const m1N1=FIXED_TOTAL/SCU, m1N2=(FIXED_TOTAL+HAPPY_T)/SCU;
