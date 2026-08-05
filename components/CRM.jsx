@@ -3009,29 +3009,28 @@ export default function CRM({ currentUser, onLogout }) {
 
                 return (
                   <div>
-                    {/* Current stats */}
-                    <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:8,marginBottom:14}}>
-                      {[
-                        ["List Price","₹"+wiItem.list_price,"#DDEEFF"],
-                        ["Daana/ctn","₹"+Math.round(daana),"#E8F5E9"],
-                        ["Margin/ctn","₹"+Math.round(wiItem.list_price-daana),"#FFF9C4"],
-                        ["MH/ctn",curr.mh+"h","#F3E5F5"],
-                        ["T/hr","₹"+curr.thr,"#FFE0E0"],
-                      ].map(([l,v,bg])=>(
-                        <div key={l} style={{background:bg,borderRadius:8,padding:10,textAlign:"center"}}>
-                          <div style={{fontSize:9,color:"var(--mut)",marginBottom:3}}>{l}</div>
-                          <div style={{fontSize:15,fontWeight:800}}>{v}</div>
-                        </div>
-                      ))}
-                    </div>
-
-                    {/* Current details */}
-                    <div style={{background:"var(--card2)",borderRadius:8,padding:10,marginBottom:14,fontSize:11}}>
-                      <b>Current:</b> Box {wiItem.box_cav} cav × {wiItem.box_cyc}s
-                      {wiItem.lid_cav>0&&` | Lid ${wiItem.lid_cav} cav × ${wiItem.lid_cyc}s`}
-                      {" | Zone: "}<span style={{fontWeight:700,color:({N3:"#10b981",N2:"#f59e0b",N1:"#f97316",RED:"#ef4444"})[curr.zone]}}>
-                        {curr.zone==="N1"?"🟡 Floor":curr.zone==="N2"?"🟨 Happy":curr.zone==="N3"?"🟩 Super Happy":"🔴 LOSS"}
-                      </span>
+                    {/* Current stats — compact summary */}
+                    <div style={{background:"var(--card2)",borderRadius:10,padding:12,marginBottom:12}}>
+                      <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:8}}>
+                        {[
+                          ["List Price","₹"+wiItem.list_price,"#1565C0"],
+                          ["Daana/ctn","₹"+Math.round(daana),"#2E7D32"],
+                          ["Margin/ctn","₹"+Math.round(wiItem.list_price-daana),"#E65100"],
+                          ["MH/ctn",curr.mh+"h","#6A1B9A"],
+                          ["T/hr","₹"+curr.thr,({N3:"#10b981",N2:"#f59e0b",N1:"#f97316",RED:"#ef4444"})[curr.zone]],
+                          ["Zone",curr.zone==="N1"?"Floor":curr.zone==="N2"?"Happy":curr.zone==="N3"?"Super":"LOSS",({N3:"#10b981",N2:"#f59e0b",N1:"#f97316",RED:"#ef4444"})[curr.zone]],
+                        ].map(([l,v,c])=>(
+                          <div key={l} style={{display:"flex",flexDirection:"column",alignItems:"center",
+                            background:"var(--bg)",borderRadius:8,padding:"6px 12px",minWidth:80}}>
+                            <div style={{fontSize:9,color:"var(--mut)"}}>{l}</div>
+                            <div style={{fontSize:14,fontWeight:800,color:c}}>{v}</div>
+                          </div>
+                        ))}
+                      </div>
+                      <div style={{fontSize:11,color:"var(--mut)"}}>
+                        Box {wiItem.box_cav} cav × {wiItem.box_cyc}s
+                        {wiItem.lid_cav>0&&` | Lid ${wiItem.lid_cav} cav × ${wiItem.lid_cyc}s`}
+                      </div>
                     </div>
 
                     {/* Scenarios table — full P&L */}
