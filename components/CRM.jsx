@@ -2094,39 +2094,54 @@ export default function CRM({ currentUser, onLogout }) {
               );
             })()}
 
-            {/* This month vs last month */}
-            {lastData&&(()=>{
-              const lastT = lastData.daily?.reduce((a,d)=>a+(d.avg_t_hr||0),0)||0;
-        const lastAvg = lastData.daily?.length ? lastT/lastData.daily.length : 0;
-              const lastZone = lastAvg<dynN1?"RED":lastAvg<dynN2?"N1":lastAvg<dynN2*1.2?"N2":"N3";
-              const tDiff = curr.avg_t_hr - lastAvg;
-              const mhDiff = curr.total_mh - lastData.total_mh;
+            {/* This month vs last month — Pro Rata */}
+            {lastData&&curr&&(()=>{
+              const currDays = prodData?.daily?.length||1;
+              const lastDays = lastData.daily?.length||1;
+              const lastAvg = lastData.avg_t_hr||0;
+              const lastT = lastData.total_throughput||lastData.daily?.reduce((a,d)=>a+(d.total_throughput||0),0)||0;
+              const lastMH = lastData.total_mh||0;
+              // Pro rata: scale last month to same days as current month
+              const proMH = Math.round(lastMH/lastDays*currDays);
+              const proT = Math.round(lastT/lastDays*currDays);
               return (
                 <div className="card" style={{marginBottom:14}}>
-                  <div style={{fontWeight:700,fontSize:13,marginBottom:12}}>📊 Is Mahine vs Pichla Mahina</div>
-                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10}}>
-                    {[
-                      ["Total MH", Math.round(curr.total_mh)+"h", Math.round(lastData.total_mh)+"h", mhDiff],
-                      ["Avg T/hr", "₹"+Math.round(curr.avg_t_hr), "₹"+Math.round(lastAvg), tDiff],
-                      ["Throughput", "₹"+(curr.total_t/1e5).toFixed(1)+"L", lastData.daily?.length?"₹"+(lastData.daily.reduce((a,d)=>a+(d.total_throughput||0),0)/1e5).toFixed(1)+"L":"—", curr.total_t-(lastData.daily?.reduce((a,d)=>a+(d.total_throughput||0),0)||0)],
-                    ].map(([lbl,curr_v,last_v,diff])=>(
-                      <div key={lbl} style={{background:"var(--card2)",borderRadius:8,padding:12}}>
-                        <div style={{fontSize:10,color:"var(--mut)",marginBottom:6}}>{lbl}</div>
-                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                          <div>
-                            <div style={{fontSize:16,fontWeight:800}}>{curr_v}</div>
-                            <div style={{fontSize:10,color:"var(--mut)"}}>Is mahina</div>
-                          </div>
-                          <div style={{fontSize:18,fontWeight:700,color:diff>0?"#10b981":"#ef4444"}}>
-                            {diff>0?"▲":"▼"}
-                          </div>
-                          <div style={{textAlign:"right"}}>
-                            <div style={{fontSize:14,color:"var(--mut)"}}>{last_v}</div>
-                            <div style={{fontSize:10,color:"var(--mut)"}}>{lastData?.label||"Pichla"}</div>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
+                  <div style={{fontWeight:700,fontSize:13,marginBottom:4}}>📊 Is Mahine vs Pichla Mahina</div>
+                  <div style={{fontSize:10,color:"var(--mut)",marginBottom:12}}>
+                    Is mahina: <b>{currDays} din</b> · {lastData.label||"Jul"}: <b>{lastDays} din</b> · Pro Rata = {lastDays} din data ko {currDays} din pe scale kiya
+                  </div>
+                  <div style={{overflowX:"auto"}}>
+                    <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+                      <thead>
+                        <tr style={{background:"var(--card2)"}}>
+                          <th style={{padding:"8px 10px",fontSize:10,color:"var(--mut)",textAlign:"left"}}></th>
+                          <th style={{padding:"8px 10px",fontSize:10,color:"var(--mut)",textAlign:"center"}}>Is Mahina<br/><span style={{fontWeight:400}}>({currDays} din)</span></th>
+                          <th style={{padding:"8px 10px",fontSize:10,color:"var(--mut)",textAlign:"center"}}>{lastData.label||"Jul"}<br/><span style={{fontWeight:400}}>({lastDays} din, poora)</span></th>
+                          <th style={{padding:"8px 10px",fontSize:10,color:"#7B5800",textAlign:"center",background:"#FFF9C4"}}>Pro Rata<br/><span style={{fontWeight:400}}>({lastDays} din → {currDays} din)</span></th>
+                          <th style={{padding:"8px 10px",fontSize:10,color:"var(--mut)",textAlign:"center"}}>Fark<br/><span style={{fontWeight:400}}>(vs Pro Rata)</span></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {[
+                          {lbl:"Total MH", curr:Math.round(curr.total_mh)+"h", last:Math.round(lastMH)+"h", pro:proMH+"h", diff:curr.total_mh-proMH, isRs:false},
+                          {lbl:"Avg T/hr", curr:"₹"+Math.round(curr.avg_t_hr), last:"₹"+Math.round(lastAvg), pro:"₹"+Math.round(lastAvg), diff:curr.avg_t_hr-lastAvg, isRs:true},
+                          {lbl:"Throughput", curr:"₹"+(curr.total_t/1e5).toFixed(1)+"L", last:"₹"+(lastT/1e5).toFixed(1)+"L", pro:"₹"+(proT/1e5).toFixed(1)+"L", diff:curr.total_t-proT, isRs:true},
+                        ].map((r,i)=>(
+                          <tr key={i} style={{borderBottom:"1px solid var(--bdr)"}}>
+                            <td style={{padding:"10px",fontWeight:600}}>{r.lbl}</td>
+                            <td style={{padding:"10px",textAlign:"center",fontWeight:700,fontSize:14}}>{r.curr}</td>
+                            <td style={{padding:"10px",textAlign:"center",color:"var(--mut)"}}>{r.last}</td>
+                            <td style={{padding:"10px",textAlign:"center",background:"#FFF9C4",fontWeight:700,color:"#7B5800"}}>{r.pro}</td>
+                            <td style={{padding:"10px",textAlign:"center"}}>
+                              <div style={{fontWeight:800,fontSize:13,color:r.diff>0?"#10b981":r.diff<0?"#ef4444":"var(--mut)"}}>
+                                {r.diff>0?"▲":r.diff<0?"▼":"="} {r.isRs?"₹"+Math.abs(Math.round(r.diff)):Math.abs(Math.round(r.diff))+"h"}
+                              </div>
+                              <div style={{fontSize:9,color:"var(--mut)"}}>{r.diff>0?"Better":"Kam"}</div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
                 </div>
               );
