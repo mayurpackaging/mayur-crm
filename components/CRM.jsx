@@ -1603,19 +1603,21 @@ export default function CRM({ currentUser, onLogout }) {
 
   // ── Global helpers ──
   const normP = (s) => (s||"").toLowerCase().replace(/\s+/g,"").replace(/ml/g,"ml").trim();
-  const findPxRow = (mosProduct) => {
-    if(!mosProduct||!pxRows.length) return null;
+  const findPxRow = (mosProduct, priceItemName) => {
+    if(!pxRows.length) return null;
+    // Try price_item_name first (most reliable)
+    if(priceItemName) {
+      const f0 = pxRows.find(r=>r.item_name===priceItemName||normP(r.item_name)===normP(priceItemName));
+      if(f0) return f0;
+    }
+    if(!mosProduct) return null;
     const np = normP(mosProduct);
-    // Try exact crm_product_name match first
     let found = pxRows.find(r=>r.crm_product_name&&normP(r.crm_product_name)===np);
     if(found) return found;
-    // Try item_name match
     found = pxRows.find(r=>normP(r.item_name)===np);
     if(found) return found;
-    // Try partial match — MOS product contains CRM name
     found = pxRows.find(r=>r.crm_product_name&&np.includes(normP(r.crm_product_name))&&normP(r.crm_product_name).length>8);
     if(found) return found;
-    // Try CRM contains MOS
     found = pxRows.find(r=>r.crm_product_name&&normP(r.crm_product_name).includes(np)&&np.length>8);
     return found||null;
   };
@@ -1970,7 +1972,8 @@ export default function CRM({ currentUser, onLogout }) {
       prodData.daily.forEach(day => {
         (day.items||[]).forEach(it => {
           if(!map[it.product]) map[it.product] = {
-            product:it.product, total_t:0, total_mh:0, good_parts:0,
+            product:it.product, price_item_name:it.price_item_name,
+            total_t:0, total_mh:0, good_parts:0,
             weighted_thr:0, zone_counts:{N3:0,N2:0,N1:0,RED:0}
           };
           const mh = it.total_mh||0;
@@ -2182,7 +2185,7 @@ export default function CRM({ currentUser, onLogout }) {
                   <tbody>
                     {itemMonthly.map((it,i)=>{
                       // Get floor/happy/super from pxRows
-                      const px = findPxRow(it.product);
+                      const px = findPxRow(it.product, it.price_item_name);
                       const f1 = px ? (() => {
                         const HOMO=Number(pxDaana.homo)||146,CP=Number(pxDaana.cp)||146,RAND=Number(pxDaana.random)||152;
                         const FIXED_TOTAL=pxThis.fixed||9800000,ELEC_BILL=pxThis.elecBill||2452659,SALES_KG=pxThis.salesKg||164297,SCU=pxThis.scu||9660,HAPPY_T=pxThis.happy||5000000;
@@ -2628,7 +2631,7 @@ export default function CRM({ currentUser, onLogout }) {
                         </thead>
                         <tbody>
                           {(day.items||[]).sort((a,b)=>b.t_hr-a.t_hr).map((it,i)=>{
-                            const pxR=findPxRow(it.product);
+                            const pxR=findPxRow(it.product, it.price_item_name);
                             const pcs=pxR?.pcs_per_carton||500;
                             const ctns=it.good_parts/pcs;
                             const vsFloor=it.t_hr-it.floor;
@@ -2683,7 +2686,7 @@ export default function CRM({ currentUser, onLogout }) {
                           {(()=>{
                             const grp={};
                             (day.items||[]).forEach(it=>{
-                              const px=findPxRow(it.product);
+                              const px=findPxRow(it.product, it.price_item_name);
                               const pcs=px?.pcs_per_carton||500;
                               if(!grp[it.product]) grp[it.product]={product:it.product,t_hr:it.t_hr,tpc:it.throughput_per_carton||0,ctns:0,mh:0,zone:it.zone};
                               grp[it.product].ctns+=it.good_parts/pcs;
@@ -2722,7 +2725,7 @@ export default function CRM({ currentUser, onLogout }) {
                               +₹{(()=>{
                                 const grp2={};
                                 (day.items||[]).forEach(it=>{
-                                  const px=findPxRow(it.product);
+                                  const px=findPxRow(it.product, it.price_item_name);
                                   const pcs=px?.pcs_per_carton||500;
                                   if(!grp2[it.product]) grp2[it.product]={tpc:it.throughput_per_carton||0,ctns:0,mh:0};
                                   grp2[it.product].ctns+=it.good_parts/pcs;
