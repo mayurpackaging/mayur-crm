@@ -1930,13 +1930,13 @@ export default function CRM({ currentUser, onLogout }) {
 
     const dynN1 = curr ? Math.round(FIXED/curr.total_mh) : N1;
     const dynN2 = curr ? Math.round((FIXED+5000000)/curr.total_mh) : N2;
-    const currZone = curr?.avg_t_hr < actN1 ? "RED" : curr?.avg_t_hr < actN2 ? "N1" : curr?.avg_t_hr < actN3 ? "N2" : "N3";
-
-    // Item-wise monthly aggregation — use MOS t_per_hour directly
-    // dynN1/dynN2 based on actual monthly MH
+    // actN1/actN2/actN3 based on actual monthly MH
     const actN1 = curr?.total_mh>0 ? Math.round(FIXED/curr.total_mh) : 1097;
     const actN2 = curr?.total_mh>0 ? Math.round((FIXED+5000000)/curr.total_mh) : 1615;
     const actN3 = Math.round(actN2*1.20);
+    const currZone = curr?.avg_t_hr < actN1 ? "RED" : curr?.avg_t_hr < actN2 ? "N1" : curr?.avg_t_hr < actN3 ? "N2" : "N3";
+
+    // Item-wise monthly aggregation — use MOS t_per_hour directly
     const itemMonthly = prodData?.daily ? (() => {
       const map = {};
       prodData.daily.forEach(day => {
