@@ -1942,7 +1942,10 @@ export default function CRM({ currentUser, onLogout }) {
       setProdLoad(false);
     };
 
-    useEffect(()=>{ loadProduction(); },[]);
+    useEffect(()=>{
+      loadProduction();
+      if(pxRows.length===0) loadPricing(); // Load pricing data for M1/M2 floor calculation
+    },[]);
 
     // Current month aggregates
     const curr = prodData?.daily ? {
