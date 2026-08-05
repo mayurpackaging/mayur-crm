@@ -3034,14 +3034,25 @@ export default function CRM({ currentUser, onLogout }) {
                       </span>
                     </div>
 
-                    {/* Scenarios table */}
-                    <div style={{fontWeight:600,fontSize:12,marginBottom:8}}>Agar ye change karein — T/hr kya hoga?</div>
-                    <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+                    {/* Scenarios table — full P&L */}
+                    <div style={{fontWeight:600,fontSize:12,marginBottom:8}}>Agar ye change karein — complete P&L kya hoga?</div>
+                    <div style={{overflowX:"auto"}}>
+                    <table style={{width:"100%",borderCollapse:"collapse",fontSize:11,minWidth:700}}>
                       <thead>
-                        <tr style={{background:"var(--card2)"}}>
-                          {["Scenario","Price","Box Cav","Box Cyc","Margin/ctn","T/hr","Zone","Gain vs Now"].map(h=>(
-                            <th key={h} style={{padding:"8px",fontSize:10,color:"var(--mut)",textAlign:"center"}}>{h}</th>
-                          ))}
+                        <tr style={{background:"#0e1a24",color:"#9fb3c0"}}>
+                          <th style={{padding:"8px 10px",textAlign:"left",fontSize:10}}>Scenario</th>
+                          <th style={{padding:"8px",fontSize:10}}>Price</th>
+                          <th style={{padding:"8px",fontSize:10}}>Daana</th>
+                          <th style={{padding:"8px",fontSize:10,color:"#f59e0b"}}>Margin/ctn</th>
+                          <th style={{padding:"8px",fontSize:10}}>MH/ctn</th>
+                          <th style={{padding:"8px",fontSize:10,color:"#ef4444"}}>M1 Floor</th>
+                          <th style={{padding:"8px",fontSize:10,color:"#f59e0b"}}>M1 Happy</th>
+                          <th style={{padding:"8px",fontSize:10,color:"#10b981"}}>M1 Super</th>
+                          <th style={{padding:"8px",fontSize:10,color:"#10b981"}}>T/hr</th>
+                          <th style={{padding:"8px",fontSize:10}}>Zone</th>
+                          <th style={{padding:"8px",fontSize:10}}>vs Floor</th>
+                          <th style={{padding:"8px",fontSize:10}}>vs Happy</th>
+                          <th style={{padding:"8px",fontSize:10}}>Gain/hr</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -3049,35 +3060,52 @@ export default function CRM({ currentUser, onLogout }) {
                           const res=calcThr(s.price,s.bcav,s.bcyc,s.lcav,s.lcyc);
                           const gain=res.thr-curr.thr;
                           const isBase=i===0;
+                          const margin=Math.round(s.price-daana);
+                          // Floor/Happy/Super per carton
+                          const bMH2=(s.bcav>0&&s.bcyc>0)?pcs/((3600/s.bcyc)*s.bcav):0;
+                          const lMH2=(s.lcav>0&&s.lcyc>0)?pcs/((3600/s.lcyc)*s.lcav):0;
+                          const mh2=bMH2+lMH2;
+                          const FIXED_TOTAL=pxThis.fixed||9800000,ELEC_BILL=pxThis.elecBill||2452659,SCU=pxThis.scu||9660,HAPPY_T=pxThis.happy||5000000;
+                          const m1N1=FIXED_TOTAL/SCU, m1N2=(FIXED_TOTAL+HAPPY_T)/SCU, m1N3=m1N2*1.2;
+                          const floorCtn=Math.round(daana+m1N1*mh2);
+                          const happyCtn=Math.round(daana+m1N2*mh2);
+                          const superCtn=Math.round(daana+m1N3*mh2);
+                          const vsFloor=s.price-floorCtn;
+                          const vsHappy=s.price-happyCtn;
+                          const zc2=(z)=>({N3:{c:"#10b981",bg:"rgba(16,185,129,.1)"},N2:{c:"#f59e0b",bg:"rgba(245,158,11,.1)"},N1:{c:"#f97316",bg:"rgba(249,115,22,.1)"},RED:{c:"#ef4444",bg:"rgba(239,68,68,.1)"}}[z]||{c:"#666",bg:"#f5f5f5"});
                           return (
                             <tr key={i} style={{borderBottom:"1px solid var(--bdr)",
-                              background:isBase?"var(--card2)":"transparent"}}>
-                              <td style={{padding:"8px",fontWeight:isBase?700:400}}>
+                              background:isBase?"var(--card2)":vsFloor<0?"rgba(239,68,68,.03)":"transparent"}}>
+                              <td style={{padding:"8px 10px",fontWeight:isBase?700:400,fontSize:11}}>
                                 <div>{s.label}</div>
                                 <div style={{fontSize:9,color:"var(--mut)"}}>{s.note}</div>
                               </td>
-                              <td style={{padding:"8px",textAlign:"center",
-                                color:s.price>wiItem.list_price?"#10b981":"inherit",fontWeight:s.price>wiItem.list_price?700:400}}>
+                              <td style={{padding:"8px",textAlign:"center",fontWeight:700,
+                                color:s.price>wiItem.list_price?"#10b981":s.price<wiItem.list_price?"#ef4444":"inherit"}}>
                                 ₹{s.price}
                               </td>
-                              <td style={{padding:"8px",textAlign:"center",
-                                color:s.bcav>wiItem.box_cav?"#10b981":"inherit",fontWeight:s.bcav>wiItem.box_cav?700:400}}>
-                                {s.bcav}
-                              </td>
-                              <td style={{padding:"8px",textAlign:"center",
-                                color:s.bcyc<wiItem.box_cyc?"#10b981":"inherit",fontWeight:s.bcyc<wiItem.box_cyc?700:400}}>
-                                {s.bcyc}s
-                              </td>
-                              <td style={{padding:"8px",textAlign:"center"}}>₹{Math.round(s.price-daana)}</td>
-                              <td style={{padding:"8px",textAlign:"center",fontWeight:700,fontSize:13,
-                                color:({N3:"#10b981",N2:"#f59e0b",N1:"#f97316",RED:"#ef4444"})[res.zone]}}>
-                                ₹{res.thr}
-                              </td>
+                              <td style={{padding:"8px",textAlign:"center",color:"var(--mut)"}}>₹{Math.round(daana)}</td>
+                              <td style={{padding:"8px",textAlign:"center",fontWeight:700,
+                                color:margin>0?"#10b981":"#ef4444"}}>₹{margin}</td>
+                              <td style={{padding:"8px",textAlign:"center",color:"var(--mut)",fontSize:10}}>{mh2.toFixed(3)}h</td>
+                              <td style={{padding:"8px",textAlign:"center",fontSize:10,color:"#ef4444"}}>₹{floorCtn}</td>
+                              <td style={{padding:"8px",textAlign:"center",fontSize:10,color:"#f59e0b"}}>₹{happyCtn}</td>
+                              <td style={{padding:"8px",textAlign:"center",fontSize:10,color:"#10b981"}}>₹{superCtn}</td>
+                              <td style={{padding:"8px",textAlign:"center",fontWeight:800,fontSize:13,
+                                color:zc2(res.zone).c}}>₹{res.thr}</td>
                               <td style={{padding:"8px",textAlign:"center"}}>
-                                <span style={{padding:"2px 8px",borderRadius:8,fontSize:10,fontWeight:700,
-                                  background:zc(res.zone).bg,color:zc(res.zone).c}}>
-                                  {res.zone==="RED"?"🔴 LOSS":res.zone==="N1"?"🟡 Floor":res.zone==="N2"?"🟨 Happy":"🟩 Super Happy"}
+                                <span style={{padding:"2px 6px",borderRadius:6,fontSize:9,fontWeight:700,
+                                  background:zc2(res.zone).bg,color:zc2(res.zone).c}}>
+                                  {res.zone==="RED"?"LOSS":res.zone==="N1"?"Floor":res.zone==="N2"?"Happy":"Super"}
                                 </span>
+                              </td>
+                              <td style={{padding:"8px",textAlign:"center",fontWeight:700,fontSize:11,
+                                color:vsFloor>=0?"#10b981":"#ef4444"}}>
+                                {vsFloor>=0?"+":""}{vsFloor>=0?"₹"+vsFloor:"−₹"+Math.abs(vsFloor)}
+                              </td>
+                              <td style={{padding:"8px",textAlign:"center",fontWeight:700,fontSize:11,
+                                color:vsHappy>=0?"#10b981":"#ef4444"}}>
+                                {vsHappy>=0?"+":""}{vsHappy>=0?"₹"+vsHappy:"−₹"+Math.abs(vsHappy)}
                               </td>
                               <td style={{padding:"8px",textAlign:"center",fontWeight:700,
                                 color:gain>0?"#10b981":gain<0?"#ef4444":"var(--mut)"}}>
@@ -3088,6 +3116,7 @@ export default function CRM({ currentUser, onLogout }) {
                         })}
                       </tbody>
                     </table>
+                    </div>
                   </div>
                 );
               })()}
