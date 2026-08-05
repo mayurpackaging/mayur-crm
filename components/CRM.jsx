@@ -1920,7 +1920,7 @@ export default function CRM({ currentUser, onLogout }) {
     const [lastData, setLastData] = useState(null); // last month
 
     const N1=1097, N2=1615, N3=1938;
-    const FIXED=9800000;
+    const FIXED=pxThis.fixed||9800000;
     const TARGET_MH = 345 * 30; // 15 machines × 23h × 30 days = 10,350h/month
 
     const zc2=(z)=>({
@@ -2410,7 +2410,7 @@ export default function CRM({ currentUser, onLogout }) {
 
     const HOMO=Number(pxDaana.homo)||146, CP=Number(pxDaana.cp)||146, RAND=Number(pxDaana.random)||152;
     const MB_B=180, MB_M=225, POLY=225, TAPE=10;
-    const FIXED=9800000, ELEC_BILL=2452659, KG=164297, SCU=9660, HAPPY=5000000;
+    const FIXED=pxThis.fixed||9800000, ELEC_BILL=pxThis.elecBill||2452659, KG=pxThis.salesKg||164297, SCU=pxThis.scu||9660, HAPPY=pxThis.happy||5000000;
     const TRUE_FIXED=FIXED-ELEC_BILL;
     const EPK=(ELEC_BILL/KG)*1.05;
 
@@ -2522,7 +2522,7 @@ export default function CRM({ currentUser, onLogout }) {
                 <div style={{fontWeight:800,color:"#1b5e20",marginBottom:10,fontSize:13}}>🟢 MODEL 2 — Variable Electricity</div>
                 <div style={{fontSize:12,lineHeight:1.8,color:"var(--txt)"}}>
                   <div style={{background:"#f5fff5",padding:10,borderRadius:8,fontFamily:"monospace",fontSize:11,marginBottom:8}}>
-                    Floor = VarCosts + Elec(₹/kg×kg) + (True Fixed ÷ 9660) × MH
+                    Floor = VarCosts + Elec(Rs/kg x kg) + (True Fixed / SCU) x MH
                   </div>
                   <div>✅ <b>Electricity alag</b> — weight se proportional</div>
                   <div>✅ Bhaari item = zyada electricity cost</div>
