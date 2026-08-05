@@ -2159,9 +2159,21 @@ export default function CRM({ currentUser, onLogout }) {
                 <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
                   <thead>
                     <tr style={{background:"var(--card2)"}}>
-                      {["Product","Pieces","MH","T/hr","T/hr Zone","Floor ₹","Happy ₹","Super ₹","Price Zone","Action"].map(h=>(
-                        <th key={h} style={{padding:"8px 8px",fontSize:10,color:"var(--mut)",textAlign:h==="Product"?"left":"center"}}>{h}</th>
-                      ))}
+                      <tr style={{background:"var(--card2)"}}>
+                        <th style={{padding:"8px 10px",fontSize:10,color:"var(--mut)",textAlign:"left"}}>Product</th>
+                        <th style={{padding:"8px 8px",fontSize:10,color:"var(--mut)"}}>Pieces</th>
+                        <th style={{padding:"8px 8px",fontSize:10,color:"var(--mut)"}}>MH</th>
+                        <th style={{padding:"8px 8px",fontSize:10,color:"var(--mut)"}}>T/hr</th>
+                        <th style={{padding:"8px 8px",fontSize:10,color:"var(--mut)"}}>T/hr Zone</th>
+                        <th style={{padding:"8px 8px",fontSize:10,color:"#b71c1c",background:"#fff5f5"}}>M1 Floor</th>
+                        <th style={{padding:"8px 8px",fontSize:10,color:"#b71c1c",background:"#fff5f5"}}>M1 Happy</th>
+                        <th style={{padding:"8px 8px",fontSize:10,color:"#b71c1c",background:"#fff5f5"}}>M1 Zone</th>
+                        <th style={{padding:"8px 4px",background:"#f0f0f0",width:6}}/>
+                        <th style={{padding:"8px 8px",fontSize:10,color:"#1b5e20",background:"#f5fff5"}}>M2 Floor</th>
+                        <th style={{padding:"8px 8px",fontSize:10,color:"#1b5e20",background:"#f5fff5"}}>M2 Happy</th>
+                        <th style={{padding:"8px 8px",fontSize:10,color:"#1b5e20",background:"#f5fff5"}}>M2 Zone</th>
+                        <th style={{padding:"8px 8px",fontSize:10,color:"var(--mut)"}}>Action</th>
+                      </tr>
                     </tr>
                   </thead>
                   <tbody>
@@ -2170,18 +2182,31 @@ export default function CRM({ currentUser, onLogout }) {
                       const px = findPxRow(it.product);
                       const f1 = px ? (() => {
                         const HOMO=Number(pxDaana.homo)||146,CP=Number(pxDaana.cp)||146,RAND=Number(pxDaana.random)||152;
+                        const FIXED_TOTAL=9800000,ELEC_BILL=2452659,SALES_KG=164297,SCU=9660,HAPPY_T=5000000;
+                        const EPK=(ELEC_BILL/SALES_KG)*1.05;
+                        const TRUE_FIXED=FIXED_TOTAL-ELEC_BILL;
+                        const m1N1=FIXED_TOTAL/SCU, m1N2=(FIXED_TOTAL+HAPPY_T)/SCU;
+                        const m2N1=TRUE_FIXED/SCU, m2N2=(TRUE_FIXED+HAPPY_T)/SCU;
                         const pcs=px.pcs_per_carton||500;
                         const daana=((px.box_homo||0)*HOMO+(px.box_cp||0)*CP+(px.box_random||0)*RAND+(px.lid_homo||0)*HOMO+(px.lid_cp||0)*CP+(px.lid_random||0)*RAND)/1000*pcs;
                         const bMH=(px.box_cav>0&&px.box_cyc>0)?pcs/((3600/px.box_cyc)*px.box_cav):0;
                         const lMH=(px.lid_cav>0&&px.lid_cyc>0)?pcs/((3600/px.lid_cyc)*px.lid_cav):0;
                         const mh=bMH+lMH;
+                        const kg=((px.box_wt||0)+(px.lid_wt||0))*pcs/1000;
                         if(!mh) return null;
-                        const floor=daana+1097*mh;
-                        const happy=daana+1615*mh;
-                        const super_=daana+1938*mh;
+                        // Model 1 — Total Fixed
+                        const m1floor=Math.round(daana+m1N1*mh);
+                        const m1happy=Math.round(daana+m1N2*mh);
+                        // Model 2 — True Fixed + Electricity
+                        const m2floor=Math.round(daana+(EPK*kg)+m2N1*mh);
+                        const m2happy=Math.round(daana+(EPK*kg)+m2N2*mh);
                         const lp=px.list_price||0;
-                        const pzone=lp<floor?"RED":lp<happy?"N1":lp<super_?"N2":"N3";
-                        return {floor:Math.round(floor),happy:Math.round(happy),super_:Math.round(super_),pzone,list_price:lp};
+                        const gz=(p,f,h)=>p<f?"RED":p<h?"N1":p<h*1.2?"N2":"N3";
+                        return {
+                          m1floor,m1happy,m1zone:gz(lp,m1floor,m1happy),
+                          m2floor,m2happy,m2zone:gz(lp,m2floor,m2happy),
+                          list_price:lp
+                        };
                       })() : null;
                       return (
                       <tr key={i} style={{borderBottom:"1px solid var(--bdr)",
@@ -2200,21 +2225,29 @@ export default function CRM({ currentUser, onLogout }) {
                         </td>
                         {f1?(
                           <>
-                            <td style={{padding:"8px",textAlign:"center",fontSize:11,color:"#f97316",fontWeight:600}}>₹{f1.floor}</td>
-                            <td style={{padding:"8px",textAlign:"center",fontSize:11,color:"#f59e0b",fontWeight:600}}>₹{f1.happy}</td>
-                            <td style={{padding:"8px",textAlign:"center",fontSize:11,color:"#10b981",fontWeight:600}}>₹{f1.super_}</td>
-                            <td style={{padding:"8px",textAlign:"center"}}>
+                            <td style={{padding:"8px",textAlign:"center",fontSize:11,fontWeight:700,color:"#b71c1c",background:"#fff5f5"}}>₹{f1.m1floor}</td>
+                            <td style={{padding:"8px",textAlign:"center",fontSize:11,color:"#b71c1c",background:"#fff5f5"}}>₹{f1.m1happy}</td>
+                            <td style={{padding:"8px",textAlign:"center",background:"#fff5f5"}}>
                               <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
                                 <span style={{padding:"2px 8px",borderRadius:10,fontSize:10,fontWeight:700,
-                                  background:zc2(f1.pzone).bg,color:zc2(f1.pzone).c}}>
-                                  {zoneName(f1.pzone)}
+                                  background:zc2(f1.m1zone).bg,color:zc2(f1.m1zone).c}}>
+                                  {zoneName(f1.m1zone)}
                                 </span>
                                 <span style={{fontSize:9,color:"var(--mut)"}}>₹{f1.list_price} list</span>
                               </div>
                             </td>
+                            <td style={{padding:0,background:"#f0f0f0",width:6}}/>
+                            <td style={{padding:"8px",textAlign:"center",fontSize:11,fontWeight:700,color:"#1b5e20",background:"#f5fff5"}}>₹{f1.m2floor}</td>
+                            <td style={{padding:"8px",textAlign:"center",fontSize:11,color:"#1b5e20",background:"#f5fff5"}}>₹{f1.m2happy}</td>
+                            <td style={{padding:"8px",textAlign:"center",background:"#f5fff5"}}>
+                              <span style={{padding:"2px 8px",borderRadius:10,fontSize:10,fontWeight:700,
+                                background:zc2(f1.m2zone).bg,color:zc2(f1.m2zone).c}}>
+                                {zoneName(f1.m2zone)}
+                              </span>
+                            </td>
                           </>
                         ):(
-                          <><td colSpan={4} style={{padding:"8px",textAlign:"center",color:"var(--mut)",fontSize:10}}>—</td></>
+                          <><td colSpan={7} style={{padding:"8px",textAlign:"center",color:"var(--mut)",fontSize:10}}>—</td></>
                         )}
                         <td style={{padding:"8px",textAlign:"center",fontSize:11,fontWeight:600,
                           color:it.zone==="RED"?"#ef4444":it.zone==="N1"?"#f97316":"#10b981"}}>
