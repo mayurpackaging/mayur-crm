@@ -1946,7 +1946,10 @@ export default function CRM({ currentUser, onLogout }) {
 
     useEffect(()=>{
       loadProduction();
-      if(pxRows.length===0) loadPricing(); // Load pricing data for M1/M2 floor calculation
+      if(pxRows.length===0) loadPricing();
+      // Retry pricing load after 2s if still empty
+      const t = setTimeout(()=>{ if(pxRows.length===0) loadPricing(); }, 2000);
+      return ()=>clearTimeout(t);
     },[]);
 
     // Current month aggregates
@@ -1966,8 +1969,8 @@ export default function CRM({ currentUser, onLogout }) {
     const actN3 = 1938;
     const currZone = curr?.avg_t_hr < actN1 ? "RED" : curr?.avg_t_hr < actN2 ? "N1" : curr?.avg_t_hr < actN3 ? "N2" : "N3";
 
-    // Item-wise monthly aggregation — use MOS t_per_hour directly
-    const itemMonthly = prodData?.daily ? (() => {
+    // Item-wise monthly aggregation — recalculates when pxRows loads
+    const itemMonthly = useMemo(()=>{ if(!prodData?.daily) return []; return (()=>{
       const map = {};
       prodData.daily.forEach(day => {
         (day.items||[]).forEach(it => {
@@ -1997,7 +2000,7 @@ export default function CRM({ currentUser, onLogout }) {
           it.weighted_thr/it.total_mh<actN3?"N2":"N3"
         ) : "RED"
       })).sort((a,b)=>b.avg_t_hr-a.avg_t_hr);
-    })() : [];
+    })();}, [prodData, pxRows, pxDaana, pxThis]);
 
     return (
       <div>
@@ -2158,7 +2161,7 @@ export default function CRM({ currentUser, onLogout }) {
               <div style={{padding:"12px 16px",fontWeight:700,fontSize:13,borderBottom:"1px solid var(--bdr)"}}>
                 Item-wise Monthly Performance (Last 30 Days)
                 <span style={{fontSize:10,color:"var(--mut)",marginLeft:8,fontWeight:400}}>
-                  Monthly avg T/hr — daily fluctuation smooth ho jaata hai
+                  Monthly avg T/hr · {pxRows.length>0?`M1/M2 floor calculated (${pxRows.length} items)`:"Loading pricing..."}
                 </span>
               </div>
               <div style={{overflowX:"auto"}}>
