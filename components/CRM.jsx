@@ -1889,17 +1889,18 @@ export default function CRM({ currentUser, onLogout }) {
 
     const zoneName=(z)=>z==="RED"?"🔴 LOSS":z==="N1"?"🟡 Floor":z==="N2"?"🟨 Happy":"🟩 Super Happy";
 
+    const [utilRaw, setUtilRaw] = useState(null); // Raw utilization from production table
+
     const loadProduction = async() => {
       setProdLoad(true);
       try {
-        // Current month — last 30 days
+        // Throughput data (from view)
         const r1 = await fetch("https://mayur-mos.vercel.app/api/throughput?days=30");
         const d1 = await r1.json();
         setProdData(d1);
-        // Last month — days 31-60
+        // Last month throughput
         const r2 = await fetch("https://mayur-mos.vercel.app/api/throughput?days=60");
         const d2 = await r2.json();
-        // Filter to days 31-60 only
         if(d2?.daily) {
           const last30 = d2.daily.slice(30);
           setLastData({
@@ -1909,6 +1910,10 @@ export default function CRM({ currentUser, onLogout }) {
             avg_t_hr: last30.length ? last30.reduce((a,d)=>a+d.avg_t_hr,0)/last30.length : 0,
           });
         }
+        // Raw utilization (direct from production table — accurate)
+        const r3 = await fetch("https://mayur-mos.vercel.app/api/utilization?days=30");
+        const d3 = await r3.json();
+        if(d3?.summary) setUtilRaw(d3);
       } catch(e) { }
       setProdLoad(false);
     };
@@ -1982,8 +1987,8 @@ export default function CRM({ currentUser, onLogout }) {
             {/* Monthly KPI cards */}
             <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10,marginBottom:14}}>
               {[
-                ["Total MH (30d)", Math.round(curr.total_mh)+"h", TARGET_MH+"h target", curr.total_mh/TARGET_MH>=0.85?"#E8F5E9":"#FFF3E0", curr.total_mh/TARGET_MH>=0.85?"#1B5E20":"#E65100"],
-                ["Utilization", Math.round(curr.total_mh/TARGET_MH*100)+"%", curr.days+" days data", curr.total_mh/TARGET_MH>=0.85?"#E8F5E9":"#FFF3E0", curr.total_mh/TARGET_MH>=0.85?"#1B5E20":"#E65100"],
+                ["Total MH (30d)", (utilRaw?.summary?.total_mh||Math.round(curr.total_mh))+"h", TARGET_MH+"h target", (utilRaw?.summary?.avg_util_pct||curr.total_mh/TARGET_MH*100)>=85?"#E8F5E9":"#FFF3E0", (utilRaw?.summary?.avg_util_pct||0)>=85?"#1B5E20":"#E65100"],
+                ["Utilization", (utilRaw?.summary?.avg_util_pct||Math.round(curr.total_mh/TARGET_MH*100))+"%", (utilRaw?.summary?.days||curr.days)+" days · raw data", (utilRaw?.summary?.avg_util_pct||0)>=85?"#E8F5E9":"#FFF3E0", (utilRaw?.summary?.avg_util_pct||0)>=85?"#1B5E20":"#E65100"],
                 ["Avg T/hr", "₹"+Math.round(curr.avg_t_hr), zoneName(currZone), zc2(currZone).bg, zc2(currZone).c],
                 ["Monthly Throughput", "₹"+(curr.total_t/1e5).toFixed(1)+"L", "Price − Daana", "#E3F2FD","#1565C0"],
               ].map(([lbl,val,sub,bg,c])=>(
@@ -2108,11 +2113,25 @@ export default function CRM({ currentUser, onLogout }) {
             {/* Daily trend — simplified, just MH */}
             <div className="card" style={{marginTop:14,padding:0}}>
               <div style={{padding:"12px 16px",fontWeight:700,fontSize:13,borderBottom:"1px solid var(--bdr)"}}>
-                Daily MH Trend
+                Daily Machine Hours (Raw — Production Table se)
                 <span style={{fontSize:10,color:"var(--mut)",marginLeft:8,fontWeight:400}}>
-                  T/hr daily unreliable (WIP) — sirf MH dekho
+                  Actual machine running hours · Target 345h/day (15×23h)
                 </span>
               </div>
+              {utilRaw?.weekly&&(
+                <div style={{padding:"10px 16px",borderBottom:"1px solid var(--bdr)",display:"flex",gap:8,flexWrap:"wrap"}}>
+                  {utilRaw.weekly.map((w,i)=>(
+                    <div key={i} style={{padding:"6px 12px",borderRadius:8,fontSize:11,
+                      background:w.util_pct>=90?"rgba(16,185,129,.1)":w.util_pct>=75?"rgba(245,158,11,.1)":"rgba(239,68,68,.1)",
+                      border:`1px solid ${w.util_pct>=90?"#10b981":w.util_pct>=75?"#f59e0b":"#ef4444"}`}}>
+                      <span style={{fontWeight:700}}>{w.week.slice(5)}</span>
+                      <span style={{color:"var(--mut)",margin:"0 4px"}}>week:</span>
+                      <span style={{fontWeight:700}}>{w.util_pct}%</span>
+                      <span style={{color:"var(--mut)",fontSize:10,marginLeft:4}}>({w.avg_mh}h/day)</span>
+                    </div>
+                  ))}
+                </div>
+              )}
               <div style={{overflowX:"auto"}}>
                 <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
                   <thead>
@@ -2123,8 +2142,9 @@ export default function CRM({ currentUser, onLogout }) {
                     </tr>
                   </thead>
                   <tbody>
-                    {[...(prodData?.daily||[])].sort((a,b)=>b.date.localeCompare(a.date)).map((d,i)=>{
-                      const mh=Math.round(d.total_mh*10)/10;
+                    {/* Use raw utilization data if available, else fall back to view data */}
+                    {[...(utilRaw?.daily||prodData?.daily||[])].sort((a,b)=>b.date.localeCompare(a.date)).map((d,i)=>{
+                      const mh=Math.round((d.raw_mh||d.total_mh||0)*10)/10;
                       const util=Math.round(mh/345*100);
                       const gap=Math.round(345-mh);
                       const dayName=new Date(d.date).toLocaleDateString("en-IN",{weekday:"short"});
