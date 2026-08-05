@@ -1976,6 +1976,8 @@ export default function CRM({ currentUser, onLogout }) {
         (day.items||[]).forEach(it => {
           if(!map[it.product]) map[it.product] = {
             product:it.product, price_item_name:it.price_item_name,
+            floor_price:it.floor, happy_price:it.happy,
+            list_price:it.list_price||0, daana_cost:it.daana_cost||0,
             total_t:0, total_mh:0, good_parts:0,
             weighted_thr:0, zone_counts:{N3:0,N2:0,N1:0,RED:0}
           };
@@ -2188,35 +2190,39 @@ export default function CRM({ currentUser, onLogout }) {
                   <tbody>
                     {itemMonthly.map((it,i)=>{
                       // Get floor/happy/super from pxRows
+                      // Use MOS floor/happy directly (always available)
+                      // If pxRows loaded, recalculate with current daana+fixed
                       const px = findPxRow(it.product, it.price_item_name);
-                      const f1 = px ? (() => {
-                        const HOMO=Number(pxDaana.homo)||146,CP=Number(pxDaana.cp)||146,RAND=Number(pxDaana.random)||152;
-                        const FIXED_TOTAL=pxThis.fixed||9800000,ELEC_BILL=pxThis.elecBill||2452659,SALES_KG=pxThis.salesKg||164297,SCU=pxThis.scu||9660,HAPPY_T=pxThis.happy||5000000;
-                        const EPK=(ELEC_BILL/SALES_KG)*1.05;
-                        const TRUE_FIXED=FIXED_TOTAL-ELEC_BILL;
-                        const m1N1=FIXED_TOTAL/SCU, m1N2=(FIXED_TOTAL+HAPPY_T)/SCU;
-                        const m2N1=TRUE_FIXED/SCU, m2N2=(TRUE_FIXED+HAPPY_T)/SCU;
-                        const pcs=px.pcs_per_carton||500;
-                        const daana=((px.box_homo||0)*HOMO+(px.box_cp||0)*CP+(px.box_random||0)*RAND+(px.lid_homo||0)*HOMO+(px.lid_cp||0)*CP+(px.lid_random||0)*RAND)/1000*pcs;
-                        const bMH=(px.box_cav>0&&px.box_cyc>0)?pcs/((3600/px.box_cyc)*px.box_cav):0;
-                        const lMH=(px.lid_cav>0&&px.lid_cyc>0)?pcs/((3600/px.lid_cyc)*px.lid_cav):0;
-                        const mh=bMH+lMH;
-                        const kg=((px.box_wt||0)+(px.lid_wt||0))*pcs/1000;
-                        if(!mh) return null;
-                        // Model 1 — Total Fixed
-                        const m1floor=Math.round(daana+m1N1*mh);
-                        const m1happy=Math.round(daana+m1N2*mh);
-                        // Model 2 — True Fixed + Electricity
-                        const m2floor=Math.round(daana+(EPK*kg)+m2N1*mh);
-                        const m2happy=Math.round(daana+(EPK*kg)+m2N2*mh);
-                        const lp=px.list_price||0;
-                        const gz=(p,f,h)=>p<f?"RED":p<h?"N1":p<h*1.2?"N2":"N3";
-                        return {
-                          m1floor,m1happy,m1zone:gz(lp,m1floor,m1happy),
-                          m2floor,m2happy,m2zone:gz(lp,m2floor,m2happy),
-                          list_price:lp
-                        };
-                      })() : null;
+                      const FIXED_TOTAL=pxThis.fixed||9800000,ELEC_BILL=pxThis.elecBill||2452659,SALES_KG=pxThis.salesKg||164297,SCU=pxThis.scu||9660,HAPPY_T=pxThis.happy||5000000;
+                      const EPK=(ELEC_BILL/SALES_KG)*1.05;
+                      const TRUE_FIXED=FIXED_TOTAL-ELEC_BILL;
+                      const m1N1=FIXED_TOTAL/SCU, m1N2=(FIXED_TOTAL+HAPPY_T)/SCU;
+                      const m2N1=TRUE_FIXED/SCU, m2N2=(TRUE_FIXED+HAPPY_T)/SCU;
+                      const lp=it.list_price||px?.list_price||0;
+                      const gz=(p,f,h)=>!p||!f?"N1":p<f?"RED":p<h?"N1":p<h*1.2?"N2":"N3";
+                      const f1 = (() => {
+                        if(px) {
+                          // Full calculation with current daana
+                          const HOMO=Number(pxDaana.homo)||146,CP=Number(pxDaana.cp)||146,RAND=Number(pxDaana.random)||152;
+                          const pcs=px.pcs_per_carton||500;
+                          const daana=((px.box_homo||0)*HOMO+(px.box_cp||0)*CP+(px.box_random||0)*RAND+(px.lid_homo||0)*HOMO+(px.lid_cp||0)*CP+(px.lid_random||0)*RAND)/1000*pcs;
+                          const bMH=(px.box_cav>0&&px.box_cyc>0)?pcs/((3600/px.box_cyc)*px.box_cav):0;
+                          const lMH=(px.lid_cav>0&&px.lid_cyc>0)?pcs/((3600/px.lid_cyc)*px.lid_cav):0;
+                          const mh=bMH+lMH;
+                          const kg=((px.box_wt||0)+(px.lid_wt||0))*pcs/1000;
+                          if(!mh) return null;
+                          const m1floor=Math.round(daana+m1N1*mh);
+                          const m1happy=Math.round(daana+m1N2*mh);
+                          const m2floor=Math.round(daana+(EPK*kg)+m2N1*mh);
+                          const m2happy=Math.round(daana+(EPK*kg)+m2N2*mh);
+                          return {m1floor,m1happy,m1zone:gz(lp,m1floor,m1happy),m2floor,m2happy,m2zone:gz(lp,m2floor,m2happy),list_price:lp};
+                        }
+                        // Fallback: use MOS floor/happy (from mos_item_pricing)
+                        const m1floor=it.floor_price||0;
+                        const m1happy=it.happy_price||0;
+                        if(!m1floor) return null;
+                        return {m1floor,m1happy,m1zone:gz(lp,m1floor,m1happy),m2floor:m1floor,m2happy:m1happy,m2zone:gz(lp,m1floor,m1happy),list_price:lp};
+                      })();
                       return (
                       <tr key={i} style={{borderBottom:"1px solid var(--bdr)",
                         background:it.zone==="RED"?"rgba(239,68,68,.04)":"transparent"}}>
