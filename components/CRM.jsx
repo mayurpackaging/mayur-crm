@@ -1894,42 +1894,50 @@ export default function CRM({ currentUser, onLogout }) {
     const loadProduction = async() => {
       setProdLoad(true);
       try {
-        // Calendar month dates
         const now = new Date();
-        const currMonthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0,10);
-        const lastMonthStart = new Date(now.getFullYear(), now.getMonth()-1, 1).toISOString().slice(0,10);
-        const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0).toISOString().slice(0,10);
+        // Days elapsed this month (1st to today)
+        const daysThisMonth = now.getDate();
+        // Days in last month
+        const lastMonthDays = new Date(now.getFullYear(), now.getMonth(), 0).getDate();
+        // Total days to fetch = this month + last month
+        const totalDays = daysThisMonth + lastMonthDays;
 
-        // Current month throughput (1st to today)
-        const r1 = await fetch(`https://mayur-mos.vercel.app/api/throughput?from=${currMonthStart}`);
+        // Fetch enough data to cover both months
+        const r1 = await fetch(`https://mayur-mos.vercel.app/api/throughput?days=${totalDays}`);
         const d1 = await r1.json();
-        // Fallback to days=30 if from param not supported
-        const r1b = d1?.error ? await fetch("https://mayur-mos.vercel.app/api/throughput?days=30") : null;
-        const data1 = d1?.error ? await r1b.json() : d1;
-        setProdData(data1);
 
-        // Last month throughput
-        const r2 = await fetch(`https://mayur-mos.vercel.app/api/throughput?from=${lastMonthStart}&to=${lastMonthEnd}`);
-        const d2 = await r2.json();
-        // Fallback
-        if(d2?.daily||d2?.error) {
-          const days = d2?.daily||[];
-          setLastData({
-            daily: days,
-            total_mh: days.reduce((a,d)=>a+d.total_mh,0),
-            total_throughput: days.reduce((a,d)=>a+(d.total_throughput||0),0),
-            avg_t_hr: days.length ? days.reduce((a,d)=>a+(d.avg_t_hr||0),0)/days.length : 0,
-            label: lastMonthStart.slice(0,7), // "2026-07"
-          });
+        if(d1?.daily) {
+          // Split by calendar month
+          const currMonth = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+          const lastMonth = `${now.getFullYear()}-${String(now.getMonth()).padStart(2,'0')}`;
+          // Handle January edge case
+          const lastMonthStr = now.getMonth()===0
+            ? `${now.getFullYear()-1}-12`
+            : `${now.getFullYear()}-${String(now.getMonth()).padStart(2,'0')}`;
+
+          const currDays = d1.daily.filter(d=>d.date.startsWith(currMonth));
+          const lastDays = d1.daily.filter(d=>d.date.startsWith(lastMonthStr));
+
+          // Current month data
+          setProdData({...d1, daily: currDays});
+
+          // Last month summary
+          if(lastDays.length>0) {
+            setLastData({
+              daily: lastDays,
+              total_mh: lastDays.reduce((a,d)=>a+d.total_mh,0),
+              total_throughput: lastDays.reduce((a,d)=>a+(d.total_throughput||0),0),
+              avg_t_hr: Math.round(lastDays.reduce((a,d)=>a+(d.avg_t_hr||0),0)/lastDays.length),
+              label: lastMonthStr.slice(0,7),
+              days: lastDays.length,
+            });
+          }
         }
 
-        // Raw utilization current month
-        const r3 = await fetch(`https://mayur-mos.vercel.app/api/utilization?from=${currMonthStart}`);
+        // Raw utilization — last 30 days (close enough for utilization)
+        const r3 = await fetch("https://mayur-mos.vercel.app/api/utilization?days=30");
         const d3 = await r3.json();
-        // Fallback
-        const r3b = d3?.error ? await fetch("https://mayur-mos.vercel.app/api/utilization?days=30") : null;
-        const data3 = d3?.error ? await r3b?.json() : d3;
-        if(data3?.summary) setUtilRaw(data3);
+        if(d3?.summary) setUtilRaw(d3);
       } catch(e) { }
       setProdLoad(false);
     };
@@ -1946,10 +1954,11 @@ export default function CRM({ currentUser, onLogout }) {
 
     const dynN1 = curr ? Math.round(FIXED/curr.total_mh) : N1;
     const dynN2 = curr ? Math.round((FIXED+5000000)/curr.total_mh) : N2;
-    // actN1/actN2/actN3 based on actual monthly MH
-    const actN1 = curr?.total_mh>0 ? Math.round(FIXED/curr.total_mh) : 1097;
-    const actN2 = curr?.total_mh>0 ? Math.round((FIXED+5000000)/curr.total_mh) : 1615;
-    const actN3 = Math.round(actN2*1.20);
+    // actN1/actN2/actN3 — use standard SCU=9660 for pricing
+    // (partial month mein actual MH se N1 distort ho jaata hai)
+    const actN1 = 1097; // Fixed ÷ 9660
+    const actN2 = 1615; // (Fixed+Happy) ÷ 9660
+    const actN3 = 1938;
     const currZone = curr?.avg_t_hr < actN1 ? "RED" : curr?.avg_t_hr < actN2 ? "N1" : curr?.avg_t_hr < actN3 ? "N2" : "N3";
 
     // Item-wise monthly aggregation — use MOS t_per_hour directly
@@ -2020,7 +2029,7 @@ export default function CRM({ currentUser, onLogout }) {
             <div className="card" style={{marginBottom:14}}>
               <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
                 <span style={{fontWeight:700,fontSize:13}}>Monthly Zone — {zoneName(currZone)}</span>
-                <span style={{fontSize:12,color:"var(--mut)"}}>Actual N1=₹{actN1} N2=₹{actN2} N3=₹{actN3} (is mahine ki actual MH se)</span>
+                <span style={{fontSize:12,color:"var(--mut)"}}>N1=₹{actN1} N2=₹{actN2} N3=₹{actN3} (Standard SCU 9660 based)</span>
               </div>
               <div style={{background:"var(--card2)",borderRadius:8,height:20,position:"relative",overflow:"hidden"}}>
                 <div style={{
