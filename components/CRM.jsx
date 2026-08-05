@@ -2025,6 +2025,50 @@ export default function CRM({ currentUser, onLogout }) {
               </div>
             </div>
 
+            {/* Gap to Happy analysis */}
+            {curr&&(()=>{
+              const gap = actN2 - curr.avg_t_hr;
+              const monthlyGap = Math.round(gap * curr.total_mh / 1e5 * 10)/10;
+              const isAbove = gap <= 0;
+              return (
+                <div className="card" style={{
+                  background: isAbove ? "rgba(16,185,129,.08)" : "rgba(245,158,11,.08)",
+                  border: `1px solid ${isAbove?"#10b981":"#f59e0b"}`,
+                  marginBottom:14
+                }}>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10}}>
+                    <div style={{textAlign:"center"}}>
+                      <div style={{fontSize:10,color:"var(--mut)",marginBottom:4}}>Gap to Happy (N2)</div>
+                      <div style={{fontSize:22,fontWeight:800,color:isAbove?"#10b981":"#f59e0b"}}>
+                        {isAbove?"+":"−"}₹{Math.abs(Math.round(gap))}/hr
+                      </div>
+                      <div style={{fontSize:10,color:"var(--mut)"}}>
+                        {isAbove?"N2 se upar ho!":"₹"+Math.round(actN2)+" chahiye, ₹"+Math.round(curr.avg_t_hr)+" aa raha hai"}
+                      </div>
+                    </div>
+                    <div style={{textAlign:"center"}}>
+                      <div style={{fontSize:10,color:"var(--mut)",marginBottom:4}}>Monthly Opportunity</div>
+                      <div style={{fontSize:22,fontWeight:800,color:isAbove?"#10b981":"#ef4444"}}>
+                        {isAbove?"+":"−"}₹{Math.abs(monthlyGap)}L
+                      </div>
+                      <div style={{fontSize:10,color:"var(--mut)"}}>
+                        {isAbove?"Extra profit this month!":"Is mahine itna miss ho raha hai"}
+                      </div>
+                    </div>
+                    <div style={{textAlign:"center"}}>
+                      <div style={{fontSize:10,color:"var(--mut)",marginBottom:4}}>Fix karo</div>
+                      <div style={{fontSize:13,fontWeight:700,color:"#f97316",lineHeight:1.4}}>
+                        {isAbove?"🟩 N2 achieve!" : gap>300?"🔴 RCT band karo":"🟡 Mix shift karo"}
+                      </div>
+                      <div style={{fontSize:10,color:"var(--mut)",marginTop:4}}>
+                        {isAbove?"Target achieve!" : "RCT → SSRE/Containers shift karo"}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
             {/* This month vs last month */}
             {lastData&&(()=>{
               const lastT = lastData.daily?.reduce((a,d)=>a+(d.avg_t_hr||0),0)||0;
