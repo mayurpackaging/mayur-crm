@@ -1976,7 +1976,8 @@ export default function CRM({ currentUser, onLogout }) {
         (day.items||[]).forEach(it => {
           if(!map[it.product]) map[it.product] = {
             product:it.product, price_item_name:it.price_item_name,
-            floor_price:it.floor_price, happy_price:it.happy_price,
+            floor_price:it.floor||it.floor_price||0,
+            happy_price:it.happy||it.happy_price||0,
             list_price:it.list_price||0, daana_cost:it.daana_cost||0,
             total_t:0, total_mh:0, good_parts:0,
             weighted_thr:0, zone_counts:{N3:0,N2:0,N1:0,RED:0}
