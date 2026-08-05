@@ -3175,87 +3175,55 @@ export default function CRM({ currentUser, onLogout }) {
                       </tbody>
                     </table>
                     </div>
-                  </div>
-
+                  
                     {/* Formula explanation */}
                     <div style={{marginTop:12,background:"var(--card2)",borderRadius:10,padding:12}}>
-                      <div style={{fontWeight:700,fontSize:12,marginBottom:10}}>📐 Formula — Kaise Calculate Hua?</div>
+                      <div style={{fontWeight:700,fontSize:12,marginBottom:10}}>Formula — Kaise Calculate Hua?</div>
                       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,fontSize:11}}>
-                        
-                        {/* T/hr formula */}
                         <div style={{background:"var(--bg)",borderRadius:8,padding:10}}>
                           <div style={{fontWeight:700,color:"#10b981",marginBottom:6}}>T/hr (Throughput per Hour)</div>
-                          <div style={{fontFamily:"monospace",fontSize:10,lineHeight:2,color:"var(--txt)"}}>
-                            <div style={{color:"var(--mut)"}}>// Step 1: Machine Hours per carton</div>
-                            <div>Box MH = Pcs ÷ ((3600÷Cycle) × Cavity)</div>
-                            <div>Lid MH = Pcs ÷ ((3600÷Cycle) × Cavity)</div>
+                          <div style={{fontFamily:"monospace",fontSize:10,lineHeight:1.8}}>
+                            <div style={{color:"var(--mut)"}}>Step 1: MH per carton</div>
+                            <div>Box MH = Pcs / ((3600/Cycle) x Cavity)</div>
+                            <div>Lid MH = Pcs / ((3600/Cycle) x Cavity)</div>
                             <div>Total MH = Box MH + Lid MH</div>
-                            <div style={{color:"var(--mut)",marginTop:4}}>// Step 2: Margin per carton</div>
-                            <div>Margin = List Price − Daana Cost</div>
-                            <div style={{color:"var(--mut)",marginTop:4}}>// Step 3: T/hr</div>
-                            <div style={{color:"#10b981",fontWeight:700}}>T/hr = Margin ÷ Total MH</div>
+                            <div style={{color:"var(--mut)",marginTop:4}}>Step 2: T/hr</div>
+                            <div>Margin = List Price - Daana</div>
+                            <div style={{color:"#10b981",fontWeight:700}}>T/hr = Margin / Total MH</div>
                           </div>
-                          <div style={{marginTop:8,padding:8,background:"rgba(16,185,129,.08)",borderRadius:6,fontSize:10}}>
-                            <div style={{color:"var(--mut)"}}>Example (Current):</div>
-                            <div>Box MH = {wiItem.pcs_per_carton||500} ÷ ((3600÷{wiItem.box_cyc})×{wiItem.box_cav}) = {curr.mh}h</div>
-                            <div>Margin = ₹{wiItem.list_price} − ₹{Math.round(daana)} = ₹{Math.round(wiItem.list_price-daana)}</div>
-                            <div style={{color:"#10b981",fontWeight:700}}>T/hr = ₹{Math.round(wiItem.list_price-daana)} ÷ {curr.mh}h = ₹{curr.thr}/hr</div>
+                          <div style={{marginTop:6,padding:6,background:"rgba(16,185,129,.08)",borderRadius:6,fontSize:9}}>
+                            {wiItem&&curr&&<span>MH={curr.mh}h | Margin={Math.round(wiItem.list_price-daana)} | T/hr=<b>{curr.thr}</b>/hr</span>}
                           </div>
                         </div>
-
-                        {/* Floor/Happy formula */}
                         <div style={{background:"var(--bg)",borderRadius:8,padding:10}}>
-                          <div style={{fontWeight:700,color:"#f97316",marginBottom:6}}>Floor / Happy / Super Price</div>
-                          <div style={{fontFamily:"monospace",fontSize:10,lineHeight:2,color:"var(--txt)"}}>
-                            <div style={{color:"var(--mut)"}}>// Fixed thresholds (from Pricing tab)</div>
-                            <div>N1 = Total Fixed ÷ SCU = ₹{Math.round((pxThis.fixed||9800000)/(pxThis.scu||9660))}/hr</div>
-                            <div>N2 = (Fixed+Happy) ÷ SCU = ₹{Math.round(((pxThis.fixed||9800000)+(pxThis.happy||5000000))/(pxThis.scu||9660))}/hr</div>
-                            <div>N3 = N2 × 1.2 = ₹{Math.round(((pxThis.fixed||9800000)+(pxThis.happy||5000000))/(pxThis.scu||9660)*1.2)}/hr</div>
-                            <div style={{color:"var(--mut)",marginTop:4}}>// Floor price per carton</div>
-                            <div style={{color:"#ef4444",fontWeight:700}}>Floor = Daana + N1 × MH/ctn</div>
-                            <div style={{color:"#f59e0b",fontWeight:700}}>Happy = Daana + N2 × MH/ctn</div>
-                            <div style={{color:"#10b981",fontWeight:700}}>Super = Daana + N3 × MH/ctn</div>
+                          <div style={{fontWeight:700,color:"#f97316",marginBottom:6}}>Floor / Happy / Super</div>
+                          <div style={{fontFamily:"monospace",fontSize:10,lineHeight:1.8}}>
+                            <div style={{color:"var(--mut)"}}>N1 = Fixed / SCU = {Math.round((pxThis.fixed||9800000)/(pxThis.scu||9660))}/hr</div>
+                            <div style={{color:"var(--mut)"}}>N2 = (Fixed+Happy) / SCU = {Math.round(((pxThis.fixed||9800000)+(pxThis.happy||5000000))/(pxThis.scu||9660))}/hr</div>
+                            <div style={{color:"#ef4444",fontWeight:700}}>Floor = Daana + N1 x MH</div>
+                            <div style={{color:"#f59e0b",fontWeight:700}}>Happy = Daana + N2 x MH</div>
                           </div>
-                          <div style={{marginTop:8,padding:8,background:"rgba(249,115,22,.08)",borderRadius:6,fontSize:10}}>
-                            <div style={{color:"var(--mut)"}}>Example (Current {wiItem.pcs_per_carton||500} pcs):</div>
-                            <div style={{color:"#ef4444"}}>Floor = ₹{Math.round(daana)} + ₹{Math.round((pxThis.fixed||9800000)/(pxThis.scu||9660))} × {curr.mh}h = ₹{Math.round(daana+((pxThis.fixed||9800000)/(pxThis.scu||9660))*parseFloat(curr.mh))}</div>
-                            <div style={{color:"#f59e0b"}}>Happy = ₹{Math.round(daana)} + ₹{Math.round(((pxThis.fixed||9800000)+(pxThis.happy||5000000))/(pxThis.scu||9660))} × {curr.mh}h = ₹{Math.round(daana+(((pxThis.fixed||9800000)+(pxThis.happy||5000000))/(pxThis.scu||9660))*parseFloat(curr.mh))}</div>
+                          <div style={{marginTop:6,padding:6,background:"rgba(249,115,22,.08)",borderRadius:6,fontSize:9}}>
+                            {wiItem&&curr&&(
+                              <span>Floor={Math.round(daana+((pxThis.fixed||9800000)/(pxThis.scu||9660))*parseFloat(curr.mh))} | Happy={Math.round(daana+(((pxThis.fixed||9800000)+(pxThis.happy||5000000))/(pxThis.scu||9660))*parseFloat(curr.mh))}</span>
+                            )}
                           </div>
                         </div>
-
-                        {/* Gain formula */}
                         <div style={{background:"var(--bg)",borderRadius:8,padding:10}}>
                           <div style={{fontWeight:700,color:"#1565C0",marginBottom:6}}>Gain per Hour</div>
-                          <div style={{fontFamily:"monospace",fontSize:10,lineHeight:2,color:"var(--txt)"}}>
-                            <div style={{color:"var(--mut)"}}>// Simple difference</div>
-                            <div style={{color:"#1565C0",fontWeight:700}}>Gain = New T/hr − Current T/hr</div>
-                            <div style={{color:"var(--mut)",marginTop:4}}>// Monthly impact</div>
-                            <div>Monthly MH ≈ {Math.round((pxThis.scu||9660)/15)} hrs/machine</div>
-                            <div style={{color:"#1565C0",fontWeight:700}}>Monthly Gain = Gain × Monthly MH</div>
-                          </div>
-                          <div style={{marginTop:8,padding:8,background:"rgba(21,101,192,.08)",borderRadius:6,fontSize:10}}>
-                            <div style={{color:"var(--mut)"}}>Example (Price +10%):</div>
-                            <div>New T/hr = ₹{Math.round((wiItem.list_price*1.1-daana)/parseFloat(curr.mh))}</div>
-                            <div>Gain = ₹{Math.round((wiItem.list_price*1.1-daana)/parseFloat(curr.mh))} − ₹{curr.thr} = ₹{Math.round((wiItem.list_price*1.1-daana)/parseFloat(curr.mh)-curr.thr)}/hr</div>
-                            <div style={{color:"#1565C0",fontWeight:700}}>Monthly = ₹{Math.round((wiItem.list_price*1.1-daana)/parseFloat(curr.mh)-curr.thr)} × {Math.round((pxThis.scu||9660)/15)}h = ₹{Math.round(((wiItem.list_price*1.1-daana)/parseFloat(curr.mh)-curr.thr)*Math.round((pxThis.scu||9660)/15)/1000)}K</div>
+                          <div style={{fontFamily:"monospace",fontSize:10,lineHeight:1.8}}>
+                            <div style={{color:"#1565C0",fontWeight:700}}>Gain = New T/hr - Current T/hr</div>
+                            <div>Monthly = Gain x {Math.round((pxThis.scu||9660)/15)} hrs/machine</div>
                           </div>
                         </div>
-
-                        {/* Why T/hr doesn't change with volume */}
                         <div style={{background:"var(--bg)",borderRadius:8,padding:10}}>
-                          <div style={{fontWeight:700,color:"#7B1FA2",marginBottom:6}}>💡 Important — Volume se T/hr nahi badlta</div>
-                          <div style={{fontSize:10,lineHeight:1.8,color:"var(--txt)"}}>
-                            <div>Zyada pieces banao:</div>
-                            <div style={{color:"var(--mut)"}}>• Throughput ↑ (zyada cartons × margin)</div>
-                            <div style={{color:"var(--mut)"}}>• MH bhi ↑ (proportionally)</div>
-                            <div style={{color:"#7B1FA2",fontWeight:700}}>• T/hr = same! (ratio constant)</div>
-                            <div style={{marginTop:6}}>T/hr sirf in 3 se badlta hai:</div>
-                            <div style={{color:"#10b981",fontWeight:700}}>1. Price badhao → margin badhta hai</div>
-                            <div style={{color:"#10b981",fontWeight:700}}>2. Cavity badhao → MH kam hota hai</div>
-                            <div style={{color:"#10b981",fontWeight:700}}>3. Cycle time kam karo → MH kam hota hai</div>
+                          <div style={{fontWeight:700,color:"#7B1FA2",marginBottom:6}}>Volume se T/hr nahi badlta</div>
+                          <div style={{fontSize:10,lineHeight:1.8}}>
+                            <div>Zyada pieces = zyada T + zyada MH = same ratio</div>
+                            <div style={{color:"#7B1FA2",fontWeight:700}}>T/hr sirf 3 se badlta hai:</div>
+                            <div style={{color:"#10b981"}}>1. Price badhao 2. Cavity badhao 3. Cycle kam karo</div>
                           </div>
                         </div>
-
                       </div>
                     </div>
 
