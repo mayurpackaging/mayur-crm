@@ -1894,26 +1894,42 @@ export default function CRM({ currentUser, onLogout }) {
     const loadProduction = async() => {
       setProdLoad(true);
       try {
-        // Throughput data (from view)
-        const r1 = await fetch("https://mayur-mos.vercel.app/api/throughput?days=30");
+        // Calendar month dates
+        const now = new Date();
+        const currMonthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0,10);
+        const lastMonthStart = new Date(now.getFullYear(), now.getMonth()-1, 1).toISOString().slice(0,10);
+        const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0).toISOString().slice(0,10);
+
+        // Current month throughput (1st to today)
+        const r1 = await fetch(`https://mayur-mos.vercel.app/api/throughput?from=${currMonthStart}`);
         const d1 = await r1.json();
-        setProdData(d1);
+        // Fallback to days=30 if from param not supported
+        const r1b = d1?.error ? await fetch("https://mayur-mos.vercel.app/api/throughput?days=30") : null;
+        const data1 = d1?.error ? await r1b.json() : d1;
+        setProdData(data1);
+
         // Last month throughput
-        const r2 = await fetch("https://mayur-mos.vercel.app/api/throughput?days=60");
+        const r2 = await fetch(`https://mayur-mos.vercel.app/api/throughput?from=${lastMonthStart}&to=${lastMonthEnd}`);
         const d2 = await r2.json();
-        if(d2?.daily) {
-          const last30 = d2.daily.slice(30);
+        // Fallback
+        if(d2?.daily||d2?.error) {
+          const days = d2?.daily||[];
           setLastData({
-            daily: last30,
-            total_mh: last30.reduce((a,d)=>a+d.total_mh,0),
-            total_throughput: last30.reduce((a,d)=>a+(d.total_throughput||0),0),
-            avg_t_hr: last30.length ? last30.reduce((a,d)=>a+d.avg_t_hr,0)/last30.length : 0,
+            daily: days,
+            total_mh: days.reduce((a,d)=>a+d.total_mh,0),
+            total_throughput: days.reduce((a,d)=>a+(d.total_throughput||0),0),
+            avg_t_hr: days.length ? days.reduce((a,d)=>a+(d.avg_t_hr||0),0)/days.length : 0,
+            label: lastMonthStart.slice(0,7), // "2026-07"
           });
         }
-        // Raw utilization (direct from production table — accurate)
-        const r3 = await fetch("https://mayur-mos.vercel.app/api/utilization?days=30");
+
+        // Raw utilization current month
+        const r3 = await fetch(`https://mayur-mos.vercel.app/api/utilization?from=${currMonthStart}`);
         const d3 = await r3.json();
-        if(d3?.summary) setUtilRaw(d3);
+        // Fallback
+        const r3b = d3?.error ? await fetch("https://mayur-mos.vercel.app/api/utilization?days=30") : null;
+        const data3 = d3?.error ? await r3b?.json() : d3;
+        if(data3?.summary) setUtilRaw(data3);
       } catch(e) { }
       setProdLoad(false);
     };
@@ -2097,7 +2113,7 @@ export default function CRM({ currentUser, onLogout }) {
                           </div>
                           <div style={{textAlign:"right"}}>
                             <div style={{fontSize:14,color:"var(--mut)"}}>{last_v}</div>
-                            <div style={{fontSize:10,color:"var(--mut)"}}>Pichla</div>
+                            <div style={{fontSize:10,color:"var(--mut)"}}>{lastData?.label||"Pichla"}</div>
                           </div>
                         </div>
                       </div>
