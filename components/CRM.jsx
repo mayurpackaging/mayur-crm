@@ -2173,18 +2173,12 @@ export default function CRM({ currentUser, onLogout }) {
                     <tr style={{background:"var(--card2)"}}>
                       <tr style={{background:"var(--card2)"}}>
                         <th style={{padding:"6px 8px",fontSize:10,color:"var(--mut)",textAlign:"left"}}>Product</th>
-                        <th style={{padding:"6px 6px",fontSize:10,color:"var(--mut)"}}>Pcs</th>
-                        <th style={{padding:"6px 6px",fontSize:10,color:"var(--mut)"}}>MH</th>
-                        <th style={{padding:"6px 6px",fontSize:10,color:"var(--mut)"}}>T/hr</th>
-                        <th style={{padding:"6px 6px",fontSize:10,color:"var(--mut)"}}>Eff Zone</th>
-                        <th style={{padding:"6px 6px",fontSize:10,color:"#b71c1c",background:"#fff5f5"}}>M1 Floor</th>
-                        <th style={{padding:"6px 6px",fontSize:10,color:"#b71c1c",background:"#fff5f5"}}>M1 Happy</th>
-                        <th style={{padding:"6px 6px",fontSize:10,color:"#b71c1c",background:"#fff5f5"}}>M1 Zone</th>
-                        <th style={{padding:"6px 4px",background:"#f0f0f0",width:4}}/>
-                        <th style={{padding:"6px 6px",fontSize:10,color:"#1b5e20",background:"#f5fff5"}}>M2 Floor</th>
-                        <th style={{padding:"6px 6px",fontSize:10,color:"#1b5e20",background:"#f5fff5"}}>M2 Happy</th>
-                        <th style={{padding:"6px 6px",fontSize:10,color:"#1b5e20",background:"#f5fff5"}}>M2 Zone</th>
-                        <th style={{padding:"6px 6px",fontSize:10,color:"var(--mut)"}}>Action</th>
+                        <th style={{padding:"6px",fontSize:10,color:"var(--mut)"}}>Pcs</th>
+                        <th style={{padding:"6px",fontSize:10,color:"var(--mut)"}}>T/hr</th>
+                        <th style={{padding:"6px",fontSize:10,color:"var(--mut)"}}>Eff</th>
+                        <th style={{padding:"6px",fontSize:10,color:"#b71c1c",background:"#fff5f5"}}>M1 F/H/Zone</th>
+                        <th style={{padding:"6px",fontSize:10,color:"#1b5e20",background:"#f5fff5"}}>M2 F/H/Zone</th>
+                        <th style={{padding:"6px",fontSize:10,color:"var(--mut)"}}>Action</th>
                       </tr>
                     </tr>
                   </thead>
@@ -2239,26 +2233,23 @@ export default function CRM({ currentUser, onLogout }) {
                         </td>
                         {f1?(
                           <>
-                            <td style={{padding:"6px",textAlign:"center",fontSize:10,fontWeight:700,color:"#b71c1c",background:"#fff5f5"}}>₹{f1.m1floor}</td>
-                            <td style={{padding:"6px",textAlign:"center",fontSize:10,color:"#b71c1c",background:"#fff5f5"}}>₹{f1.m1happy}</td>
-                            <td style={{padding:"8px",textAlign:"center",background:"#fff5f5"}}>
-                              <span style={{padding:"2px 8px",borderRadius:10,fontSize:10,fontWeight:700,
+                            <td style={{padding:"6px",textAlign:"center",background:"#fff5f5"}}>
+                              <div style={{fontSize:10,fontWeight:700,color:"#b71c1c"}}>₹{f1.m1floor} / ₹{f1.m1happy}</div>
+                              <span style={{padding:"1px 5px",borderRadius:4,fontSize:9,fontWeight:700,
                                 background:zc2(f1.m1zone).bg,color:zc2(f1.m1zone).c}}>
-                                {zoneName(f1.m1zone)}
+                                {f1.m1zone==="RED"?"LOSS":f1.m1zone==="N1"?"Floor":f1.m1zone==="N2"?"Happy":"Super"}
                               </span>
                             </td>
-                            <td style={{padding:0,background:"#f0f0f0",width:6}}/>
-                            <td style={{padding:"6px",textAlign:"center",fontSize:10,fontWeight:700,color:"#1b5e20",background:"#f5fff5"}}>₹{f1.m2floor}</td>
-                            <td style={{padding:"6px",textAlign:"center",fontSize:10,color:"#1b5e20",background:"#f5fff5"}}>₹{f1.m2happy}</td>
                             <td style={{padding:"6px",textAlign:"center",background:"#f5fff5"}}>
-                              <span style={{padding:"2px 6px",borderRadius:8,fontSize:9,fontWeight:700,
+                              <div style={{fontSize:10,fontWeight:700,color:"#1b5e20"}}>₹{f1.m2floor} / ₹{f1.m2happy}</div>
+                              <span style={{padding:"1px 5px",borderRadius:4,fontSize:9,fontWeight:700,
                                 background:zc2(f1.m2zone).bg,color:zc2(f1.m2zone).c}}>
                                 {f1.m2zone==="RED"?"LOSS":f1.m2zone==="N1"?"Floor":f1.m2zone==="N2"?"Happy":"Super"}
                               </span>
                             </td>
                           </>
                         ):(
-                          <><td colSpan={7} style={{padding:"8px",textAlign:"center",color:"var(--mut)",fontSize:10}}>—</td></>
+                          <><td colSpan={4} style={{padding:"8px",textAlign:"center",color:"var(--mut)",fontSize:10}}>—</td></>
                         )}
                         <td style={{padding:"6px",textAlign:"center",fontSize:10,fontWeight:600,
                           color:it.zone==="RED"?"#ef4444":it.zone==="N1"?"#f97316":"#10b981"}}>
