@@ -2159,36 +2159,70 @@ export default function CRM({ currentUser, onLogout }) {
                 <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
                   <thead>
                     <tr style={{background:"var(--card2)"}}>
-                      {["Product","Total Pieces","Total MH","Monthly T/hr","Zone","Days Active","Action"].map(h=>(
-                        <th key={h} style={{padding:"8px 10px",fontSize:10,color:"var(--mut)",textAlign:h==="Product"?"left":"center"}}>{h}</th>
+                      {["Product","Pieces","MH","T/hr","T/hr Zone","Floor ₹","Happy ₹","Super ₹","Price Zone","Action"].map(h=>(
+                        <th key={h} style={{padding:"8px 8px",fontSize:10,color:"var(--mut)",textAlign:h==="Product"?"left":"center"}}>{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
-                    {itemMonthly.map((it,i)=>(
+                    {itemMonthly.map((it,i)=>{
+                      // Get floor/happy/super from pxRows
+                      const px = findPxRow(it.product);
+                      const f1 = px ? (() => {
+                        const HOMO=Number(pxDaana.homo)||146,CP=Number(pxDaana.cp)||146,RAND=Number(pxDaana.random)||152;
+                        const pcs=px.pcs_per_carton||500;
+                        const daana=((px.box_homo||0)*HOMO+(px.box_cp||0)*CP+(px.box_random||0)*RAND+(px.lid_homo||0)*HOMO+(px.lid_cp||0)*CP+(px.lid_random||0)*RAND)/1000*pcs;
+                        const bMH=(px.box_cav>0&&px.box_cyc>0)?pcs/((3600/px.box_cyc)*px.box_cav):0;
+                        const lMH=(px.lid_cav>0&&px.lid_cyc>0)?pcs/((3600/px.lid_cyc)*px.lid_cav):0;
+                        const mh=bMH+lMH;
+                        if(!mh) return null;
+                        const floor=daana+1097*mh;
+                        const happy=daana+1615*mh;
+                        const super_=daana+1938*mh;
+                        const lp=px.list_price||0;
+                        const pzone=lp<floor?"RED":lp<happy?"N1":lp<super_?"N2":"N3";
+                        return {floor:Math.round(floor),happy:Math.round(happy),super_:Math.round(super_),pzone,list_price:lp};
+                      })() : null;
+                      return (
                       <tr key={i} style={{borderBottom:"1px solid var(--bdr)",
                         background:it.zone==="RED"?"rgba(239,68,68,.04)":"transparent"}}>
-                        <td style={{padding:"8px 10px",fontWeight:600,fontSize:12}}>{it.product?.replace(" Container","")}</td>
-                        <td style={{padding:"8px",textAlign:"center"}}>{Number(it.good_parts).toLocaleString()}</td>
-                        <td style={{padding:"8px",textAlign:"center",color:"var(--mut)"}}>{it.total_mh.toFixed(1)}h</td>
+                        <td style={{padding:"8px 10px",fontWeight:600,fontSize:11}}>{it.product?.replace(" Container","")}</td>
+                        <td style={{padding:"8px",textAlign:"center",fontSize:11}}>{Number(it.good_parts).toLocaleString()}</td>
+                        <td style={{padding:"8px",textAlign:"center",color:"var(--mut)",fontSize:11}}>{it.total_mh.toFixed(0)}h</td>
                         <td style={{padding:"8px",textAlign:"center",fontWeight:700,color:zc2(it.zone).c,fontSize:13}}>
                           ₹{it.avg_t_hr}
                         </td>
                         <td style={{padding:"8px",textAlign:"center"}}>
-                          <span style={{padding:"2px 10px",borderRadius:10,fontSize:10,fontWeight:700,
+                          <span style={{padding:"2px 8px",borderRadius:10,fontSize:10,fontWeight:700,
                             background:zc2(it.zone).bg,color:zc2(it.zone).c}}>
                             {zoneName(it.zone)}
                           </span>
                         </td>
-                        <td style={{padding:"8px",textAlign:"center",color:"var(--mut)",fontSize:11}}>
-                          {(it.zone_counts.N3||0)+(it.zone_counts.N2||0)} good / {Object.values(it.zone_counts).reduce((a,b)=>a+b,0)} days
-                        </td>
+                        {f1?(
+                          <>
+                            <td style={{padding:"8px",textAlign:"center",fontSize:11,color:"#f97316",fontWeight:600}}>₹{f1.floor}</td>
+                            <td style={{padding:"8px",textAlign:"center",fontSize:11,color:"#f59e0b",fontWeight:600}}>₹{f1.happy}</td>
+                            <td style={{padding:"8px",textAlign:"center",fontSize:11,color:"#10b981",fontWeight:600}}>₹{f1.super_}</td>
+                            <td style={{padding:"8px",textAlign:"center"}}>
+                              <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
+                                <span style={{padding:"2px 8px",borderRadius:10,fontSize:10,fontWeight:700,
+                                  background:zc2(f1.pzone).bg,color:zc2(f1.pzone).c}}>
+                                  {zoneName(f1.pzone)}
+                                </span>
+                                <span style={{fontSize:9,color:"var(--mut)"}}>₹{f1.list_price} list</span>
+                              </div>
+                            </td>
+                          </>
+                        ):(
+                          <><td colSpan={4} style={{padding:"8px",textAlign:"center",color:"var(--mut)",fontSize:10}}>—</td></>
+                        )}
                         <td style={{padding:"8px",textAlign:"center",fontSize:11,fontWeight:600,
                           color:it.zone==="RED"?"#ef4444":it.zone==="N1"?"#f97316":"#10b981"}}>
-                          {it.zone==="RED"?"🔴 Price fix karo":it.zone==="N1"?"🟡 Price badhao":it.zone==="N2"?"🟨 Push sales":"🟩 Zyada chalao!"}
+                          {it.zone==="RED"?"🔴 Price fix":it.zone==="N1"?"🟡 Badhao":it.zone==="N2"?"🟨 Push":"🟩 Chalao!"}
                         </td>
                       </tr>
-                    ))}
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
