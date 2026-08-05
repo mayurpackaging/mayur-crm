@@ -1976,7 +1976,7 @@ export default function CRM({ currentUser, onLogout }) {
         (day.items||[]).forEach(it => {
           if(!map[it.product]) map[it.product] = {
             product:it.product, price_item_name:it.price_item_name,
-            floor_price:it.floor, happy_price:it.happy,
+            floor_price:it.floor_price, happy_price:it.happy_price,
             list_price:it.list_price||0, daana_cost:it.daana_cost||0,
             total_t:0, total_mh:0, good_parts:0,
             weighted_thr:0, zone_counts:{N3:0,N2:0,N1:0,RED:0}
@@ -2198,7 +2198,7 @@ export default function CRM({ currentUser, onLogout }) {
                       const TRUE_FIXED=FIXED_TOTAL-ELEC_BILL;
                       const m1N1=FIXED_TOTAL/SCU, m1N2=(FIXED_TOTAL+HAPPY_T)/SCU;
                       const m2N1=TRUE_FIXED/SCU, m2N2=(TRUE_FIXED+HAPPY_T)/SCU;
-                      const lp=it.list_price||px?.list_price||0;
+                      const lp=it.list_price||px?.list_price||0; // list_price now from MOS API
                       const gz=(p,f,h)=>!p||!f?"N1":p<f?"RED":p<h?"N1":p<h*1.2?"N2":"N3";
                       const f1 = (() => {
                         if(px) {
