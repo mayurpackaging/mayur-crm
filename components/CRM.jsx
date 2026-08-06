@@ -198,7 +198,33 @@ export default function CRM({ currentUser, onLogout }) {
     if(!cid||!form.note) return toast$("Customer aur Note required!",true);
     const c=gc(cid);
     setSv(true);
-    try { const r=await sbInsert("crm_interactions",{...form,customer_id:cid,customer_name:c?.name,company:c?.company,type:form.type||"call"}); setI(p=>[r[0],...p]); toast$("Interaction save ✓"); if(back){setForm({});setModal("detail");}else closeM(); }
+    try {
+      const r=await sbInsert("crm_interactions",{...form,customer_id:cid,customer_name:c?.name,company:c?.company,type:form.type||"call"});
+      setI(p=>[r[0],...p]);
+      // Auto-create Planner task if follow-up date set
+      if(form.next_follow_up) {
+        const taskTitle = form.follow_up_note || `Follow-up: ${c?.name||"Customer"}`;
+        await sbFetch("crm_tasks", {method:"POST", body:{
+          title: taskTitle,
+          description: `Re: ${form.note?.slice(0,100)}`,
+          due_date: form.next_follow_up,
+          due_time: "10:00",
+          type: form.type||"call",
+          priority: "medium",
+          customer_name: c?.name||"",
+          customer_id: cid,
+          status: "pending",
+          remind_at: form.next_follow_up+"T10:00:00",
+          created_by: userRole
+        }});
+        toast$("Interaction + Follow-up task created!");
+        // Update badge
+        setTodayTaskCount(n=>form.next_follow_up===new Date().toISOString().slice(0,10)?n+1:n);
+      } else {
+        toast$("Interaction save!");
+      }
+      if(back){setForm({});setModal("detail");}else closeM();
+    }
     catch(e){ toast$(e.message,true); }
     setSv(false);
   };
@@ -346,6 +372,49 @@ export default function CRM({ currentUser, onLogout }) {
     <div class="footer">Payment Terms: As agreed | Computer generated proforma invoice.</div>
     </body></html>`);
     win.document.close(); win.print();
+  };
+
+  const generateWAMessage = (order) => {
+    if(!order) return;
+    const subtotal = order.items?.reduce((s,i)=>s+(Number(i.amount)||0),0)||0;
+    const epr = order.epr_applied ? Math.round(subtotal*0.01) : 0;
+    const gst = order.gst_type==="including" ? 0 : Math.round(subtotal*0.18);
+    const total = subtotal + epr + gst;
+
+    const lines = [
+      `*Mayur Food Packaging Products*`,
+      `_Shreeja Packaging Industries Pvt. Ltd._`,
+      ``,
+      `*Order Confirmation*`,
+      `Date: ${fd(order.order_date)}`,
+      `Party: *${order.company||order.customer_name}*`,
+      ``,
+      `*Items:*`,
+      ...(order.items||[]).map((item,i)=>
+        `${i+1}. ${item.product_name||""} — ${item.qty_cases} ctns @ ₹${item.ctn_price}/ctn = *₹${Number(item.amount||0).toLocaleString("en-IN")}*`
+      ),
+      ``,
+      `Subtotal: ₹${subtotal.toLocaleString("en-IN")}`,
+      ...(epr>0?[`EPR @1%: ₹${epr.toLocaleString("en-IN")}`]:[]),
+      ...(gst>0?[`GST @18%: ₹${gst.toLocaleString("en-IN")}`]:[]),
+      `*Total: ₹${total.toLocaleString("en-IN")}*`,
+      ``,
+      `Payment: ${order.payment_mode?.replace("_"," ")||"As agreed"}`,
+      ...(order.notes?[`Note: ${order.notes}`]:[]),
+      ``,
+      `_Please confirm the order._`,
+      `Thank you! 🙏`,
+    ].join("
+");
+
+    // Copy to clipboard
+    navigator.clipboard.writeText(lines).then(()=>{
+      toast$("WhatsApp message copied! Open WhatsApp and paste.");
+    }).catch(()=>{
+      // Fallback — open in new window
+      const win = window.open("","_blank");
+      win.document.write(`<pre style="font-family:sans-serif;padding:20px;white-space:pre-wrap;">${lines}</pre>`);
+    });
   };
 
   if(loading) return (
@@ -1226,7 +1295,8 @@ export default function CRM({ currentUser, onLogout }) {
           <div className="mod-ttl">
             <span>📄 Proforma Invoice</span>
             <div style={{display:"flex",gap:8}}>
-              <button className="btn btn-p btn-sm" onClick={printProforma}><Printer size={12}/> Print</button>
+              <button className="btn btn-p btn-sm" onClick={printProforma}><Printer size={12}/> Print PI</button>
+              <button className="btn btn-o btn-sm" onClick={()=>generateWAMessage(selOrder)} style={{background:"#25D366",color:"#fff",border:"none"}}>💬 WA Message</button>
               <button className="btn btn-o btn-sm" onClick={closeM}><X size={13}/></button>
             </div>
           </div>
