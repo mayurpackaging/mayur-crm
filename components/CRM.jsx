@@ -75,6 +75,7 @@ export default function CRM({ currentUser, onLogout }) {
   });
   useEffect(()=>{try{localStorage.setItem("mayur_px",JSON.stringify(pxThis));}catch(e){}},[pxThis]);
   const [pxLoad,setPxLoad] = useState(false);
+  const [todayTaskCount, setTodayTaskCount] = useState(0);
   const [pxSave,setPxSave] = useState(false);
   const [pxQ,setPxQ] = useState("");
   const [partyDiscount,setPartyDiscount] = useState(50); // default ₹50/ctn
@@ -136,6 +137,14 @@ export default function CRM({ currentUser, onLogout }) {
     }catch(e){ setToast({msg:"Production load error",err:true}); }
     setProdLoad(false);
   };
+
+  // Load today task count for dashboard badge
+  useEffect(()=>{
+    const today = new Date().toISOString().slice(0,10);
+    sbFetch(`crm_tasks?due_date=eq.${today}&status=eq.pending&select=id`)
+      .then(d=>setTodayTaskCount((d||[]).length))
+      .catch(()=>{});
+  },[]);
 
   const loadPricing = useCallback(async()=>{
     setPxLoad(true);
@@ -3397,6 +3406,274 @@ export default function CRM({ currentUser, onLogout }) {
     );
   };
 
+
+  // ══════════════════════════════════════════════
+  // PLANNER + REMINDERS
+  // ══════════════════════════════════════════════
+  const Planner = () => {
+    const [tasks, setTasks] = useState([]);
+    const [loading, setLoading] = useState(false);
+    const [view, setView] = useState("today"); // today | upcoming | all
+    const [showAdd, setShowAdd] = useState(false);
+    const [form, setForm] = useState({
+      title:"", description:"", due_date: new Date().toISOString().slice(0,10),
+      due_time:"09:00", type:"call", priority:"medium", customer_name:""
+    });
+
+    const loadTasks = async() => {
+      setLoading(true);
+      try {
+        const today = new Date().toISOString().slice(0,10);
+        let url = "crm_tasks?order=due_date.asc,due_time.asc&status=neq.done";
+        if(view==="today") url += `&due_date=eq.${today}`;
+        else if(view==="upcoming") url += `&due_date=gte.${today}`;
+        const data = await sbFetch(url);
+        setTasks(data||[]);
+      } catch(e){}
+      setLoading(false);
+    };
+
+    useEffect(()=>{ loadTasks(); },[view]);
+
+    // Browser notification permission
+    const requestNotifPermission = async() => {
+      if("Notification" in window) {
+        const perm = await Notification.requestPermission();
+        if(perm==="granted") toast$("Notifications enabled!");
+        else toast$("Notifications blocked by browser",true);
+      }
+    };
+
+    // Check for due tasks and notify
+    useEffect(()=>{
+      const check = () => {
+        const now = new Date();
+        tasks.forEach(t=>{
+          if(t.remind_at && !t.reminded) {
+            const remindAt = new Date(t.remind_at);
+            if(now >= remindAt && now < new Date(remindAt.getTime()+60000)) {
+              if(Notification.permission==="granted") {
+                new Notification("Mayur CRM Reminder", {
+                  body: `${t.title}${t.customer_name?" — "+t.customer_name:""}`,
+                  icon: "/favicon.ico"
+                });
+              }
+              sbFetch("crm_tasks?id=eq."+t.id, {method:"PATCH", body:{reminded:true}});
+            }
+          }
+        });
+      };
+      const interval = setInterval(check, 30000);
+      return ()=>clearInterval(interval);
+    },[tasks]);
+
+    const addTask = async() => {
+      if(!form.title) return;
+      try {
+        const remind_at = form.due_date && form.due_time
+          ? new Date(form.due_date+"T"+form.due_time+":00").toISOString()
+          : null;
+        await sbFetch("crm_tasks", {method:"POST", body:{
+          ...form, remind_at, created_by: userRole
+        }});
+        setShowAdd(false);
+        setForm({title:"",description:"",due_date:new Date().toISOString().slice(0,10),due_time:"09:00",type:"call",priority:"medium",customer_name:""});
+        loadTasks();
+        toast$("Task added!");
+      } catch(e){ toast$("Error adding task",true); }
+    };
+
+    const markDone = async(id) => {
+      await sbFetch("crm_tasks?id=eq."+id, {method:"PATCH", body:{status:"done"}});
+      setTasks(tasks.filter(t=>t.id!==id));
+      toast$("Task done!");
+    };
+
+    const snooze = async(id, mins=60) => {
+      const remind_at = new Date(Date.now()+mins*60000).toISOString();
+      await sbFetch("crm_tasks?id=eq."+id, {method:"PATCH", body:{remind_at, reminded:false}});
+      toast$(`Snoozed ${mins} min`);
+    };
+
+    const today = new Date().toISOString().slice(0,10);
+    const todayTasks = tasks.filter(t=>t.due_date===today);
+    const overdue = tasks.filter(t=>t.due_date<today);
+    const upcoming = tasks.filter(t=>t.due_date>today);
+
+    const TYPES = {call:"📞",meeting:"🤝",follow_up:"🔄",general:"📌",order:"🧾"};
+    const PRIORITY = {high:{c:"#ef4444",bg:"rgba(239,68,68,.1)"},medium:{c:"#f59e0b",bg:"rgba(245,158,11,.1)"},low:{c:"#10b981",bg:"rgba(16,185,129,.1)"}};
+
+    const TaskCard = ({task}) => (
+      <div style={{padding:12,borderRadius:10,border:"1px solid var(--bdr)",
+        background:task.priority==="high"?"rgba(239,68,68,.03)":"var(--card)",
+        marginBottom:8,display:"flex",gap:10,alignItems:"flex-start"}}>
+        <button onClick={()=>markDone(task.id)} style={{
+          width:22,height:22,borderRadius:"50%",border:"2px solid var(--bdr)",
+          background:"transparent",cursor:"pointer",flexShrink:0,marginTop:2,
+          display:"flex",alignItems:"center",justifyContent:"center",fontSize:12
+        }}>✓</button>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap",marginBottom:4}}>
+            <span style={{fontSize:14}}>{TYPES[task.type]||"📌"}</span>
+            <span style={{fontWeight:700,fontSize:13}}>{task.title}</span>
+            <span style={{padding:"1px 7px",borderRadius:8,fontSize:10,fontWeight:700,
+              background:PRIORITY[task.priority]?.bg,color:PRIORITY[task.priority]?.c}}>
+              {task.priority}
+            </span>
+          </div>
+          {task.customer_name&&<div style={{fontSize:11,color:"var(--mut)",marginBottom:2}}>👤 {task.customer_name}</div>}
+          {task.description&&<div style={{fontSize:11,color:"var(--mut)",marginBottom:4}}>{task.description}</div>}
+          <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+            <span style={{fontSize:10,color:task.due_date<today?"#ef4444":"var(--mut)"}}>
+              📅 {task.due_date} {task.due_time?task.due_time.slice(0,5):""}
+            </span>
+            <button onClick={()=>snooze(task.id,60)} style={{fontSize:10,padding:"1px 8px",borderRadius:6,
+              border:"1px solid var(--bdr)",background:"transparent",cursor:"pointer",color:"var(--mut)"}}>
+              ⏰ +1h
+            </button>
+            <button onClick={()=>snooze(task.id,1440)} style={{fontSize:10,padding:"1px 8px",borderRadius:6,
+              border:"1px solid var(--bdr)",background:"transparent",cursor:"pointer",color:"var(--mut)"}}>
+              📅 Kal
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+
+    return (
+      <div>
+        <div className="sh">
+          <div>
+            <div className="sh-t">📅 Planner & Reminders</div>
+            <div className="sh-s">Aaj ke tasks · Follow-ups · Customer calls</div>
+          </div>
+          <div style={{display:"flex",gap:8}}>
+            <button className="btn btn-o btn-sm" onClick={requestNotifPermission}>🔔 Enable Alerts</button>
+            <button className="btn btn-p" onClick={()=>setShowAdd(true)}>+ Add Task</button>
+          </div>
+        </div>
+
+        {/* Summary badges */}
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:14}}>
+          {[
+            ["🔴 Overdue",overdue.length,"#ef4444","rgba(239,68,68,.08)"],
+            ["📅 Today",todayTasks.length,"#f59e0b","rgba(245,158,11,.08)"],
+            ["📆 Upcoming",upcoming.length,"#10b981","rgba(16,185,129,.08)"],
+          ].map(([lbl,cnt,c,bg])=>(
+            <div key={lbl} style={{background:bg,border:`1px solid ${c}33`,borderRadius:10,
+              padding:14,textAlign:"center",cursor:"pointer"}}
+              onClick={()=>setView(lbl.includes("Today")?"today":lbl.includes("Over")?"all":"upcoming")}>
+              <div style={{fontSize:24,fontWeight:800,color:c}}>{cnt}</div>
+              <div style={{fontSize:11,color:c,fontWeight:600}}>{lbl}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Add Task Modal */}
+        {showAdd&&(
+          <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:"rgba(0,0,0,.5)",
+            zIndex:200,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+            <div style={{background:"var(--card)",borderRadius:16,padding:20,width:"100%",maxWidth:440}}>
+              <div style={{fontWeight:700,fontSize:16,marginBottom:16}}>+ New Task</div>
+              <div style={{display:"flex",flexDirection:"column",gap:10}}>
+                <input className="inp" placeholder="Task title (e.g. Call Dominos buyer)" 
+                  value={form.title} onChange={e=>setForm({...form,title:e.target.value})}/>
+                <input className="inp" placeholder="Customer/Party name (optional)"
+                  value={form.customer_name} onChange={e=>setForm({...form,customer_name:e.target.value})}/>
+                <textarea className="inp" placeholder="Notes / description" rows={2}
+                  value={form.description} onChange={e=>setForm({...form,description:e.target.value})}
+                  style={{resize:"none"}}/>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                  <div>
+                    <div style={{fontSize:10,color:"var(--mut)",marginBottom:4}}>Due Date</div>
+                    <input type="date" className="inp" value={form.due_date}
+                      onChange={e=>setForm({...form,due_date:e.target.value})}/>
+                  </div>
+                  <div>
+                    <div style={{fontSize:10,color:"var(--mut)",marginBottom:4}}>Time (Reminder)</div>
+                    <input type="time" className="inp" value={form.due_time}
+                      onChange={e=>setForm({...form,due_time:e.target.value})}/>
+                  </div>
+                </div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                  <div>
+                    <div style={{fontSize:10,color:"var(--mut)",marginBottom:4}}>Type</div>
+                    <select className="inp" value={form.type} onChange={e=>setForm({...form,type:e.target.value})}>
+                      <option value="call">📞 Call</option>
+                      <option value="meeting">🤝 Meeting</option>
+                      <option value="follow_up">🔄 Follow-up</option>
+                      <option value="order">🧾 Order</option>
+                      <option value="general">📌 General</option>
+                    </select>
+                  </div>
+                  <div>
+                    <div style={{fontSize:10,color:"var(--mut)",marginBottom:4}}>Priority</div>
+                    <select className="inp" value={form.priority} onChange={e=>setForm({...form,priority:e.target.value})}>
+                      <option value="high">🔴 High</option>
+                      <option value="medium">🟡 Medium</option>
+                      <option value="low">🟢 Low</option>
+                    </select>
+                  </div>
+                </div>
+                <div style={{display:"flex",gap:8,marginTop:4}}>
+                  <button className="btn btn-p" style={{flex:1,justifyContent:"center"}} onClick={addTask}>
+                    Save Task
+                  </button>
+                  <button className="btn btn-o" onClick={()=>setShowAdd(false)}>Cancel</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* View toggle */}
+        <div style={{display:"flex",gap:6,marginBottom:12}}>
+          {[["today","📅 Aaj"],["upcoming","📆 Upcoming"],["all","📋 Sab"]].map(([v,l])=>(
+            <button key={v} className={`btn btn-sm ${view===v?"btn-p":"btn-o"}`}
+              onClick={()=>setView(v)}>{l}</button>
+          ))}
+          <button className="btn btn-o btn-sm" onClick={loadTasks}>🔄</button>
+        </div>
+
+        {loading&&<div className="card empty"><p>Loading...</p></div>}
+
+        {!loading&&(
+          <div>
+            {/* Overdue */}
+            {overdue.length>0&&(
+              <div style={{marginBottom:16}}>
+                <div style={{fontSize:11,fontWeight:700,color:"#ef4444",marginBottom:8,
+                  textTransform:"uppercase",letterSpacing:.5}}>🔴 Overdue ({overdue.length})</div>
+                {overdue.map(t=><TaskCard key={t.id} task={t}/>)}
+              </div>
+            )}
+            {/* Today */}
+            {(view==="today"||view==="all")&&(
+              <div style={{marginBottom:16}}>
+                <div style={{fontSize:11,fontWeight:700,color:"#f59e0b",marginBottom:8,
+                  textTransform:"uppercase",letterSpacing:.5}}>📅 Aaj — {today} ({todayTasks.length})</div>
+                {todayTasks.length===0?<div style={{color:"var(--mut)",fontSize:12,padding:12}}>Aaj koi task nahi — add karo!</div>:
+                  todayTasks.map(t=><TaskCard key={t.id} task={t}/>)}
+              </div>
+            )}
+            {/* Upcoming */}
+            {(view==="upcoming"||view==="all")&&upcoming.length>0&&(
+              <div>
+                <div style={{fontSize:11,fontWeight:700,color:"#10b981",marginBottom:8,
+                  textTransform:"uppercase",letterSpacing:.5}}>📆 Upcoming ({upcoming.length})</div>
+                {upcoming.map(t=><TaskCard key={t.id} task={t}/>)}
+              </div>
+            )}
+            {tasks.length===0&&!loading&&(
+              <div className="card empty"><p>Koi task nahi — "Add Task" dabao!</p></div>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+
   /* ── NAV ── */
   const navs = [
     {id:"dashboard",lbl:"Dashboard",ic:"🏠",roles:["admin","sales","dataentry"]},
@@ -3411,6 +3688,7 @@ export default function CRM({ currentUser, onLogout }) {
     {id:"targets",lbl:"Targets",ic:"🎯",roles:["admin"]},
     {id:"pricing",lbl:"Pricing",ic:"💰",roles:["admin"]},
     {id:"production",lbl:"Production",ic:"🏭",roles:["admin"]},
+    {id:"planner",lbl:`Planner${todayTaskCount>0?" ("+todayTaskCount+")":""}`,ic:"📅",roles:["admin","sales"]},
     {id:"analytics",lbl:"Analytics",ic:"📊",roles:["admin"]},
   ].filter(n=>n.roles?.includes(userRole)||userRole==="viewer");
 
@@ -3464,6 +3742,7 @@ export default function CRM({ currentUser, onLogout }) {
           {view==="pricing"&&<Pricing/>}
           {view==="production"&&isAdmin&&<Production/>}
           {view==="analytics"&&isAdmin&&<Analytics/>}
+          {view==="planner"&&<Planner/>}
         </div>
       </div>
       {renderModal()}
