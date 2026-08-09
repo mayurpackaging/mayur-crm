@@ -3814,18 +3814,32 @@ export default function CRM({ currentUser, onLogout }) {
       if(!dForm.title||!dForm.customer_name) return toast$("Title aur Customer required!",true);
       try {
         if(selDeal) {
-          await sbFetch("crm_deals?id=eq."+selDeal.id, {method:"PATCH", body:{...dForm, updated_at:new Date().toISOString()}});
+          const patchBody = {
+            title: dForm.title, customer_name: dForm.customer_name,
+            company: dForm.company||"", stage: dForm.stage||"lead",
+            probability: Number(dForm.probability)||10,
+            product_mix: dForm.product_mix||"", notes: dForm.notes||"",
+            assigned_to: dForm.assigned_to||"",
+            updated_at: new Date().toISOString()
+          };
+          if(dForm.value_per_month) patchBody.value_per_month = Number(dForm.value_per_month);
+          if(dForm.expected_close) patchBody.expected_close = dForm.expected_close;
+          await sbFetch("crm_deals?id=eq."+selDeal.id, {method:"PATCH", body: patchBody});
           toast$("Deal updated!");
         } else {
-          await sbFetch("crm_deals", {method:"POST", body:{
-            title:dForm.title, customer_name:dForm.customer_name,
-            company:dForm.company||"", stage:dForm.stage||"lead",
-            value_per_month:dForm.value_per_month?Number(dForm.value_per_month):null,
-            probability:Number(dForm.probability)||10,
-            expected_close:dForm.expected_close||null,
-            product_mix:dForm.product_mix||"", notes:dForm.notes||"",
-            assigned_to:dForm.assigned_to||"", created_by:userRole
-          }});
+          const postBody = {
+            title: dForm.title,
+            customer_name: dForm.customer_name,
+            company: dForm.company||"",
+            stage: dForm.stage||"lead",
+            probability: Number(dForm.probability)||10,
+            product_mix: dForm.product_mix||"",
+            notes: dForm.notes||"",
+            assigned_to: dForm.assigned_to||""
+          };
+          if(dForm.value_per_month) postBody.value_per_month = Number(dForm.value_per_month);
+          if(dForm.expected_close) postBody.expected_close = dForm.expected_close;
+          await sbFetch("crm_deals", {method:"POST", body: postBody});
           toast$("Deal added!");
         }
         setShowAdd(false); setSelDeal(null);
