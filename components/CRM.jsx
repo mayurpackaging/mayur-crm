@@ -497,8 +497,7 @@ export default function CRM({ currentUser, onLogout }) {
                 <path d={"M "+s.x+" "+s.y+" A "+r+" "+r+" 0 1 1 "+e.x+" "+e.y}
                   fill="none" stroke="#1a1a2e" strokeWidth={size*0.09} strokeLinecap="round"/>
                 {/* Color zones on arc */}
-                {[{from:0,to:0.4,c:"#ef444433"},{from:0.4,to:0.7,c:"#f97316
-33"},{from:0.7,to:0.9,c:"#f59e0b33"},{from:0.9,to:1,c:"#10b98133"}].map((zone,zi)=>{
+                {[{from:0,to:0.4,c:"#ef444433"},{from:0.4,to:0.7,c:"#f9731633"},{from:0.7,to:0.9,c:"#f59e0b33"},{from:0.9,to:1,c:"#10b98133"}].map((zone,zi)=>{
                   const sa=toXY(-135+zone.from*270,r), ea=toXY(-135+zone.to*270,r);
                   const largeArc=(zone.to-zone.from)>0.5?1:0;
                   return <path key={zi} d={"M "+sa.x+" "+sa.y+" A "+r+" "+r+" 0 "+largeArc+" 1 "+ea.x+" "+ea.y}
