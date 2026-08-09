@@ -3763,6 +3763,265 @@ export default function CRM({ currentUser, onLogout }) {
   };
 
 
+
+  // ══════════════════════════════════════════════
+  // PIPELINE — Deal Stages
+  // ══════════════════════════════════════════════
+  const Pipeline = () => {
+    const [deals, setDeals] = useState([]);
+    const [loading, setLoading] = useState(false);
+    const [showAdd, setShowAdd] = useState(false);
+    const [selDeal, setSelDeal] = useState(null);
+    const [dForm, setDForm] = useState({
+      title:"", customer_name:"", company:"", stage:"lead",
+      value_per_month:"", probability:10, expected_close:"",
+      product_mix:"", notes:"", assigned_to:""
+    });
+    const [actNote, setActNote] = useState("");
+    const [filter, setFilter] = useState("active"); // active | won | lost | all
+
+    const STAGES = [
+      {id:"lead",      label:"🌱 Lead",        color:"#6b7280", prob:10},
+      {id:"qualified", label:"✅ Qualified",    color:"#3b82f6", prob:25},
+      {id:"proposal",  label:"📄 Proposal",     color:"#f59e0b", prob:50},
+      {id:"negotiation",label:"🤝 Negotiation", color:"#f97316", prob:75},
+      {id:"won",       label:"🏆 Won",          color:"#10b981", prob:100},
+      {id:"lost",      label:"❌ Lost",         color:"#ef4444", prob:0},
+    ];
+
+    const loadDeals = async() => {
+      setLoading(true);
+      try {
+        let url = "crm_deals?order=updated_at.desc";
+        if(filter==="active") url += "&stage=not.in.(won,lost)";
+        else if(filter==="won") url += "&stage=eq.won";
+        else if(filter==="lost") url += "&stage=eq.lost";
+        const data = await sbFetch(url);
+        setDeals(data||[]);
+      } catch(e){}
+      setLoading(false);
+    };
+
+    useEffect(()=>{ loadDeals(); },[filter]);
+
+    const saveDeal = async() => {
+      if(!dForm.title||!dForm.customer_name) return toast$("Title aur Customer required!",true);
+      try {
+        if(selDeal) {
+          await sbFetch("crm_deals?id=eq."+selDeal.id, {method:"PATCH", body:{...dForm, updated_at:new Date().toISOString()}});
+          toast$("Deal updated!");
+        } else {
+          await sbFetch("crm_deals", {method:"POST", body:{...dForm, created_by:userRole}});
+          toast$("Deal added!");
+        }
+        setShowAdd(false); setSelDeal(null);
+        setDForm({title:"",customer_name:"",company:"",stage:"lead",value_per_month:"",probability:10,expected_close:"",product_mix:"",notes:"",assigned_to:""});
+        loadDeals();
+      } catch(e){ toast$("Error: "+e.message,true); }
+    };
+
+    const moveStage = async(deal, newStage) => {
+      const extra = newStage==="won" ? {won_at:new Date().toISOString()} : newStage==="lost" ? {lost_at:new Date().toISOString()} : {};
+      const stg = STAGES.find(s=>s.id===newStage);
+      await sbFetch("crm_deals?id=eq."+deal.id, {method:"PATCH", body:{
+        stage:newStage, probability:stg?.prob||deal.probability,
+        updated_at:new Date().toISOString(), ...extra
+      }});
+      // Log activity
+      await sbFetch("crm_deal_activities", {method:"POST", body:{
+        deal_id:deal.id, type:"stage_change",
+        from_stage:deal.stage, to_stage:newStage,
+        note:"Stage moved: "+deal.stage+" → "+newStage,
+        created_by:userRole
+      }});
+      loadDeals();
+      toast$("Stage updated!");
+    };
+
+    const addActivity = async(dealId) => {
+      if(!actNote) return;
+      await sbFetch("crm_deal_activities", {method:"POST", body:{
+        deal_id:dealId, type:"note", note:actNote, created_by:userRole
+      }});
+      setActNote("");
+      toast$("Note added!");
+    };
+
+    // Pipeline summary
+    const activeDe = deals.filter(d=>!["won","lost"].includes(d.stage));
+    const totalPipe = activeDe.reduce((s,d)=>s+(Number(d.value_per_month)||0),0);
+    const weightedPipe = activeDe.reduce((s,d)=>s+(Number(d.value_per_month)||0)*(d.probability||0)/100,0);
+    const wonThis = deals.filter(d=>d.stage==="won"&&d.won_at?.startsWith(new Date().toISOString().slice(0,7)));
+
+    const DealCard = ({deal}) => {
+      const stg = STAGES.find(s=>s.id===deal.stage);
+      const nextStages = STAGES.filter(s=>s.id!==deal.stage&&!["won","lost"].includes(deal.stage)?true:false);
+      return (
+        <div style={{background:"var(--card)",border:"1px solid var(--bdr)",borderRadius:10,
+          padding:12,marginBottom:8,borderLeft:"3px solid "+stg?.color}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
+            <div style={{flex:1}}>
+              <div style={{fontWeight:700,fontSize:13,marginBottom:2}}>{deal.title}</div>
+              <div style={{fontSize:11,color:"var(--mut)"}}>👤 {deal.customer_name} {deal.company?"· "+deal.company:""}</div>
+              {deal.product_mix&&<div style={{fontSize:10,color:"var(--mut)",marginTop:2}}>📦 {deal.product_mix}</div>}
+            </div>
+            <div style={{textAlign:"right",flexShrink:0}}>
+              {deal.value_per_month&&<div style={{fontWeight:800,color:"#10b981",fontSize:13}}>₹{Number(deal.value_per_month).toLocaleString("en-IN")}/mo</div>}
+              <div style={{fontSize:10,color:stg?.color,fontWeight:700}}>{deal.probability}% chance</div>
+            </div>
+          </div>
+          {deal.expected_close&&(
+            <div style={{fontSize:10,color:"var(--mut)",marginTop:4}}>
+              🗓️ Close by: {deal.expected_close}
+              {new Date(deal.expected_close)<new Date()&&deal.stage!=="won"&&<span style={{color:"#ef4444",marginLeft:4}}>OVERDUE</span>}
+            </div>
+          )}
+          <div style={{display:"flex",gap:6,marginTop:8,flexWrap:"wrap"}}>
+            <span style={{padding:"2px 8px",borderRadius:6,fontSize:10,fontWeight:700,
+              background:stg?.color+"22",color:stg?.color}}>{stg?.label}</span>
+            {deal.stage!=="won"&&deal.stage!=="lost"&&STAGES.filter(s=>!["won","lost"].includes(s.id)&&s.id!==deal.stage).map(s=>(
+              <button key={s.id} onClick={()=>moveStage(deal,s.id)} style={{
+                padding:"2px 8px",borderRadius:6,fontSize:10,border:"1px solid "+s.color,
+                background:"transparent",color:s.color,cursor:"pointer"}}>→ {s.label.split(" ")[1]}</button>
+            ))}
+            {deal.stage!=="won"&&<button onClick={()=>moveStage(deal,"won")} style={{padding:"2px 8px",borderRadius:6,fontSize:10,border:"1px solid #10b981",background:"#10b981",color:"#fff",cursor:"pointer",fontWeight:700}}>🏆 Won!</button>}
+            {deal.stage!=="lost"&&deal.stage!=="won"&&<button onClick={()=>moveStage(deal,"lost")} style={{padding:"2px 8px",borderRadius:6,fontSize:10,border:"1px solid #ef4444",background:"transparent",color:"#ef4444",cursor:"pointer"}}>✕ Lost</button>}
+            <button onClick={()=>{setSelDeal(deal);setDForm({...deal});setShowAdd(true);}} style={{padding:"2px 8px",borderRadius:6,fontSize:10,border:"1px solid var(--bdr)",background:"transparent",color:"var(--mut)",cursor:"pointer",marginLeft:"auto"}}>✏️ Edit</button>
+          </div>
+        </div>
+      );
+    };
+
+    return (
+      <div>
+        <div className="sh">
+          <div>
+            <div className="sh-t">🎯 Sales Pipeline</div>
+            <div className="sh-s">Lead se Order tak — track karo</div>
+          </div>
+          <button className="btn btn-p" onClick={()=>{setSelDeal(null);setDForm({title:"",customer_name:"",company:"",stage:"lead",value_per_month:"",probability:10,expected_close:"",product_mix:"",notes:"",assigned_to:""});setShowAdd(true);}}>+ New Deal</button>
+        </div>
+
+        {/* Summary cards */}
+        <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10,marginBottom:14}}>
+          {[
+            ["Total Pipeline",activeDe.length+" deals","₹"+Math.round(totalPipe/1000)+"K/mo","#3b82f6"],
+            ["Weighted Value","Probability based","₹"+Math.round(weightedPipe/1000)+"K/mo","#f59e0b"],
+            ["Won This Month",wonThis.length+" deals","₹"+Math.round(wonThis.reduce((s,d)=>s+(Number(d.value_per_month)||0),0)/1000)+"K/mo","#10b981"],
+            ["Avg Deal Size",activeDe.length?"₹"+Math.round(totalPipe/activeDe.length/1000)+"K/mo":"—","per deal","#6b7280"],
+          ].map(([lbl,sub,val,c])=>(
+            <div key={lbl} style={{background:c+"11",border:"1px solid "+c+"33",borderRadius:10,padding:12}}>
+              <div style={{fontSize:10,color:"var(--mut)",marginBottom:4}}>{lbl}</div>
+              <div style={{fontSize:18,fontWeight:800,color:c}}>{val}</div>
+              <div style={{fontSize:10,color:"var(--mut)"}}>{sub}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Stage funnel bar */}
+        <div className="card" style={{marginBottom:14,padding:12}}>
+          <div style={{fontWeight:700,fontSize:12,marginBottom:10}}>Stage Funnel</div>
+          <div style={{display:"flex",gap:4}}>
+            {STAGES.filter(s=>s.id!=="lost").map(s=>{
+              const cnt = deals.filter(d=>d.stage===s.id).length;
+              const val = deals.filter(d=>d.stage===s.id).reduce((a,d)=>a+(Number(d.value_per_month)||0),0);
+              return (
+                <div key={s.id} style={{flex:1,textAlign:"center",cursor:"pointer"}} onClick={()=>setFilter(s.id==="won"?"won":"active")}>
+                  <div style={{background:s.color+"22",border:"1px solid "+s.color+"44",borderRadius:6,padding:"6px 4px"}}>
+                    <div style={{fontWeight:800,color:s.color,fontSize:16}}>{cnt}</div>
+                    <div style={{fontSize:9,color:"var(--mut)"}}>{s.label}</div>
+                    {val>0&&<div style={{fontSize:9,color:s.color}}>₹{Math.round(val/1000)}K</div>}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Filter tabs */}
+        <div style={{display:"flex",gap:6,marginBottom:12}}>
+          {[["active","🎯 Active"],["won","🏆 Won"],["lost","❌ Lost"],["all","📋 All"]].map(([v,l])=>(
+            <button key={v} className={"btn btn-sm "+(filter===v?"btn-p":"btn-o")} onClick={()=>setFilter(v)}>{l}</button>
+          ))}
+          <button className="btn btn-o btn-sm" onClick={loadDeals}>🔄</button>
+        </div>
+
+        {loading&&<div className="card empty"><p>Loading...</p></div>}
+
+        {/* Stage-wise deals */}
+        {!loading&&filter==="active"&&(
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+            {STAGES.filter(s=>!["won","lost"].includes(s.id)).map(stg=>{
+              const stgDeals = deals.filter(d=>d.stage===stg.id);
+              return (
+                <div key={stg.id}>
+                  <div style={{fontWeight:700,fontSize:11,color:stg.color,marginBottom:8,
+                    textTransform:"uppercase",letterSpacing:.5,display:"flex",justifyContent:"space-between"}}>
+                    <span>{stg.label} ({stgDeals.length})</span>
+                    {stgDeals.length>0&&<span style={{fontWeight:400,fontSize:10}}>₹{Math.round(stgDeals.reduce((a,d)=>a+(Number(d.value_per_month)||0),0)/1000)}K/mo</span>}
+                  </div>
+                  {stgDeals.length===0?<div style={{color:"var(--mut)",fontSize:12,padding:8,border:"1px dashed var(--bdr)",borderRadius:8,textAlign:"center"}}>Koi deal nahi</div>:
+                    stgDeals.map(d=><DealCard key={d.id} deal={d}/>)}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {!loading&&filter!=="active"&&(
+          <div>{deals.map(d=><DealCard key={d.id} deal={d}/>)}</div>
+        )}
+
+        {/* Add/Edit Modal */}
+        {showAdd&&(
+          <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:"rgba(0,0,0,.5)",
+            zIndex:200,display:"flex",alignItems:"center",justifyContent:"center",padding:16,overflowY:"auto"}}>
+            <div style={{background:"var(--card)",borderRadius:16,padding:20,width:"100%",maxWidth:480,margin:"auto"}}>
+              <div style={{fontWeight:700,fontSize:16,marginBottom:16}}>{selDeal?"✏️ Edit Deal":"+ New Deal"}</div>
+              <div style={{display:"flex",flexDirection:"column",gap:10}}>
+                <input className="inp" placeholder="Deal title (e.g. 500ml Milky — 50K pcs/mo)" value={dForm.title} onChange={e=>setDForm({...dForm,title:e.target.value})}/>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                  <input className="inp" placeholder="Customer name" value={dForm.customer_name} onChange={e=>setDForm({...dForm,customer_name:e.target.value})}/>
+                  <input className="inp" placeholder="Company" value={dForm.company} onChange={e=>setDForm({...dForm,company:e.target.value})}/>
+                </div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                  <div>
+                    <div style={{fontSize:10,color:"var(--mut)",marginBottom:4}}>Stage</div>
+                    <select className="inp" value={dForm.stage} onChange={e=>{ const s=STAGES.find(x=>x.id===e.target.value); setDForm({...dForm,stage:e.target.value,probability:s?.prob||dForm.probability}); }}>
+                      {STAGES.map(s=><option key={s.id} value={s.id}>{s.label}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <div style={{fontSize:10,color:"var(--mut)",marginBottom:4}}>Probability %</div>
+                    <input type="number" className="inp" value={dForm.probability} onChange={e=>setDForm({...dForm,probability:Number(e.target.value)})}/>
+                  </div>
+                </div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                  <div>
+                    <div style={{fontSize:10,color:"var(--mut)",marginBottom:4}}>Value/Month (₹)</div>
+                    <input type="number" className="inp" placeholder="Expected monthly value" value={dForm.value_per_month} onChange={e=>setDForm({...dForm,value_per_month:e.target.value})}/>
+                  </div>
+                  <div>
+                    <div style={{fontSize:10,color:"var(--mut)",marginBottom:4}}>Expected Close Date</div>
+                    <input type="date" className="inp" value={dForm.expected_close} onChange={e=>setDForm({...dForm,expected_close:e.target.value})}/>
+                  </div>
+                </div>
+                <input className="inp" placeholder="Product mix (e.g. 500ml Milky, 300ml Black)" value={dForm.product_mix} onChange={e=>setDForm({...dForm,product_mix:e.target.value})}/>
+                <input className="inp" placeholder="Assigned to (sales rep)" value={dForm.assigned_to} onChange={e=>setDForm({...dForm,assigned_to:e.target.value})}/>
+                <textarea className="inp" placeholder="Notes" rows={2} value={dForm.notes} onChange={e=>setDForm({...dForm,notes:e.target.value})} style={{resize:"none"}}/>
+                <div style={{display:"flex",gap:8}}>
+                  <button className="btn btn-p" style={{flex:1,justifyContent:"center"}} onClick={saveDeal}>Save Deal</button>
+                  <button className="btn btn-o" onClick={()=>{setShowAdd(false);setSelDeal(null);}}>Cancel</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+
   /* ── NAV ── */
   const navs = [
     {id:"dashboard",lbl:"Dashboard",ic:"🏠",roles:["admin","sales","dataentry"]},
@@ -3778,6 +4037,7 @@ export default function CRM({ currentUser, onLogout }) {
     {id:"pricing",lbl:"Pricing",ic:"💰",roles:["admin"]},
     {id:"production",lbl:"Production",ic:"🏭",roles:["admin"]},
     {id:"planner",lbl:`Planner${todayTaskCount>0?" ("+todayTaskCount+")":""}`,ic:"📅",roles:["admin","sales"]},
+    {id:"pipeline",lbl:"Pipeline",ic:"🎯",roles:["admin","sales"]},
     {id:"analytics",lbl:"Analytics",ic:"📊",roles:["admin"]},
   ].filter(n=>n.roles?.includes(userRole)||userRole==="viewer");
 
@@ -3832,6 +4092,7 @@ export default function CRM({ currentUser, onLogout }) {
           {view==="production"&&isAdmin&&<Production/>}
           {view==="analytics"&&isAdmin&&<Analytics/>}
           {view==="planner"&&<Planner/>}
+          {view==="pipeline"&&<Pipeline/>}
         </div>
       </div>
       {renderModal()}
