@@ -3793,7 +3793,7 @@ export default function CRM({ currentUser, onLogout }) {
       setLoading(true);
       try {
         let url = "crm_deals?order=updated_at.desc";
-        if(filter==="active") url += "&stage=not.in.(won,lost)";
+        if(filter==="active") url += "&stage=neq.won&stage=neq.lost";
         else if(filter==="won") url += "&stage=eq.won";
         else if(filter==="lost") url += "&stage=eq.lost";
         const data = await sbFetch(url);
@@ -3811,7 +3811,15 @@ export default function CRM({ currentUser, onLogout }) {
           await sbFetch("crm_deals?id=eq."+selDeal.id, {method:"PATCH", body:{...dForm, updated_at:new Date().toISOString()}});
           toast$("Deal updated!");
         } else {
-          await sbFetch("crm_deals", {method:"POST", body:{...dForm, created_by:userRole}});
+          await sbFetch("crm_deals", {method:"POST", body:{
+            title:dForm.title, customer_name:dForm.customer_name,
+            company:dForm.company||"", stage:dForm.stage||"lead",
+            value_per_month:dForm.value_per_month?Number(dForm.value_per_month):null,
+            probability:Number(dForm.probability)||10,
+            expected_close:dForm.expected_close||null,
+            product_mix:dForm.product_mix||"", notes:dForm.notes||"",
+            assigned_to:dForm.assigned_to||"", created_by:userRole
+          }});
           toast$("Deal added!");
         }
         setShowAdd(false); setSelDeal(null);
