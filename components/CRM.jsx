@@ -380,40 +380,29 @@ export default function CRM({ currentUser, onLogout }) {
     const epr = order.epr_applied ? Math.round(subtotal*0.01) : 0;
     const gst = order.gst_type==="including" ? 0 : Math.round(subtotal*0.18);
     const total = subtotal + epr + gst;
-
-    const lines = [
-      `*Mayur Food Packaging Products*`,
-      `_Shreeja Packaging Industries Pvt. Ltd._`,
-      ``,
-      `*Order Confirmation*`,
-      `Date: ${fd(order.order_date)}`,
-      `Party: *${order.company||order.customer_name}*`,
-      ``,
-      `*Items:*`,
-      ...(order.items||[]).map((item,i)=>
-        `${i+1}. ${item.product_name||""} — ${item.qty_cases} ctns @ ₹${item.ctn_price}/ctn = *₹${Number(item.amount||0).toLocaleString("en-IN")}*`
-      ),
-      ``,
-      `Subtotal: ₹${subtotal.toLocaleString("en-IN")}`,
-      ...(epr>0?[`EPR @1%: ₹${epr.toLocaleString("en-IN")}`]:[]),
-      ...(gst>0?[`GST @18%: ₹${gst.toLocaleString("en-IN")}`]:[]),
-      `*Total: ₹${total.toLocaleString("en-IN")}*`,
-      ``,
-      `Payment: ${order.payment_mode?.replace("_"," ")||"As agreed"}`,
-      ...(order.notes?[`Note: ${order.notes}`]:[]),
-      ``,
-      `_Please confirm the order._`,
-      `Thank you! 🙏`,
-    ].join("
-");
-
-    // Copy to clipboard
-    navigator.clipboard.writeText(lines).then(()=>{
-      toast$("WhatsApp message copied! Open WhatsApp and paste.");
+    const NL = "\n";
+    let msg = "*Mayur Food Packaging Products*" + NL;
+    msg += "_Shreeja Packaging Industries Pvt. Ltd._" + NL + NL;
+    msg += "*Order Confirmation*" + NL;
+    msg += "Date: " + fd(order.order_date) + NL;
+    msg += "Party: *" + (order.company||order.customer_name||"") + "*" + NL + NL;
+    msg += "*Items:*" + NL;
+    (order.items||[]).forEach((item,idx) => {
+      const amt = Number(item.amount||0).toLocaleString("en-IN");
+      msg += (idx+1) + ". " + (item.product_name||"") + " - " + (item.qty_cases||"") + " ctns @ Rs." + (item.ctn_price||"") + "/ctn = *Rs." + amt + "*" + NL;
+    });
+    msg += NL + "Subtotal: Rs." + subtotal.toLocaleString("en-IN") + NL;
+    if(epr>0) msg += "EPR @1%: Rs." + epr.toLocaleString("en-IN") + NL;
+    if(gst>0) msg += "GST @18%: Rs." + gst.toLocaleString("en-IN") + NL;
+    msg += "*Total: Rs." + total.toLocaleString("en-IN") + "*" + NL + NL;
+    msg += "Payment: " + (order.payment_mode||"").replace("_"," ") + NL;
+    if(order.notes) msg += "Note: " + order.notes + NL;
+    msg += NL + "_Please confirm the order._" + NL + "Thank you!";
+    navigator.clipboard.writeText(msg).then(()=>{
+      toast$("WA message copied — WhatsApp mein paste karo!");
     }).catch(()=>{
-      // Fallback — open in new window
-      const win = window.open("","_blank");
-      win.document.write(`<pre style="font-family:sans-serif;padding:20px;white-space:pre-wrap;">${lines}</pre>`);
+      const w = window.open("","_blank");
+      w.document.write("<pre style='padding:20px;font-family:sans-serif;white-space:pre-wrap;'>" + msg + "</pre>");
     });
   };
 
