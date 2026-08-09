@@ -4749,6 +4749,221 @@ export default function CRM({ currentUser, onLogout }) {
   };
 
 
+
+  // ══════════════════════════════════════════════
+  // SOP — Standard Operating Procedure
+  // ══════════════════════════════════════════════
+  const SOP = () => {
+    const isFieldSales = ["Akhilesh"].includes(currentUser?.name);
+    const isInsideSales = ["Karan"].includes(currentUser?.name);
+    const [sopTab, setSopTab] = useState(isFieldSales?"field":isInsideSales?"inside":"field");
+
+    const FieldSOP = () => (
+      <div style={{fontSize:13,lineHeight:1.9}}>
+        <div style={{background:"rgba(59,130,246,.08)",border:"1px solid rgba(59,130,246,.2)",
+          borderRadius:10,padding:14,marginBottom:16}}>
+          <div style={{fontWeight:800,fontSize:15,marginBottom:4}}>🎯 Aapka Kaam Kya Hai?</div>
+          <div>Aap <b>field sales</b> mein ho — seedha customer ke paas jaana, malna, order lana.</div>
+          <div style={{marginTop:6}}>CRM aapka <b>digital diary</b> hai — visit log karo, note karo, reminder lagao, order enter karo.</div>
+        </div>
+
+        {[
+          {
+            time:"🌅 SUBAH (9 AM)", color:"#3b82f6",
+            steps:[
+              {icon:"📅",title:"Planner check karo",desc:'CRM → Planner tab → 🔴 Overdue tasks pehle karo → 🟡 Aaj ki calls plan karo'},
+              {icon:"👥",title:"Apni parties dekho",desc:'CRM → Customers → Akhilesh filter lagao → Follow-up 🔴🟡 wali parties pehle visit karo'},
+            ]
+          },
+          {
+            time:"🚗 FIELD MEIN — Har Visit Ke Baad", color:"#f59e0b",
+            steps:[
+              {icon:"📝",title:"Visit log karo (5 min)",desc:'CRM → Party dhundho → Log Interaction → Type: Visit → Note: kya baat hui → Follow-up date daalo'},
+              {icon:"💡",title:"Note example",desc:'"500ml Milky ka sample diya. Price ₹2050 discuss ki. Next visit mein order confirm hoga."'},
+            ]
+          },
+          {
+            time:"🧾 ORDER MILA — Turant Enter Karo", color:"#10b981",
+            steps:[
+              {icon:"➕",title:"Order enter karo",desc:'CRM → New Order (top button) → Party select → Items bharo → Price daalo → Save'},
+              {icon:"💬",title:"WhatsApp bhejo",desc:'Order detail mein → WA Message button dabao → Copy hoga → WhatsApp kholo → Paste karo → Send!'},
+            ]
+          },
+          {
+            time:"🌆 SHAM (6 PM)", color:"#a78bfa",
+            steps:[
+              {icon:"✓",title:"Done tasks tick karo",desc:'Planner → Completed tasks pe ✓ dabao → Kal ke tasks check karo'},
+              {icon:"🎯",title:"Pipeline update karo",desc:'Pipeline → Deals mein stage move karo agar progress hui → Weekly ek baar zaroori'},
+            ]
+          },
+        ].map((section,si)=>(
+          <div key={si} style={{marginBottom:20}}>
+            <div style={{fontWeight:800,fontSize:13,color:section.color,
+              background:section.color+"11",padding:"8px 14px",borderRadius:8,marginBottom:10}}>
+              {section.time}
+            </div>
+            {section.steps.map((step,i)=>(
+              <div key={i} style={{display:"flex",gap:12,marginBottom:10,
+                background:"var(--card2)",borderRadius:8,padding:"10px 14px"}}>
+                <div style={{fontSize:20,flexShrink:0}}>{step.icon}</div>
+                <div>
+                  <div style={{fontWeight:700,marginBottom:2}}>{step.title}</div>
+                  <div style={{fontSize:12,color:"var(--mut)"}}>{step.desc}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        ))}
+
+        <div style={{background:"rgba(239,68,68,.08)",border:"1px solid rgba(239,68,68,.2)",
+          borderRadius:10,padding:14}}>
+          <div style={{fontWeight:800,marginBottom:8}}>⚠️ 5 Zaroori Rules</div>
+          {[
+            "Har visit ke baad note karo — chahe 2 line hi sahi",
+            "Follow-up date zaroori — bina date ke note mat karo",
+            "Order same din enter karo — kal pe mat chhodo",
+            "Pipeline weekly update karo — har Friday",
+            "Planner roz subah check karo — ye aapka to-do list hai",
+          ].map((r,i)=>(
+            <div key={i} style={{display:"flex",gap:8,marginBottom:6,fontSize:12}}>
+              <span style={{color:"#ef4444",fontWeight:700,flexShrink:0}}>{i+1}.</span>
+              <span>{r}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+
+    const InsideSOP = () => (
+      <div style={{fontSize:13,lineHeight:1.9}}>
+        <div style={{background:"rgba(16,185,129,.08)",border:"1px solid rgba(16,185,129,.2)",
+          borderRadius:10,padding:14,marginBottom:16}}>
+          <div style={{fontWeight:800,fontSize:15,marginBottom:4}}>🎯 Aapka Kaam Kya Hai?</div>
+          <div>Aap <b>inside sales</b> mein ho — phone/WhatsApp/email se customers handle, quotes bhejo, orders process karo.</div>
+          <div style={{marginTop:6}}>CRM aapka <b>command center</b> hai — enquiries track, quotes manage, pipeline update.</div>
+        </div>
+
+        {[
+          {
+            time:"🌅 SUBAH (9:30 AM)", color:"#3b82f6",
+            steps:[
+              {icon:"📅",title:"Planner check karo",desc:'CRM → Planner → 🔴 Overdue calls pehle karo → Aaj ke follow-ups list banao'},
+              {icon:"📋",title:"Pending enquiries dekho",desc:'CRM → Enquiries → Pending filter → 24 ghante se zyada old = turant call karo'},
+            ]
+          },
+          {
+            time:"📞 DIN MEIN — Har Call/WA Ke Baad", color:"#f59e0b",
+            steps:[
+              {icon:"📝",title:"Interaction log karo (2 min)",desc:'CRM → Party dhundho → Log Interaction → Type: Call/WhatsApp → Note likhो → Follow-up date daalo'},
+              {icon:"💡",title:"Note example",desc:'"Price enquiry — 300ml Milky 10,000 pcs. ₹1750 quote kiya. 2 din mein confirm."'},
+            ]
+          },
+          {
+            time:"📄 QUOTE BHEJNI HO", color:"#a78bfa",
+            steps:[
+              {icon:"🧾",title:"Proforma banao",desc:'CRM → New Order → Items bharo → Print PI → Customer ko PDF bhejo'},
+              {icon:"💬",title:"WhatsApp message bhejo",desc:'Order mein → WA Message button → Copy hoga → WhatsApp pe paste karo → Send!'},
+            ]
+          },
+          {
+            time:"✅ ORDER CONFIRM HUA", color:"#10b981",
+            steps:[
+              {icon:"🎉",title:"Order confirm karo",desc:'CRM → Orders → Draft → Status: Confirmed → Customer ko confirmation bhejo'},
+              {icon:"📦",title:"Production inform karo",desc:'Nitin bhai ko batao → Dispatch date confirm karo → Customer ko ETA do'},
+            ]
+          },
+          {
+            time:"🌆 SHAM (5:30 PM) — Pipeline Review", color:"#f97316",
+            steps:[
+              {icon:"🎯",title:"Pipeline update karo",desc:'Pipeline → Active deals → Stage move karo → Note add karo → Kal ke follow-ups plan karo'},
+            ]
+          },
+        ].map((section,si)=>(
+          <div key={si} style={{marginBottom:20}}>
+            <div style={{fontWeight:800,fontSize:13,color:section.color,
+              background:section.color+"11",padding:"8px 14px",borderRadius:8,marginBottom:10}}>
+              {section.time}
+            </div>
+            {section.steps.map((step,i)=>(
+              <div key={i} style={{display:"flex",gap:12,marginBottom:10,
+                background:"var(--card2)",borderRadius:8,padding:"10px 14px"}}>
+                <div style={{fontSize:20,flexShrink:0}}>{step.icon}</div>
+                <div>
+                  <div style={{fontWeight:700,marginBottom:2}}>{step.title}</div>
+                  <div style={{fontSize:12,color:"var(--mut)"}}>{step.desc}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        ))}
+
+        {/* Enquiry to Order Flow */}
+        <div className="card" style={{marginBottom:16}}>
+          <div style={{fontWeight:800,marginBottom:12}}>🔄 Enquiry → Order Flow</div>
+          <div style={{display:"flex",flexDirection:"column",gap:6}}>
+            {[
+              ["📞","Customer call aaya"],
+              ["📝","Interaction log karo (Call type)"],
+              ["📋","Enquiry enter karo"],
+              ["📄","Quote ready → PI banao → WhatsApp karo"],
+              ["🤝","Negotiation? → Pipeline mein Negotiation stage"],
+              ["✅","Order confirmed → Enter karo → Confirmed status"],
+              ["📦","Dispatch → Status update → Customer ko batao"],
+            ].map(([ic,txt],i)=>(
+              <div key={i} style={{display:"flex",gap:10,alignItems:"center"}}>
+                <div style={{fontSize:16,width:28,textAlign:"center"}}>{ic}</div>
+                <div style={{flex:1,fontSize:12,padding:"6px 10px",background:"var(--card2)",borderRadius:6}}>{txt}</div>
+                {i<6&&<div style={{color:"var(--mut)",fontSize:16}}>↓</div>}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div style={{background:"rgba(239,68,68,.08)",border:"1px solid rgba(239,68,68,.2)",
+          borderRadius:10,padding:14}}>
+          <div style={{fontWeight:800,marginBottom:8}}>⚠️ 5 Zaroori Rules</div>
+          {[
+            "Har call ke baad note karo — chahe ek line hi sahi",
+            "Follow-up date hamesha daalo — bina date ka note waste hai",
+            "Enquiry 24 ghante mein respond karo — delay = lost customer",
+            "Order same din enter karo — Draft mein mat chhodo",
+            "Pipeline weekly update karo — har Friday review karo",
+          ].map((r,i)=>(
+            <div key={i} style={{display:"flex",gap:8,marginBottom:6,fontSize:12}}>
+              <span style={{color:"#ef4444",fontWeight:700,flexShrink:0}}>{i+1}.</span>
+              <span>{r}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+
+    return (
+      <div>
+        <div className="sh">
+          <div>
+            <div className="sh-t">📋 SOP — Kaise Use Karein CRM</div>
+            <div className="sh-s">Step-by-step guide · Roz ka routine · Rules</div>
+          </div>
+        </div>
+
+        {/* Tabs */}
+        <div className="tabs" style={{marginBottom:16}}>
+          <div className={"tab "+(sopTab==="field"?"a":"")} onClick={()=>setSopTab("field")}>
+            🚗 Field Sales (Akhilesh)
+          </div>
+          <div className={"tab "+(sopTab==="inside"?"a":"")} onClick={()=>setSopTab("inside")}>
+            📞 Inside Sales (Karan)
+          </div>
+        </div>
+
+        {sopTab==="field"&&<FieldSOP/>}
+        {sopTab==="inside"&&<InsideSOP/>}
+      </div>
+    );
+  };
+
+
   /* ── NAV ── */
   const navs = [
     {id:"dashboard",lbl:"Dashboard",ic:"🏠",roles:["admin","sales","dataentry"]},
@@ -4766,6 +4981,7 @@ export default function CRM({ currentUser, onLogout }) {
     {id:"planner",lbl:`Planner${todayTaskCount>0?" ("+todayTaskCount+")":""}`,ic:"📅",roles:["admin","sales"]},
     {id:"pipeline",lbl:"Pipeline",ic:"🎯",roles:["admin","sales"]},
     {id:"forecast",lbl:"Forecast",ic:"📈",roles:["admin","sales"]},
+    {id:"sop",lbl:"SOP",ic:"📋",roles:["admin","sales","dataentry"]},
     {id:"analytics",lbl:"Analytics",ic:"📊",roles:["admin"]},
   ].filter(n=>n.roles?.includes(userRole)||userRole==="viewer");
 
@@ -4822,6 +5038,7 @@ export default function CRM({ currentUser, onLogout }) {
           {view==="planner"&&<Planner/>}
           {view==="pipeline"&&<Pipeline/>}
           {view==="forecast"&&<Forecast/>}
+          {view==="sop"&&<SOP/>}
         </div>
       </div>
       {renderModal()}
