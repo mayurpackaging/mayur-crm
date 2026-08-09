@@ -4272,6 +4272,245 @@ export default function CRM({ currentUser, onLogout }) {
   };
 
 
+
+  // ══════════════════════════════════════════════
+  // SALES FORECASTING
+  // ══════════════════════════════════════════════
+  const Forecast = () => {
+    const [fMonth, setFMonth] = useState(new Date().getMonth()+1);
+    const [fYear, setFYear] = useState(new Date().getFullYear());
+    const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
+    // Pipeline deals → forecast
+    const [deals, setDeals] = useState([]);
+    const [loading, setLoading] = useState(false);
+
+    React.useEffect(()=>{
+      setLoading(true);
+      sbFetch("crm_deals?order=updated_at.desc&select=*")
+        .then(d=>setDeals(d||[]))
+        .finally(()=>setLoading(false));
+    },[]);
+
+    const activeDe = deals.filter(d=>!["lost"].includes(d.stage));
+    
+    // Monthly forecast from pipeline
+    const pipelineByRep = USERS.reduce((acc,u)=>{
+      const myDeals = activeDe.filter(d=>d.assigned_to===u.name);
+      const weighted = myDeals.reduce((s,d)=>s+(Number(d.value_per_month)||0)*(d.probability||0)/100,0);
+      const bestCase = myDeals.reduce((s,d)=>s+(Number(d.value_per_month)||0),0);
+      const wonDeals = deals.filter(d=>d.stage==="won"&&d.assigned_to===u.name);
+      const wonVal = wonDeals.reduce((s,d)=>s+(Number(d.value_per_month)||0),0);
+      acc[u.name] = {weighted, bestCase, wonVal, deals:myDeals.length, wonDeals:wonDeals.length};
+      return acc;
+    },{});
+
+    // Orders this month
+    const inMonth = (dateStr) => {
+      if(!dateStr) return false;
+      const d = new Date(dateStr);
+      return d.getFullYear()===fYear && d.getMonth()===fMonth-1;
+    };
+    const monthOrders = ORDERS.filter(o=>inMonth(o.order_date));
+    const monthRev = monthOrders.reduce((s,o)=>s+(Number(o.total_amount)||0),0);
+
+    // Target this month
+    const curMonthStr = String(fMonth).padStart(2,"0");
+    const monthTarget = TARGETS.filter(t=>t.month===curMonthStr&&t.year===fYear)
+      .reduce((s,t)=>s+(Number(t.target_amount)||0),0);
+
+    // Total pipeline weighted
+    const totalWeighted = activeDe.reduce((s,d)=>s+(Number(d.value_per_month)||0)*(d.probability||0)/100,0);
+    const totalBest = activeDe.reduce((s,d)=>s+(Number(d.value_per_month)||0),0);
+
+    return (
+      <div>
+        <div className="sh">
+          <div>
+            <div className="sh-t">📈 Sales Forecasting</div>
+            <div className="sh-s">Pipeline se monthly forecast · Target vs Actual</div>
+          </div>
+          <div style={{display:"flex",gap:8,alignItems:"center"}}>
+            <select className="inp" style={{width:"auto",padding:"5px 10px",fontSize:11}}
+              value={fMonth} onChange={e=>setFMonth(Number(e.target.value))}>
+              {months.map((m,i)=><option key={i} value={i+1}>{m}</option>)}
+            </select>
+            <select className="inp" style={{width:"auto",padding:"5px 10px",fontSize:11}}
+              value={fYear} onChange={e=>setFYear(Number(e.target.value))}>
+              {[2025,2026,2027].map(y=><option key={y} value={y}>{y}</option>)}
+            </select>
+          </div>
+        </div>
+
+        {/* Summary cards */}
+        <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10,marginBottom:14}}>
+          {[
+            ["🎯 Monthly Target", monthTarget>0?"₹"+Math.round(monthTarget/1000)+"K":"Not set", "From Targets tab", "#3b82f6"],
+            ["✅ Achieved", "₹"+Math.round(monthRev/1000)+"K", monthOrders.length+" orders", "#10b981"],
+            ["📊 Weighted Forecast", "₹"+Math.round(totalWeighted/1000)+"K/mo", "Probability adjusted", "#f59e0b"],
+            ["🚀 Best Case", "₹"+Math.round(totalBest/1000)+"K/mo", "If all deals close", "#a78bfa"],
+          ].map(([lbl,val,sub,c])=>(
+            <div key={lbl} style={{background:c+"11",border:"1px solid "+c+"33",borderRadius:10,padding:12}}>
+              <div style={{fontSize:10,color:"var(--mut)",marginBottom:4}}>{lbl}</div>
+              <div style={{fontSize:18,fontWeight:800,color:c}}>{val}</div>
+              <div style={{fontSize:10,color:"var(--mut)"}}>{sub}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Target vs Achieved bar */}
+        {monthTarget>0&&(
+          <div className="card" style={{marginBottom:14}}>
+            <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
+              <span style={{fontWeight:700,fontSize:13}}>{months[fMonth-1]} {fYear} — Target vs Achieved</span>
+              <span style={{fontSize:12,color:"var(--mut)"}}>{monthTarget>0?Math.round(monthRev/monthTarget*100):0}% achieved</span>
+            </div>
+            <div style={{background:"var(--card2)",borderRadius:8,height:24,overflow:"hidden",position:"relative"}}>
+              <div style={{height:"100%",width:Math.min(monthRev/monthTarget*100,100)+"%",
+                background:monthRev>=monthTarget?"#10b981":"#f59e0b",borderRadius:8,transition:"width .5s"}}/>
+              <span style={{position:"absolute",right:8,top:0,fontSize:11,lineHeight:"24px",fontWeight:700}}>
+                ₹{Math.round(monthRev/1000)}K / ₹{Math.round(monthTarget/1000)}K
+              </span>
+            </div>
+            <div style={{fontSize:11,color:monthRev>=monthTarget?"#10b981":"#ef4444",marginTop:6,fontWeight:700}}>
+              {monthRev>=monthTarget?"🎉 Target achieved!":"Gap: ₹"+Math.round((monthTarget-monthRev)/1000)+"K remaining"}
+            </div>
+          </div>
+        )}
+
+        {/* Rep-wise forecast */}
+        <div className="card" style={{marginBottom:14,padding:0}}>
+          <div style={{padding:"12px 16px",fontWeight:700,fontSize:13,borderBottom:"1px solid var(--bdr)"}}>
+            👤 Rep-wise Pipeline Forecast
+          </div>
+          <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+            <thead>
+              <tr style={{background:"var(--card2)"}}>
+                {["Rep","Active Deals","Won Deals","Won Value","Weighted Forecast","Best Case","Achievement %"].map(h=>(
+                  <th key={h} style={{padding:"8px 12px",fontSize:10,color:"var(--mut)",textAlign:h==="Rep"?"left":"center"}}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {USERS.map(u=>{
+                const d = pipelineByRep[u.name]||{weighted:0,bestCase:0,wonVal:0,deals:0,wonDeals:0};
+                const tgt = TARGETS.find(t=>t.user_name===u.name&&t.month===curMonthStr&&t.year===fYear);
+                const tgtAmt = Number(tgt?.target_amount||0);
+                const ach = monthOrders.filter(o=>o.created_by===u.name).reduce((s,o)=>s+(Number(o.total_amount)||0),0);
+                const achPct = tgtAmt>0?Math.round(ach/tgtAmt*100):null;
+                return (
+                  <tr key={u.name} style={{borderBottom:"1px solid var(--bdr)"}}>
+                    <td style={{padding:"10px 12px",fontWeight:700}}>
+                      <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                        <Av name={u.name} size={28}/>{u.name}
+                      </div>
+                    </td>
+                    <td style={{padding:"10px",textAlign:"center",fontWeight:700,color:"#3b82f6"}}>{d.deals}</td>
+                    <td style={{padding:"10px",textAlign:"center",fontWeight:700,color:"#10b981"}}>{d.wonDeals}</td>
+                    <td style={{padding:"10px",textAlign:"center",fontWeight:700,color:"#10b981"}}>
+                      {d.wonVal>0?"₹"+Math.round(d.wonVal/1000)+"K/mo":"—"}
+                    </td>
+                    <td style={{padding:"10px",textAlign:"center",fontWeight:700,color:"#f59e0b"}}>
+                      {d.weighted>0?"₹"+Math.round(d.weighted/1000)+"K/mo":"—"}
+                    </td>
+                    <td style={{padding:"10px",textAlign:"center",color:"#a78bfa"}}>
+                      {d.bestCase>0?"₹"+Math.round(d.bestCase/1000)+"K/mo":"—"}
+                    </td>
+                    <td style={{padding:"10px",textAlign:"center"}}>
+                      {achPct!==null?(
+                        <div>
+                          <div style={{fontWeight:800,color:achPct>=100?"#10b981":achPct>=70?"#f59e0b":"#ef4444"}}>{achPct}%</div>
+                          <div style={{fontSize:9,color:"var(--mut)"}}>₹{Math.round(ach/1000)}K / ₹{Math.round(tgtAmt/1000)}K</div>
+                        </div>
+                      ):<span style={{color:"var(--mut)",fontSize:10}}>No target</span>}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Stage-wise pipeline value */}
+        <div className="card" style={{marginBottom:14}}>
+          <div style={{fontWeight:700,fontSize:13,marginBottom:12}}>🎯 Pipeline Stage Analysis</div>
+          <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+            {[
+              {id:"lead",label:"🌱 Lead",color:"#6b7280",prob:10},
+              {id:"qualified",label:"✅ Qualified",color:"#3b82f6",prob:25},
+              {id:"proposal",label:"📄 Proposal",color:"#f59e0b",prob:50},
+              {id:"negotiation",label:"🤝 Negotiation",color:"#f97316",prob:75},
+              {id:"won",label:"🏆 Won",color:"#10b981",prob:100},
+            ].map(stg=>{
+              const stgDeals = deals.filter(d=>d.stage===stg.id);
+              const val = stgDeals.reduce((s,d)=>s+(Number(d.value_per_month)||0),0);
+              const weighted = val * stg.prob/100;
+              return (
+                <div key={stg.id} style={{flex:1,minWidth:120,background:stg.color+"11",
+                  border:"1px solid "+stg.color+"33",borderRadius:10,padding:12,textAlign:"center"}}>
+                  <div style={{fontSize:11,fontWeight:700,color:stg.color,marginBottom:6}}>{stg.label}</div>
+                  <div style={{fontSize:18,fontWeight:800,color:stg.color}}>{stgDeals.length}</div>
+                  <div style={{fontSize:10,color:"var(--mut)"}}>deals</div>
+                  {val>0&&<div style={{fontSize:11,fontWeight:700,marginTop:4}}>₹{Math.round(val/1000)}K/mo</div>}
+                  {val>0&&<div style={{fontSize:9,color:"var(--mut)"}}>Weighted: ₹{Math.round(weighted/1000)}K</div>}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Deal list with expected close */}
+        <div className="card" style={{padding:0}}>
+          <div style={{padding:"12px 16px",fontWeight:700,fontSize:13,borderBottom:"1px solid var(--bdr)"}}>
+            📋 Deals Closing Soon
+          </div>
+          <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+            <thead>
+              <tr style={{background:"var(--card2)"}}>
+                {["Deal","Customer","Rep","Stage","Value/mo","Probability","Expected Close","Weighted"].map(h=>(
+                  <th key={h} style={{padding:"8px",fontSize:10,color:"var(--mut)",textAlign:h==="Deal"||h==="Customer"?"left":"center"}}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {activeDe
+                .filter(d=>d.expected_close)
+                .sort((a,b)=>new Date(a.expected_close)-new Date(b.expected_close))
+                .map((d,i)=>{
+                  const weighted = (Number(d.value_per_month)||0)*(d.probability||0)/100;
+                  const overdue = new Date(d.expected_close)<new Date() && d.stage!=="won";
+                  return (
+                    <tr key={i} style={{borderBottom:"1px solid var(--bdr)",
+                      background:overdue?"rgba(239,68,68,.04)":"transparent"}}>
+                      <td style={{padding:"8px 10px",fontWeight:600,fontSize:11}}>{d.title}</td>
+                      <td style={{padding:"8px",color:"var(--mut)",fontSize:11}}>{d.customer_name}</td>
+                      <td style={{padding:"8px",textAlign:"center",fontSize:11}}>{d.assigned_to||"—"}</td>
+                      <td style={{padding:"8px",textAlign:"center"}}>
+                        <span style={{fontSize:10,padding:"2px 6px",borderRadius:6,
+                          background:"var(--card2)",fontWeight:700}}>{d.stage}</span>
+                      </td>
+                      <td style={{padding:"8px",textAlign:"center",fontWeight:700,color:"#10b981"}}>
+                        {d.value_per_month?"₹"+Number(d.value_per_month).toLocaleString("en-IN"):"—"}
+                      </td>
+                      <td style={{padding:"8px",textAlign:"center",fontWeight:700}}>{d.probability||0}%</td>
+                      <td style={{padding:"8px",textAlign:"center",
+                        color:overdue?"#ef4444":"var(--txt)",fontWeight:overdue?700:400}}>
+                        {d.expected_close} {overdue&&"⚠️"}
+                      </td>
+                      <td style={{padding:"8px",textAlign:"center",fontWeight:700,color:"#f59e0b"}}>
+                        {weighted>0?"₹"+Math.round(weighted/1000)+"K":"—"}
+                      </td>
+                    </tr>
+                  );
+                })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  };
+
+
   /* ── NAV ── */
   const navs = [
     {id:"dashboard",lbl:"Dashboard",ic:"🏠",roles:["admin","sales","dataentry"]},
@@ -4288,6 +4527,7 @@ export default function CRM({ currentUser, onLogout }) {
     {id:"production",lbl:"Production",ic:"🏭",roles:["admin"]},
     {id:"planner",lbl:`Planner${todayTaskCount>0?" ("+todayTaskCount+")":""}`,ic:"📅",roles:["admin","sales"]},
     {id:"pipeline",lbl:"Pipeline",ic:"🎯",roles:["admin","sales"]},
+    {id:"forecast",lbl:"Forecast",ic:"📈",roles:["admin","sales"]},
     {id:"analytics",lbl:"Analytics",ic:"📊",roles:["admin"]},
   ].filter(n=>n.roles?.includes(userRole)||userRole==="viewer");
 
@@ -4343,6 +4583,7 @@ export default function CRM({ currentUser, onLogout }) {
           {view==="analytics"&&isAdmin&&<Analytics/>}
           {view==="planner"&&<Planner/>}
           {view==="pipeline"&&<Pipeline/>}
+          {view==="forecast"&&<Forecast/>}
         </div>
       </div>
       {renderModal()}
