@@ -449,6 +449,80 @@ export default function CRM({ currentUser, onLogout }) {
           </div>
         ))}
       </div>
+      {/* ── SPEED METER SECTION ── */}
+      {isAdmin&&(()=>{
+        const curMonth = String(new Date().getMonth()+1).padStart(2,"0");
+        const curYear = new Date().getFullYear();
+        const today = new Date().toISOString().slice(0,10);
+
+        const SpeedGauge = ({value, max, label, color="#10b981", size=100}) => {
+          const pct = Math.min(value/Math.max(max,1), 1);
+          const startAngle = -135, endAngle = 135;
+          const range = endAngle - startAngle;
+          const valAngle = startAngle + pct * range;
+          const r = size*0.38, cx = size/2, cy = size/2;
+          const toXY = (deg, radius) => ({
+            x: cx + radius * Math.cos((deg-90)*Math.PI/180),
+            y: cy + radius * Math.sin((deg-90)*Math.PI/180)
+          });
+          const s = toXY(startAngle, r), e = toXY(endAngle, r), v = toXY(valAngle, r);
+          const needleEnd = toXY(valAngle, r*0.65);
+          const zone = pct>=0.9?"#10b981":pct>=0.7?"#f59e0b":pct>=0.4?"#f97316":"#ef4444";
+          const dispVal = value>=1000?"₹"+Math.round(value/1000)+"K":value;
+          return (
+            <div style={{textAlign:"center"}}>
+              <svg width={size} height={size*0.72} viewBox={"0 0 "+size+" "+(size*0.72)} style={{overflow:"visible"}}>
+                <path d={"M "+s.x+" "+s.y+" A "+r+" "+r+" 0 1 1 "+e.x+" "+e.y} fill="none" stroke="var(--bdr)" strokeWidth={size*0.07} strokeLinecap="round"/>
+                {pct>0.02&&<path d={"M "+s.x+" "+s.y+" A "+r+" "+r+" 0 "+(pct>0.5?1:0)+" 1 "+v.x+" "+v.y} fill="none" stroke={zone} strokeWidth={size*0.07} strokeLinecap="round"/>}
+                <line x1={cx} y1={cy} x2={needleEnd.x} y2={needleEnd.y} stroke={zone} strokeWidth={size*0.03} strokeLinecap="round"/>
+                <circle cx={cx} cy={cy} r={size*0.05} fill={zone}/>
+                <text x={cx} y={cy*1.1} textAnchor="middle" fontSize={size*0.15} fontWeight="800" fill={zone}>{dispVal}</text>
+                <text x={cx} y={cy*1.32} textAnchor="middle" fontSize={size*0.1} fill="var(--mut)">{label}</text>
+              </svg>
+            </div>
+          );
+        };
+
+        return (
+          <div className="card" style={{marginBottom:14}}>
+            <div style={{fontWeight:700,fontSize:13,marginBottom:12}}>⚡ Team Performance — {["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][new Date().getMonth()]} {curYear}</div>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:12}}>
+              {USERS.filter(u=>u.role==="sales"||u.role==="admin").map(u=>{
+                const mInter = I.filter(i=>i.created_at?.startsWith(curYear+"-"+curMonth)&&i.done_by===u.name).length;
+                const mOrders = ORDERS.filter(o=>o.order_date?.startsWith(curYear+"-"+curMonth)&&o.created_by===u.name);
+                const mRev = mOrders.reduce((s,o)=>s+(Number(o.total_amount)||0),0);
+                const tgt = TARGETS.find(t=>t.user_name===u.name&&t.month===curMonth&&t.year===curYear);
+                const tgtAmt = Number(tgt?.target_amount||0);
+                const achPct = tgtAmt>0?Math.round(mRev/tgtAmt*100):0;
+                const todayActs = I.filter(i=>i.created_at?.startsWith(today)&&i.done_by===u.name).length;
+                return (
+                  <div key={u.name} style={{background:"var(--card2)",borderRadius:10,padding:10,textAlign:"center"}}>
+                    <div style={{display:"flex",gap:6,alignItems:"center",justifyContent:"center",marginBottom:8}}>
+                      <Av name={u.name} size={22}/>
+                      <span style={{fontWeight:700,fontSize:12}}>{u.name}</span>
+                      {todayActs>0&&<span style={{fontSize:9,background:"#10b981",color:"#fff",borderRadius:8,padding:"1px 6px",fontWeight:700}}>+{todayActs} aaj</span>}
+                    </div>
+                    <div style={{display:"flex",gap:4,justifyContent:"center",flexWrap:"wrap"}}>
+                      <SpeedGauge value={mInter} max={50} label="Calls/Visits" size={95}/>
+                      <SpeedGauge value={mOrders.length} max={20} label="Orders" size={95}/>
+                      {tgtAmt>0
+                        ?<SpeedGauge value={achPct} max={100} label={"Target "+achPct+"%"} size={95}/>
+                        :<SpeedGauge value={mRev} max={500000} label="Revenue" size={95}/>
+                      }
+                    </div>
+                    {tgtAmt>0&&(
+                      <div style={{fontSize:10,marginTop:4,color:achPct>=100?"#10b981":achPct>=70?"#f59e0b":"#ef4444",fontWeight:700}}>
+                        ₹{Math.round(mRev/1000)}K / ₹{Math.round(tgtAmt/1000)}K target
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
+
       <div className="g2" style={{marginBottom:18}}>
         <div className="card">
           <div className="sh"><div><div className="sh-t">⚡ Urgent Follow-ups</div><div className="sh-s">Overdue + Today</div></div><button className="btn btn-o btn-sm" onClick={()=>setView("followups")}>All →</button></div>
