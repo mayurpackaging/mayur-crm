@@ -587,6 +587,7 @@ export default function CRM({ currentUser, onLogout }) {
                       <div style={{fontSize:15,fontWeight:800,color:"#10b981"}}>{fr(o.total_amount)}</div>
                       <button className="btn btn-o btn-sm" onClick={async()=>{setForm({...o,epr:!!o.epr_applied});try{const items=await sbGetOrderItems(o.id);setOrderItems(items||[]);}catch(e){setOrderItems([]);}setModal("editorder");}}>✏️</button>
                       <button className="btn btn-o btn-sm" onClick={()=>openOrder(o)}><Printer size={11}/></button>
+                      {isAdmin&&<button onClick={async(e)=>{e.stopPropagation();if(!window.confirm("Delete order?"))return;await sbFetch("crm_order_items?order_id=eq."+o.id,{method:"DELETE"});await sbFetch("crm_orders?id=eq."+o.id,{method:"DELETE"});setORDERS(p=>p.filter(x=>x.id!==o.id));toast$("Order deleted!");}} style={{padding:"3px 7px",borderRadius:5,fontSize:10,border:"1px solid #ef4444",background:"transparent",color:"#ef4444",cursor:"pointer"}}>🗑</button>}
                     </div>
                   </div>
                   <div style={{display:"flex",alignItems:"flex-start",gap:0,marginBottom:12}}>
@@ -1508,9 +1509,15 @@ export default function CRM({ currentUser, onLogout }) {
                       {idx<ilist.length-1&&<div style={{width:1,flex:1,background:"var(--bdr)",margin:"3px 0"}}/>}
                     </div>
                     <div style={{flex:1,paddingBottom:10}}>
-                      <div style={{display:"flex",justifyContent:"space-between"}}>
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                         <span style={{fontSize:11,color:TC[i.type],fontWeight:700,textTransform:"capitalize"}}>{i.type}</span>
-                        <span style={{fontSize:10,color:"var(--mut)"}}>{fd(i.created_at)} · {i.done_by}</span>
+                        <div style={{display:"flex",gap:6,alignItems:"center"}}>
+                          <span style={{fontSize:10,color:"var(--mut)"}}>{fd(i.created_at)} · {i.done_by}</span>
+                          {isAdmin&&<>
+                            <button onClick={()=>{setForm({...i,customer_id:selId});setModal("ainter");}} style={{padding:"1px 6px",borderRadius:4,fontSize:9,border:"1px solid var(--bdr)",background:"transparent",cursor:"pointer"}}>✏️</button>
+                            <button onClick={async()=>{if(!window.confirm("Delete?"))return;await sbFetch("crm_interactions?id=eq."+i.id,{method:"DELETE"});setI(p=>p.filter(x=>x.id!==i.id));toast$("Deleted!");}} style={{padding:"1px 6px",borderRadius:4,fontSize:9,border:"1px solid #ef4444",background:"transparent",color:"#ef4444",cursor:"pointer"}}>🗑</button>
+                          </>}
+                        </div>
                       </div>
                       <div style={{fontSize:12,marginTop:3,lineHeight:1.5}}>{i.note}</div>
                       {i.next_follow_up&&<div style={{fontSize:10,marginTop:3,color:"var(--acc)"}}>📌 {i.follow_up_note} · {fd(i.next_follow_up)}</div>}
@@ -4990,6 +4997,247 @@ export default function CRM({ currentUser, onLogout }) {
   };
 
 
+
+  // ══════════════════════════════════════════════
+  // DAILY REPORT + SPEED METER DASHBOARD
+  // ══════════════════════════════════════════════
+  const DailyReport = () => {
+    const today = new Date().toISOString().slice(0,10);
+    const [selDate, setSelDate] = useState(today);
+    const [selRep, setSelRep] = useState("all");
+    const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+    const curMonth = String(new Date().getMonth()+1).padStart(2,"0");
+    const curYear = new Date().getFullYear();
+
+    // Today's data
+    const dayInter = I.filter(i=>i.created_at?.startsWith(selDate)&&(selRep==="all"||i.done_by===selRep));
+    const dayOrders = ORDERS.filter(o=>o.order_date===selDate&&(selRep==="all"||o.created_by===selRep));
+    const dayTasks = []; // from crm_tasks — would need separate load
+
+    // Monthly data per rep
+    const monthData = (rep) => {
+      const mInter = I.filter(i=>i.created_at?.startsWith(curYear+"-"+curMonth)&&(rep==="all"||i.done_by===rep));
+      const mOrders = ORDERS.filter(o=>o.order_date?.startsWith(curYear+"-"+curMonth)&&(rep==="all"||o.created_by===rep));
+      const mRev = mOrders.reduce((s,o)=>s+(Number(o.total_amount)||0),0);
+      const tgt = TARGETS.find(t=>t.user_name===rep&&t.month===curMonth&&t.year===curYear);
+      const tgtAmt = Number(tgt?.target_amount||0);
+      return {interactions:mInter.length, orders:mOrders.length, revenue:mRev, target:tgtAmt};
+    };
+
+    // Speedometer SVG component
+    const Speedometer = ({value, max, label, unit="", color="#10b981", size=120}) => {
+      const pct = Math.min(value/Math.max(max,1), 1);
+      const angle = -135 + pct * 270; // -135 to +135 degrees
+      const r = size*0.38;
+      const cx = size/2, cy = size/2;
+      // Arc path
+      const polarToCart = (angle, r) => ({
+        x: cx + r * Math.cos((angle-90) * Math.PI/180),
+        y: cy + r * Math.sin((angle-90) * Math.PI/180)
+      });
+      const start = polarToCart(-135, r);
+      const end = polarToCart(135, r);
+      const active = polarToCart(angle, r);
+      const largeArc = pct > 0.5 ? 1 : 0;
+      const needle = polarToCart(angle, r*0.7);
+      const zone = pct >= 0.9 ? "#10b981" : pct >= 0.7 ? "#f59e0b" : pct >= 0.4 ? "#f97316" : "#ef4444";
+      return (
+        <svg width={size} height={size*0.75} viewBox={"0 0 "+size+" "+(size*0.75)}>
+          {/* Background arc */}
+          <path d={"M "+start.x+" "+start.y+" A "+r+" "+r+" 0 1 1 "+end.x+" "+end.y}
+            fill="none" stroke="var(--bdr)" strokeWidth={size*0.06} strokeLinecap="round"/>
+          {/* Value arc */}
+          {pct > 0 && <path d={"M "+start.x+" "+start.y+" A "+r+" "+r+" 0 "+largeArc+" 1 "+active.x+" "+active.y}
+            fill="none" stroke={zone} strokeWidth={size*0.06} strokeLinecap="round"/>}
+          {/* Needle */}
+          <line x1={cx} y1={cy} x2={needle.x} y2={needle.y}
+            stroke={zone} strokeWidth={size*0.025} strokeLinecap="round"/>
+          <circle cx={cx} cy={cy} r={size*0.04} fill={zone}/>
+          {/* Value text */}
+          <text x={cx} y={cy*1.15} textAnchor="middle" fontSize={size*0.14} fontWeight="800" fill={zone}>
+            {typeof value === "number" ? (value >= 1000 ? "₹"+Math.round(value/1000)+"K" : value) : value}{unit}
+          </text>
+          <text x={cx} y={cy*1.35} textAnchor="middle" fontSize={size*0.09} fill="var(--mut)">{label}</text>
+        </svg>
+      );
+    };
+
+    return (
+      <div>
+        <div className="sh">
+          <div>
+            <div className="sh-t">📊 Daily Report & Dashboard</div>
+            <div className="sh-s">Aaj ka performance · Speed meter · Full activity log</div>
+          </div>
+          <div style={{display:"flex",gap:8,alignItems:"center"}}>
+            <input type="date" className="inp" style={{width:"auto",padding:"5px 10px",fontSize:11}}
+              value={selDate} onChange={e=>setSelDate(e.target.value)}/>
+            <select className="inp" style={{width:"auto",padding:"5px 10px",fontSize:11}}
+              value={selRep} onChange={e=>setSelRep(e.target.value)}>
+              <option value="all">👥 All Reps</option>
+              {USERS.map(u=><option key={u.name} value={u.name}>{u.name}</option>)}
+            </select>
+          </div>
+        </div>
+
+        {/* ── SPEED METERS ── */}
+        <div className="card" style={{marginBottom:14}}>
+          <div style={{fontWeight:700,fontSize:13,marginBottom:14}}>
+            ⚡ Performance Dashboard — {months[new Date().getMonth()]} {curYear}
+            {selRep!=="all"&&<span style={{fontSize:11,color:"var(--mut)",fontWeight:400,marginLeft:8}}>({selRep})</span>}
+          </div>
+          <div style={{display:"flex",gap:8,justifyContent:"space-around",flexWrap:"wrap"}}>
+            {(selRep==="all"?["all"]:USERS.filter(u=>u.name===selRep).map(u=>u.name)).map(rep=>{
+              const d = monthData(rep);
+              const achPct = d.target>0?Math.round(d.revenue/d.target*100):0;
+              return (
+                <div key={rep} style={{textAlign:"center",minWidth:130}}>
+                  {selRep==="all"&&<div style={{fontWeight:700,fontSize:12,marginBottom:8}}><Av name={rep==="all"?"Team":rep} size={24}/> {rep==="all"?"Team":rep}</div>}
+                  <div style={{display:"flex",gap:4,flexWrap:"wrap",justifyContent:"center"}}>
+                    <div style={{textAlign:"center"}}>
+                      <Speedometer value={d.interactions} max={50} label="Interactions" size={110}/>
+                    </div>
+                    <div style={{textAlign:"center"}}>
+                      <Speedometer value={d.orders} max={20} label="Orders" color="#3b82f6" size={110}/>
+                    </div>
+                    <div style={{textAlign:"center"}}>
+                      <Speedometer value={d.revenue} max={d.target||500000} label="Revenue" color="#f59e0b" size={110}/>
+                    </div>
+                    {d.target>0&&<div style={{textAlign:"center"}}>
+                      <Speedometer value={achPct} max={100} label="Target %" unit="%" color={achPct>=90?"#10b981":achPct>=70?"#f59e0b":"#ef4444"} size={110}/>
+                    </div>}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* ── DAILY ACTIVITY SUMMARY ── */}
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:14}}>
+          {[
+            ["💬 Interactions", dayInter.length, "Aaj", "#a78bfa"],
+            ["🧾 Orders", dayOrders.length, "₹"+Math.round(dayOrders.reduce((s,o)=>s+(Number(o.total_amount)||0),0)/1000)+"K", "#10b981"],
+            ["📞 Calls", dayInter.filter(i=>i.type==="call").length, "Phone calls", "#3b82f6"],
+          ].map(([lbl,val,sub,c])=>(
+            <div key={lbl} style={{background:c+"11",border:"1px solid "+c+"33",borderRadius:10,padding:12,textAlign:"center"}}>
+              <div style={{fontSize:11,color:"var(--mut)",marginBottom:4}}>{lbl}</div>
+              <div style={{fontSize:22,fontWeight:800,color:c}}>{val}</div>
+              <div style={{fontSize:10,color:"var(--mut)"}}>{sub}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* ── REP-WISE DAILY SUMMARY ── */}
+        <div className="card" style={{marginBottom:14,padding:0}}>
+          <div style={{padding:"12px 16px",fontWeight:700,fontSize:13,borderBottom:"1px solid var(--bdr)"}}>
+            👥 Rep-wise Activity — {selDate}
+          </div>
+          <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+            <thead>
+              <tr style={{background:"var(--card2)"}}>
+                {["Rep","Calls","Visits","WhatsApp","Total Interactions","Orders","Revenue","Notes"].map(h=>(
+                  <th key={h} style={{padding:"8px 10px",fontSize:10,color:"var(--mut)",textAlign:h==="Rep"||h==="Notes"?"left":"center"}}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {USERS.map(u=>{
+                const rInter = I.filter(i=>i.created_at?.startsWith(selDate)&&i.done_by===u.name);
+                const rOrders = ORDERS.filter(o=>o.order_date===selDate&&o.created_by===u.name);
+                const rRev = rOrders.reduce((s,o)=>s+(Number(o.total_amount)||0),0);
+                const calls = rInter.filter(i=>i.type==="call").length;
+                const visits = rInter.filter(i=>i.type==="visit").length;
+                const wa = rInter.filter(i=>i.type==="whatsapp").length;
+                if(rInter.length===0&&rOrders.length===0) return null;
+                return (
+                  <tr key={u.name} style={{borderBottom:"1px solid var(--bdr)"}}>
+                    <td style={{padding:"10px",fontWeight:700}}>
+                      <div style={{display:"flex",gap:8,alignItems:"center"}}><Av name={u.name} size={26}/>{u.name}</div>
+                    </td>
+                    <td style={{padding:"10px",textAlign:"center",color:"#3b82f6",fontWeight:700}}>{calls||"—"}</td>
+                    <td style={{padding:"10px",textAlign:"center",color:"#10b981",fontWeight:700}}>{visits||"—"}</td>
+                    <td style={{padding:"10px",textAlign:"center",color:"#25D366",fontWeight:700}}>{wa||"—"}</td>
+                    <td style={{padding:"10px",textAlign:"center",fontWeight:800,fontSize:13}}>{rInter.length}</td>
+                    <td style={{padding:"10px",textAlign:"center",color:"#f59e0b",fontWeight:700}}>{rOrders.length||"—"}</td>
+                    <td style={{padding:"10px",textAlign:"center",color:"#10b981",fontWeight:700}}>{rRev>0?"₹"+Math.round(rRev/1000)+"K":"—"}</td>
+                    <td style={{padding:"10px",fontSize:10,color:"var(--mut)",maxWidth:180}}>
+                      {rInter.slice(0,2).map((i,idx)=>(
+                        <div key={idx} style={{marginBottom:2}}>
+                          <span style={{color:TC[i.type]}}>{TI[i.type]}</span> {i.customer_name} — {i.note?.slice(0,30)}{i.note?.length>30?"...":""}
+                        </div>
+                      ))}
+                      {rInter.length>2&&<div style={{color:"var(--mut)"}}>+{rInter.length-2} more</div>}
+                    </td>
+                  </tr>
+                );
+              }).filter(Boolean)}
+              {USERS.every(u=>I.filter(i=>i.created_at?.startsWith(selDate)&&i.done_by===u.name).length===0&&ORDERS.filter(o=>o.order_date===selDate&&o.created_by===u.name).length===0)&&(
+                <tr><td colSpan={8} style={{padding:20,textAlign:"center",color:"var(--mut)"}}>Is din koi activity nahi mili</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* ── FULL INTERACTION LOG ── */}
+        <div className="card" style={{padding:0}}>
+          <div style={{padding:"12px 16px",fontWeight:700,fontSize:13,borderBottom:"1px solid var(--bdr)",display:"flex",justifyContent:"space-between"}}>
+            <span>📋 Full Activity Log — {selDate}</span>
+            <span style={{fontSize:11,color:"var(--mut)",fontWeight:400}}>{dayInter.length} interactions · {dayOrders.length} orders</span>
+          </div>
+          {dayInter.length===0&&dayOrders.length===0?(
+            <div style={{padding:20,textAlign:"center",color:"var(--mut)"}}>Koi activity nahi</div>
+          ):(
+            <div>
+              {/* Interactions */}
+              {dayInter.map((i,idx)=>(
+                <div key={idx} style={{padding:"10px 16px",borderBottom:"1px solid var(--bdr)",
+                  display:"flex",gap:12,alignItems:"flex-start"}}>
+                  <span style={{fontSize:18,flexShrink:0}}>{TI[i.type]||"💬"}</span>
+                  <div style={{flex:1}}>
+                    <div style={{display:"flex",justifyContent:"space-between",marginBottom:2}}>
+                      <div>
+                        <span style={{fontWeight:700,fontSize:12}}>{i.customer_name}</span>
+                        <span style={{fontSize:10,color:"var(--mut)",marginLeft:8}}>{i.company}</span>
+                      </div>
+                      <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                        <span style={{fontSize:10,color:TC[i.type],fontWeight:700}}>{i.type}</span>
+                        <span style={{fontSize:10,color:"var(--mut)"}}>{i.done_by}</span>
+                        {isAdmin&&<>
+                          <button onClick={()=>{setForm({...i,customer_id:i.customer_id});setModal("ainter");}} style={{padding:"1px 6px",borderRadius:4,fontSize:9,border:"1px solid var(--bdr)",background:"transparent",cursor:"pointer"}}>✏️</button>
+                          <button onClick={async()=>{if(!window.confirm("Delete?"))return;await sbFetch("crm_interactions?id=eq."+i.id,{method:"DELETE"});setI(p=>p.filter(x=>x.id!==i.id));toast$("Deleted!");}} style={{padding:"1px 6px",borderRadius:4,fontSize:9,border:"1px solid #ef4444",background:"transparent",color:"#ef4444",cursor:"pointer"}}>🗑</button>
+                        </>}
+                      </div>
+                    </div>
+                    {i.note&&<div style={{fontSize:11,color:"var(--txt)",fontStyle:"italic"}}>"{i.note}"</div>}
+                    {i.next_follow_up&&<div style={{fontSize:10,color:"var(--acc)",marginTop:2}}>📌 Follow-up: {fd(i.next_follow_up)}</div>}
+                  </div>
+                </div>
+              ))}
+              {/* Orders */}
+              {dayOrders.map((o,idx)=>(
+                <div key={idx} style={{padding:"10px 16px",borderBottom:"1px solid var(--bdr)",
+                  display:"flex",gap:12,alignItems:"center",background:"rgba(16,185,129,.03)"}}>
+                  <span style={{fontSize:18}}>🧾</span>
+                  <div style={{flex:1}}>
+                    <div style={{display:"flex",justifyContent:"space-between"}}>
+                      <div>
+                        <span style={{fontWeight:700,fontSize:12}}>{o.company}</span>
+                        <span style={{fontSize:10,color:"var(--mut)",marginLeft:8}}>Order by {o.created_by}</span>
+                      </div>
+                      <span style={{fontWeight:800,color:"#10b981"}}>₹{Math.round(Number(o.total_amount)/1000)}K</span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+
   /* ── NAV ── */
   const navs = [
     {id:"dashboard",lbl:"Dashboard",ic:"🏠",roles:["admin","sales","dataentry"]},
@@ -5008,6 +5256,7 @@ export default function CRM({ currentUser, onLogout }) {
     {id:"pipeline",lbl:"Pipeline",ic:"🎯",roles:["admin","sales"]},
     {id:"forecast",lbl:"Forecast",ic:"📈",roles:["admin","sales"]},
     {id:"sop",lbl:"SOP",ic:"📋",roles:["admin","sales","dataentry"]},
+    {id:"daily",lbl:"Daily Report",ic:"📊",roles:["admin"]},
     {id:"analytics",lbl:"Analytics",ic:"📊",roles:["admin"]},
   ].filter(n=>n.roles?.includes(userRole)||userRole==="viewer");
 
@@ -5065,6 +5314,7 @@ export default function CRM({ currentUser, onLogout }) {
           {view==="pipeline"&&<Pipeline/>}
           {view==="forecast"&&<Forecast/>}
           {view==="sop"&&<SOP/>}
+          {view==="daily"&&<DailyReport/>}
         </div>
       </div>
       {renderModal()}
