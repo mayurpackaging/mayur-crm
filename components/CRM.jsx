@@ -3872,6 +3872,7 @@ export default function CRM({ currentUser, onLogout }) {
               <div style={{fontWeight:700,fontSize:13,marginBottom:2}}>{deal.title}</div>
               <div style={{fontSize:11,color:"var(--mut)"}}>👤 {deal.customer_name} {deal.company?"· "+deal.company:""}</div>
               {deal.product_mix&&<div style={{fontSize:10,color:"var(--mut)",marginTop:2}}>📦 {deal.product_mix}</div>}
+              {deal.assigned_to&&<div style={{fontSize:10,color:"#3b82f6",marginTop:2}}>👤 Rep: <b>{deal.assigned_to}</b></div>}
             </div>
             <div style={{textAlign:"right",flexShrink:0}}>
               {deal.value_per_month&&<div style={{fontWeight:800,color:"#10b981",fontSize:13}}>₹{Number(deal.value_per_month).toLocaleString("en-IN")}/mo</div>}
@@ -3895,6 +3896,30 @@ export default function CRM({ currentUser, onLogout }) {
             {deal.stage!=="won"&&<button onClick={()=>moveStage(deal,"won")} style={{padding:"2px 8px",borderRadius:6,fontSize:10,border:"1px solid #10b981",background:"#10b981",color:"#fff",cursor:"pointer",fontWeight:700}}>🏆 Won!</button>}
             {deal.stage!=="lost"&&deal.stage!=="won"&&<button onClick={()=>moveStage(deal,"lost")} style={{padding:"2px 8px",borderRadius:6,fontSize:10,border:"1px solid #ef4444",background:"transparent",color:"#ef4444",cursor:"pointer"}}>✕ Lost</button>}
             <button onClick={()=>{setSelDeal(deal);setDForm({...deal});setShowAdd(true);}} style={{padding:"2px 8px",borderRadius:6,fontSize:10,border:"1px solid var(--bdr)",background:"transparent",color:"var(--mut)",cursor:"pointer",marginLeft:"auto"}}>✏️ Edit</button>
+            <select
+              value={deal.assigned_to||""}
+              onChange={async(e)=>{
+                const newRep = e.target.value;
+                if(!newRep) return;
+                await sbFetch("crm_deals?id=eq."+deal.id, {method:"PATCH", body:{
+                  assigned_to:newRep, updated_at:new Date().toISOString()
+                }});
+                await sbFetch("crm_deal_activities", {method:"POST", body:{
+                  deal_id:deal.id, type:"reassign",
+                  note:"Reassigned from "+(deal.assigned_to||"unassigned")+" to "+newRep,
+                  created_by:userRole
+                }});
+                toast$("Deal reassigned to "+newRep+"!");
+                loadDeals();
+              }}
+              style={{padding:"2px 6px",borderRadius:6,fontSize:10,border:"1px solid #3b82f6",
+                background:"transparent",color:"#3b82f6",cursor:"pointer"}}
+              onClick={e=>e.stopPropagation()}>
+              <option value="">🔄 Reassign</option>
+              {(USERS.length>0?USERS.map(u=>u.name):[]).map(name=>(
+                <option key={name} value={name}>{name}</option>
+              ))}
+            </select>
           </div>
         </div>
       );
@@ -4015,7 +4040,15 @@ export default function CRM({ currentUser, onLogout }) {
                   </div>
                 </div>
                 <input className="inp" placeholder="Product mix (e.g. 500ml Milky, 300ml Black)" value={dForm.product_mix} onChange={e=>setDForm({...dForm,product_mix:e.target.value})}/>
-                <input className="inp" placeholder="Assigned to (sales rep)" value={dForm.assigned_to} onChange={e=>setDForm({...dForm,assigned_to:e.target.value})}/>
+                <div>
+                  <div style={{fontSize:10,color:"var(--mut)",marginBottom:4}}>Assigned To (Sales Rep)</div>
+                  <select className="inp" value={dForm.assigned_to} onChange={e=>setDForm({...dForm,assigned_to:e.target.value})}>
+                    <option value="">-- Select Rep --</option>
+                    {(USERS.length>0?USERS.map(u=>u.name):[]).map(name=>(
+                      <option key={name} value={name}>{name}</option>
+                    ))}
+                  </select>
+                </div>
                 <textarea className="inp" placeholder="Notes" rows={2} value={dForm.notes} onChange={e=>setDForm({...dForm,notes:e.target.value})} style={{resize:"none"}}/>
                 <div style={{display:"flex",gap:8}}>
                   <button className="btn btn-p" style={{flex:1,justifyContent:"center"}} onClick={saveDeal}>Save Deal</button>
