@@ -614,39 +614,162 @@ export default function CRM({ currentUser, onLogout }) {
 
   /* ── CUSTOMERS ── */
   const Customers = () => {
-    const list = myC.filter(c=>cTab==="all"||c.type===cTab).filter(c=>!q||[c.name,c.company,c.city].some(v=>v?.toLowerCase().includes(q.toLowerCase())));
+    const [sortBy, setSortBy] = useState("company"); // company | assigned | status | type
+    const [alphaFilter, setAlphaFilter] = useState("all"); // all | A | B | C ...
+    const [assignFilter, setAssignFilter] = useState("all");
+    const [typeFilter, setTypeFilter] = useState(cTab);
+
+    // Sync typeFilter with cTab
+    React.useEffect(()=>setTypeFilter(cTab),[cTab]);
+
+    const ALPHA = ["all","#","A","B","C","D","E","F","G","H","I","J","K","L","M","N","O","P","Q","R","S","T","U","V","W","X","Y","Z"];
+    const assignees = ["all", ...new Set(myC.map(c=>c.assigned_to).filter(Boolean))].sort();
+
+    const getFirst = (c) => {
+      const name = (c.company||c.name||"").replace(/^M\/S\s*/i,"").trim();
+      const ch = name[0]?.toUpperCase();
+      return ch>="A"&&ch<="Z" ? ch : "#";
+    };
+
+    const list = myC
+      .filter(c=>typeFilter==="all"||c.type===typeFilter)
+      .filter(c=>assignFilter==="all"||c.assigned_to===assignFilter)
+      .filter(c=>alphaFilter==="all"||(getFirst(c)===alphaFilter)||(alphaFilter==="#"&&getFirst(c)==="#"))
+      .filter(c=>!q||[c.name,c.company,c.city,c.assigned_to].some(v=>v?.toLowerCase().includes(q.toLowerCase())))
+      .sort((a,b)=>{
+        if(sortBy==="company") return (a.company||"").localeCompare(b.company||"");
+        if(sortBy==="assigned") return (a.assigned_to||"").localeCompare(b.assigned_to||"");
+        if(sortBy==="status") return (a.status||"").localeCompare(b.status||"");
+        return (a.company||"").localeCompare(b.company||"");
+      });
+
+    // Group by first letter
+    const grouped = list.reduce((g,c)=>{
+      const k = getFirst(c);
+      if(!g[k]) g[k]=[];
+      g[k].push(c);
+      return g;
+    },{});
+    const groupKeys = Object.keys(grouped).sort();
+
     return (
       <div>
         <div className="sh">
-          <div><div className="sh-t">Customer Management</div><div className="sh-s">{myC.length} total</div></div>
+          <div><div className="sh-t">Customer Management</div><div className="sh-s">{list.length} of {myC.length} · {assignFilter!=="all"?assignFilter:"All reps"}</div></div>
           <div style={{display:"flex",gap:8}}>
             <button className="btn btn-o btn-sm" onClick={()=>{setForm({});setModal("ainter");}}>+ Log Interaction</button>
             <button className="btn btn-p" onClick={()=>{setForm({});setModal("acust");}}><Plus size={13}/> Add Customer</button>
           </div>
         </div>
-        <div className="tabs">{[["all","All"],["enduser","End Users"],["nbd","NBD"]].map(([id,l])=><div key={id} className={`tab ${cTab===id?"a":""}`} onClick={()=>setCTab(id)}>{l}</div>)}</div>
-        <div className="sr"><Search size={13} className="sr-ic"/><input className="inp" placeholder="Search..." value={q} onChange={e=>setQ(e.target.value)}/></div>
-        {list.length===0?<div className="card empty"><p>Koi customer nahi</p></div>
-          :<div className="card" style={{padding:0}}><div className="tw"><table>
-            <thead><tr><th>Customer</th><th>Type</th><th>Segment</th><th>Assigned</th><th>Last Interaction</th><th>Last Word</th><th>Follow-up</th><th>Status</th><th></th></tr></thead>
-            <tbody>{list.map(c=>{
-              const li=gli(c.id);
-              return <tr key={c.id} onClick={()=>openC(c.id)} style={{cursor:"pointer"}}>
-                <td><div style={{display:"flex",gap:9,alignItems:"center"}}><Av name={c.name} size={30}/><div><div style={{fontWeight:700,fontSize:12.5}}>{c.name}</div><div style={{fontSize:10.5,color:"var(--mut)"}}>{c.company} · {c.city}</div></div></div></td>
-                <td><span style={{fontSize:9.5,fontWeight:800,padding:"2px 8px",borderRadius:12,background:c.type==="crm"?"rgba(16,185,129,.1)":"rgba(59,130,246,.1)",color:c.type==="crm"?"#10b981":"#60a5fa"}}>{c.type?.toUpperCase()}</span></td>
-                <td style={{fontSize:11,color:"var(--mut)"}}>{c.segment||"—"}</td>
-                <td style={{fontSize:11.5}}>{c.assigned_to||"—"}</td>
-                <td>{li?<div><span style={{color:TC[li.type],fontSize:11}}>{TI[li.type]} {li.type}</span><div style={{color:"var(--mut)",fontSize:9.5}}>{fd(li.created_at)}</div></div>:<span style={{color:"var(--mut)"}}>—</span>}</td>
-                <td style={{maxWidth:150}}>{li?.note?<div style={{fontSize:11,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontStyle:"italic"}} title={li.note}>"{li.note}"</div>:<span style={{color:"var(--mut)"}}>—</span>}</td>
-                <td>{li?.next_follow_up?<span style={{fontSize:10,fontWeight:800,color:isOD(li.next_follow_up)?"#ef4444":isTD(li.next_follow_up)?"#f59e0b":"#10b981"}}>{isOD(li.next_follow_up)?"🔴":isTD(li.next_follow_up)?"🟡":"🟢"} {fd(li.next_follow_up)}</span>:<span style={{color:"var(--mut)"}}>—</span>}</td>
-                <td><Bdg s={c.status}/></td>
-                <td><button className="btn btn-o btn-sm" onClick={ev=>{ev.stopPropagation();openC(c.id);}}><Eye size={11}/></button></td>
-              </tr>;
-            })}</tbody>
-          </table></div></div>}
+
+        {/* Type tabs */}
+        <div className="tabs">
+          {[["all","All"],["crm","CRM"],["enduser","End Users"],["nbd","NBD"]].map(([id,l])=>(
+            <div key={id} className={`tab ${typeFilter===id?"a":""}`} onClick={()=>{setTypeFilter(id);setCTab(id);}}>{l} ({id==="all"?myC.length:myC.filter(c=>c.type===id).length})</div>
+          ))}
+        </div>
+
+        {/* Filters row */}
+        <div style={{display:"flex",gap:8,marginBottom:10,flexWrap:"wrap",alignItems:"center"}}>
+          {/* Assigned to filter */}
+          <select className="inp" style={{width:"auto",padding:"5px 10px",fontSize:11}}
+            value={assignFilter} onChange={e=>setAssignFilter(e.target.value)}>
+            {assignees.map(a=><option key={a} value={a}>{a==="all"?"👤 Sab Reps":a}</option>)}
+          </select>
+          {/* Sort */}
+          <select className="inp" style={{width:"auto",padding:"5px 10px",fontSize:11}}
+            value={sortBy} onChange={e=>setSortBy(e.target.value)}>
+            <option value="company">A-Z Company</option>
+            <option value="assigned">A-Z Rep</option>
+            <option value="status">Status</option>
+          </select>
+          {/* Search */}
+          <div className="sr" style={{flex:1,marginBottom:0}}>
+            <Search size={13} className="sr-ic"/>
+            <input className="inp" placeholder="Search party, city, rep..." value={q} onChange={e=>setQ(e.target.value)}/>
+          </div>
+          {q&&<button className="btn btn-o btn-sm" onClick={()=>setQ("")}>✕ Clear</button>}
+        </div>
+
+        {/* Alphabet filter */}
+        <div style={{display:"flex",gap:3,marginBottom:10,flexWrap:"wrap"}}>
+          {ALPHA.map(a=>(
+            <button key={a} onClick={()=>setAlphaFilter(a===alphaFilter?"all":a)}
+              style={{padding:"3px 7px",borderRadius:6,fontSize:11,fontWeight:700,cursor:"pointer",
+                background:alphaFilter===a?"var(--acc)":"var(--card2)",
+                color:alphaFilter===a?"#fff":"var(--mut)",
+                border:"1px solid "+(alphaFilter===a?"var(--acc)":"var(--bdr)"),
+                opacity:a==="all"||grouped[a]||a==="#"?1:0.3}}>
+              {a}
+            </button>
+          ))}
+        </div>
+
+        {list.length===0?<div className="card empty"><p>Koi customer nahi mila</p></div>
+          : alphaFilter!=="all" ? (
+            // Single letter — flat table
+            <div className="card" style={{padding:0}}>
+              <div style={{padding:"8px 16px",fontSize:11,fontWeight:700,color:"var(--mut)",
+                borderBottom:"1px solid var(--bdr)",background:"var(--card2)"}}>
+                {alphaFilter} — {list.length} parties
+              </div>
+              <CustomerTable list={list}/>
+            </div>
+          ) : (
+            // All — grouped by letter
+            <div>
+              {groupKeys.map(letter=>(
+                <div key={letter} style={{marginBottom:14}}>
+                  <div style={{padding:"6px 12px",background:"var(--acc)",color:"#fff",
+                    borderRadius:"8px 8px 0 0",fontSize:13,fontWeight:800,
+                    display:"flex",justifyContent:"space-between"}}>
+                    <span>{letter}</span>
+                    <span style={{fontWeight:400,fontSize:11}}>{grouped[letter].length} parties</span>
+                  </div>
+                  <div className="card" style={{padding:0,borderRadius:"0 0 8px 8px",borderTop:"none"}}>
+                    <CustomerTable list={grouped[letter]}/>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )
+        }
       </div>
     );
   };
+
+  const CustomerTable = ({list}) => (
+    <div className="tw"><table>
+      <thead><tr>
+        <th>Party Name</th><th>Type</th><th>GST</th>
+        <th>Assigned</th><th>Last Interaction</th><th>Follow-up</th><th>Status</th><th></th>
+      </tr></thead>
+      <tbody>{list.map(c=>{
+        const li=gli(c.id);
+        return <tr key={c.id} onClick={()=>openC(c.id)} style={{cursor:"pointer"}}>
+          <td><div style={{display:"flex",gap:9,alignItems:"center"}}>
+            <Av name={c.name||c.company} size={28}/>
+            <div>
+              <div style={{fontWeight:700,fontSize:12}}>{c.company||c.name}</div>
+              <div style={{fontSize:10,color:"var(--mut)"}}>{c.city||""}</div>
+            </div>
+          </div></td>
+          <td><span style={{fontSize:9.5,fontWeight:800,padding:"2px 8px",borderRadius:12,
+            background:c.type==="crm"?"rgba(16,185,129,.1)":"rgba(59,130,246,.1)",
+            color:c.type==="crm"?"#10b981":"#60a5fa"}}>{c.type?.toUpperCase()}</span></td>
+          <td style={{fontSize:10,color:"var(--mut)",fontFamily:"monospace"}}>{c.gst_no||"—"}</td>
+          <td><span style={{fontSize:11,fontWeight:600,color:c.assigned_to?"var(--txt)":"var(--mut)"}}>{c.assigned_to||"—"}</span></td>
+          <td>{li?<div><span style={{color:TC[li.type],fontSize:11}}>{TI[li.type]} {li.type}</span><div style={{color:"var(--mut)",fontSize:9.5}}>{fd(li.created_at)}</div></div>:<span style={{color:"var(--mut)"}}>—</span>}</td>
+          <td>{li?.next_follow_up?<span style={{fontSize:10,fontWeight:800,
+            color:isOD(li.next_follow_up)?"#ef4444":isTD(li.next_follow_up)?"#f59e0b":"#10b981"}}>
+            {isOD(li.next_follow_up)?"🔴":isTD(li.next_follow_up)?"🟡":"🟢"} {fd(li.next_follow_up)}
+          </span>:<span style={{color:"var(--mut)"}}>—</span>}</td>
+          <td><Bdg s={c.status}/></td>
+          <td><button className="btn btn-o btn-sm" onClick={ev=>{ev.stopPropagation();openC(c.id);}}><Eye size={11}/></button></td>
+        </tr>;
+      })}</tbody>
+    </table></div>
+  );
 
   /* ── ENQUIRIES ── */
   const Enquiries = () => {
