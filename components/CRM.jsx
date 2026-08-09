@@ -1702,7 +1702,7 @@ export default function CRM({ currentUser, onLogout }) {
   // ── Global helpers ──
   // Reusable formula tooltip component
   const FormulaBox = ({title, lines, example}) => {
-    const [open, setOpen] = React.useState(false);
+    const [open, setOpen] = useState(false)(false);
     return (
       <span style={{display:"inline-block",marginLeft:6}}>
         <button onClick={()=>setOpen(!open)} style={{
