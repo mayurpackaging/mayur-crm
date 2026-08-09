@@ -82,6 +82,23 @@ export default function CRM({ currentUser, onLogout }) {
 
   const toast$ = (msg,err=false) => { setToast({msg,err}); setTimeout(()=>setToast(null),2500); };
   const sf = (k,v) => setForm(p=>({...p,[k]:v}));
+  const sfn = (k,v) => setForm(p=>({...p,[k]:v}));
+
+  // SmartInput — prevents cursor jump for text inputs in modals
+  const SmartInput = ({formKey, placeholder, type="text", style, className="inp", rows}) => {
+    const [local, setLocal] = useState(form[formKey]||"");
+    const [focused, setFocused] = useState(false);
+    useEffect(()=>{ if(!focused) setLocal(form[formKey]||""); },[form[formKey],focused]);
+    const props = {
+      className, style, placeholder, type,
+      value: local,
+      onFocus: ()=>setFocused(true),
+      onChange: e=>setLocal(e.target.value),
+      onBlur: e=>{ setFocused(false); sf(formKey, e.target.value); }
+    };
+    if(rows) return <textarea {...props} rows={rows}/>;
+    return <input {...props}/>;
+  };
   const gc = id => C.find(c=>c.id===id);
   const gli= cid => I.filter(i=>i.customer_id===cid).sort((a,b)=>new Date(b.created_at)-new Date(a.created_at))[0];
   const gci= cid => I.filter(i=>i.customer_id===cid).sort((a,b)=>new Date(b.created_at)-new Date(a.created_at));
@@ -1184,8 +1201,19 @@ export default function CRM({ currentUser, onLogout }) {
   /* ── NUM INPUT ── */
   const NumInput = ({value,onChange,style}) => {
     const [local,setLocal]=useState(String(value??""));
-    useEffect(()=>{setLocal(String(value??""));},[value]);
-    return <input type="text" inputMode="numeric" className="inp" style={style} value={local} onClick={e=>e.target.select()} onChange={e=>setLocal(e.target.value)} onBlur={()=>{const n=parseFloat(local.replace(/[^0-9.]/g,""));onChange(isNaN(n)?0:n);}}/>;
+    const [focused,setFocused]=useState(false);
+    // Only sync from parent when NOT focused (prevents cursor jump while typing)
+    useEffect(()=>{ if(!focused) setLocal(String(value??"")); },[value,focused]);
+    return <input type="text" inputMode="numeric" className="inp" style={style}
+      value={local}
+      onClick={e=>e.target.select()}
+      onFocus={()=>setFocused(true)}
+      onChange={e=>setLocal(e.target.value)}
+      onBlur={()=>{
+        setFocused(false);
+        const n=parseFloat(local.replace(/[^0-9.]/g,""));
+        onChange(isNaN(n)?0:n);
+      }}/>;
   };
 
   /* ── ORDER MODAL ── */
@@ -1202,7 +1230,9 @@ export default function CRM({ currentUser, onLogout }) {
           </div>
           <div style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",background:"rgba(245,158,11,.08)",border:"1px solid rgba(245,158,11,.2)",borderRadius:8,marginBottom:12}}>
             <span style={{fontSize:12,color:"var(--acc)",fontWeight:700}}>🏷️ Party Discount</span>
-            <input type="number" value={partyDiscount} onChange={e=>setPartyDiscount(Number(e.target.value))}
+            <input type="number" defaultValue={partyDiscount}
+              onBlur={e=>setPartyDiscount(Number(e.target.value)||0)}
+              onKeyDown={e=>{ if(e.key==="Enter") { setPartyDiscount(Number(e.target.value)||0); e.target.blur(); }}}
               style={{width:70,padding:"4px 8px",borderRadius:6,border:"1px solid var(--bdr)",textAlign:"center",fontWeight:700}}/>
             <span style={{fontSize:11,color:"var(--mut)"}}>₹/carton (auto-apply on add)</span>
           </div>
@@ -1608,7 +1638,7 @@ export default function CRM({ currentUser, onLogout }) {
     const f=FM[modal]; if(!f) return null;
     return (
       <div className="ov" onClick={closeM}>
-        <div className="mod" onClick={e=>e.stopPropagation()}>
+        <div className="mod" onClick={e=>e.stopPropagation()} key={modal}>
           <div className="mod-ttl">{f.t} <button className="btn btn-o btn-sm" onClick={closeM}><X size={13}/></button></div>
           {f.f}
           {modal!=="ainter"&&<button className="btn btn-p" style={{width:"100%",justifyContent:"center",marginTop:8}} disabled={saving} onClick={f.fn}>{saving?<Spin/>:"Save"}</button>}
