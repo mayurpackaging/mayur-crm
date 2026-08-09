@@ -1,5 +1,5 @@
 "use client";
-import { useState, useMemo, useEffect, useCallback, useRef } from "react";
+import React, { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { Plus, Search, X, Eye, CheckCircle, Loader, Printer, Trash2, Edit } from "lucide-react";
 import { sbFetch, sbGet, sbGetPay, sbGetProducts, sbGetOrders, sbGetAllOrders, sbGetOrderItems, sbGetTargets, sbInsert, sbPatch, sbDelete } from "../lib/supabase";
 
@@ -135,7 +135,7 @@ export default function CRM({ currentUser, onLogout }) {
       setPRODS(pr||[]); setORDERS(o||[]); setTARGETS(t||[]);
       // Load sales users from crm_users
       try {
-        const users = await sbFetch("crm_users?role=eq.sales&select=name&order=name.asc");
+        const users = await sbFetch("crm_users?select=name,role&order=name.asc");
         setUSERS(users||[]);
       } catch(e) {}
     } catch(err){ toast$("Load failed: "+err.message,true); }
@@ -3772,6 +3772,7 @@ export default function CRM({ currentUser, onLogout }) {
     const [loading, setLoading] = useState(false);
     const [showAdd, setShowAdd] = useState(false);
     const [selDeal, setSelDeal] = useState(null);
+    const [viewDeal, setViewDeal] = useState(null);
     const [dForm, setDForm] = useState({
       title:"", customer_name:"", company:"", stage:"lead",
       value_per_month:"", probability:10, expected_close:"",
@@ -3881,16 +3882,23 @@ export default function CRM({ currentUser, onLogout }) {
     const weightedPipe = activeDe.reduce((s,d)=>s+(Number(d.value_per_month)||0)*(d.probability||0)/100,0);
     const wonThis = deals.filter(d=>d.stage==="won"&&d.won_at?.startsWith(new Date().toISOString().slice(0,7)));
 
+    const deleteDeal = async(id) => {
+      if(!window.confirm("Delete this deal?")) return;
+      await sbFetch("crm_deal_activities?deal_id=eq."+id, {method:"DELETE"});
+      await sbFetch("crm_deals?id=eq."+id, {method:"DELETE"});
+      toast$("Deal deleted!");
+      loadDeals();
+    };
+
     const DealCard = ({deal}) => {
       const stg = STAGES.find(s=>s.id===deal.stage);
-      const nextStages = STAGES.filter(s=>s.id!==deal.stage&&!["won","lost"].includes(deal.stage)?true:false);
       return (
         <div style={{background:"var(--card)",border:"1px solid var(--bdr)",borderRadius:10,
           padding:12,marginBottom:8,borderLeft:"3px solid "+stg?.color}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
-            <div style={{flex:1}}>
+            <div style={{flex:1,cursor:"pointer"}} onClick={()=>setViewDeal(deal)}>
               <div style={{fontWeight:700,fontSize:13,marginBottom:2}}>{deal.title}</div>
-              <div style={{fontSize:11,color:"var(--mut)"}}>👤 {deal.customer_name} {deal.company?"· "+deal.company:""}</div>
+              <div style={{fontSize:11,color:"var(--mut)"}}>🏢 {deal.customer_name} {deal.company?"· "+deal.company:""}</div>
               {deal.product_mix&&<div style={{fontSize:10,color:"var(--mut)",marginTop:2}}>📦 {deal.product_mix}</div>}
               {deal.assigned_to&&<div style={{fontSize:10,color:"#3b82f6",marginTop:2}}>👤 Rep: <b>{deal.assigned_to}</b></div>}
             </div>
@@ -3915,7 +3923,9 @@ export default function CRM({ currentUser, onLogout }) {
             ))}
             {deal.stage!=="won"&&<button onClick={()=>moveStage(deal,"won")} style={{padding:"2px 8px",borderRadius:6,fontSize:10,border:"1px solid #10b981",background:"#10b981",color:"#fff",cursor:"pointer",fontWeight:700}}>🏆 Won!</button>}
             {deal.stage!=="lost"&&deal.stage!=="won"&&<button onClick={()=>moveStage(deal,"lost")} style={{padding:"2px 8px",borderRadius:6,fontSize:10,border:"1px solid #ef4444",background:"transparent",color:"#ef4444",cursor:"pointer"}}>✕ Lost</button>}
-            <button onClick={()=>{setSelDeal(deal);setDForm({...deal});setShowAdd(true);}} style={{padding:"2px 8px",borderRadius:6,fontSize:10,border:"1px solid var(--bdr)",background:"transparent",color:"var(--mut)",cursor:"pointer",marginLeft:"auto"}}>✏️ Edit</button>
+            <button onClick={()=>setViewDeal(deal)} style={{padding:"2px 8px",borderRadius:6,fontSize:10,border:"1px solid var(--bdr)",background:"transparent",color:"var(--mut)",cursor:"pointer"}}>👁 View</button>
+            <button onClick={()=>{setSelDeal(deal);setDForm({...deal});setShowAdd(true);}} style={{padding:"2px 8px",borderRadius:6,fontSize:10,border:"1px solid var(--bdr)",background:"transparent",color:"var(--mut)",cursor:"pointer"}}>✏️ Edit</button>
+            {isAdmin&&<button onClick={()=>deleteDeal(deal.id)} style={{padding:"2px 8px",borderRadius:6,fontSize:10,border:"1px solid #ef4444",background:"transparent",color:"#ef4444",cursor:"pointer"}}>🗑 Del</button>}
             <select
               value={deal.assigned_to||""}
               onChange={async(e)=>{
@@ -3990,6 +4000,62 @@ export default function CRM({ currentUser, onLogout }) {
             })}
           </div>
         </div>
+
+        {/* Deal Detail Modal */}
+        {viewDeal&&(
+          <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:"rgba(0,0,0,.5)",
+            zIndex:200,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}
+            onClick={()=>setViewDeal(null)}>
+            <div style={{background:"var(--card)",borderRadius:16,padding:20,width:"100%",maxWidth:480,
+              maxHeight:"90vh",overflowY:"auto"}} onClick={e=>e.stopPropagation()}>
+              {(()=>{
+                const stg = STAGES.find(s=>s.id===viewDeal.stage);
+                return (<>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+                    <div style={{fontWeight:800,fontSize:16}}>Deal Detail</div>
+                    <div style={{display:"flex",gap:8}}>
+                      {isAdmin&&<button onClick={()=>{setViewDeal(null);deleteDeal(viewDeal.id);}}
+                        style={{padding:"4px 10px",borderRadius:6,fontSize:11,border:"1px solid #ef4444",
+                          background:"transparent",color:"#ef4444",cursor:"pointer"}}>🗑 Delete</button>}
+                      <button onClick={()=>setViewDeal(null)} style={{padding:"4px 10px",borderRadius:6,
+                        fontSize:11,border:"1px solid var(--bdr)",background:"transparent",cursor:"pointer"}}>✕ Close</button>
+                    </div>
+                  </div>
+                  <div style={{display:"flex",flexDirection:"column",gap:12}}>
+                    {[
+                      ["Title", viewDeal.title],
+                      ["Customer", viewDeal.customer_name],
+                      ["Company", viewDeal.company],
+                      ["Stage", stg?.label],
+                      ["Probability", (viewDeal.probability||0)+"%"],
+                      ["Value/Month", viewDeal.value_per_month?"₹"+Number(viewDeal.value_per_month).toLocaleString("en-IN")+"/mo":"—"],
+                      ["Expected Close", viewDeal.expected_close||"—"],
+                      ["Product Mix", viewDeal.product_mix||"—"],
+                      ["Assigned To", viewDeal.assigned_to||"—"],
+                      ["Notes", viewDeal.notes||"—"],
+                      ["Created", viewDeal.created_at?new Date(viewDeal.created_at).toLocaleDateString("en-IN"):"—"],
+                      ["Last Updated", viewDeal.updated_at?new Date(viewDeal.updated_at).toLocaleDateString("en-IN"):"—"],
+                      ...(viewDeal.won_at?[["Won On", new Date(viewDeal.won_at).toLocaleDateString("en-IN")]]:[] ),
+                      ...(viewDeal.lost_at?[["Lost On", new Date(viewDeal.lost_at).toLocaleDateString("en-IN")]]:[] ),
+                      ...(viewDeal.lost_reason?[["Lost Reason", viewDeal.lost_reason]]:[] ),
+                    ].map(([lbl,val])=>val&&val!=="—"?(
+                      <div key={lbl} style={{display:"flex",gap:10,padding:"8px 0",borderBottom:"1px solid var(--bdr)"}}>
+                        <div style={{fontSize:11,color:"var(--mut)",width:120,flexShrink:0}}>{lbl}</div>
+                        <div style={{fontSize:12,fontWeight:600}}>{val}</div>
+                      </div>
+                    ):null)}
+                    <div style={{display:"flex",gap:8,marginTop:8}}>
+                      <button className="btn btn-p" style={{flex:1,justifyContent:"center"}}
+                        onClick={()=>{setViewDeal(null);setSelDeal(viewDeal);setDForm({...viewDeal});setShowAdd(true);}}>
+                        ✏️ Edit Deal
+                      </button>
+                    </div>
+                  </div>
+                </>);
+              })()}
+            </div>
+          </div>
+        )}
 
         {/* Filter tabs */}
         <div style={{display:"flex",gap:6,marginBottom:12}}>
