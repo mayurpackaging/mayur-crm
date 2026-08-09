@@ -945,8 +945,8 @@ export default function CRM({ currentUser, onLogout }) {
             {!allOrdersLoaded&&<button className="btn btn-o btn-sm" onClick={loadAllOrders}>Load All Orders</button>}
           </div>
         </div>
-        <div className="tabs">
-          {[["sales","📈 Sales"],["party","🏢 Party-wise"],["top","🏆 Top 10"],["nbd","🎯 NBD"],["sp","👤 Salesperson"],["visit","📍 Visit Freq"]].map(([id,lbl])=>(
+        <div className="tabs" style={{flexWrap:"wrap"}}>
+          {[["sales","📈 Sales"],["party","🏢 Party-wise"],["top","🏆 Top 10"],["nbd","🎯 NBD"],["sp","👤 Salesperson"],["visit","📍 Visit Freq"],["conversion","🔄 Conversion"],["detailed","📋 Detailed Rep"]].map(([id,lbl])=>(
             <div key={id} className={`tab ${rTab===id?"a":""}`} onClick={()=>setRTab(id)}>{lbl}</div>
           ))}
         </div>
@@ -1091,6 +1091,244 @@ export default function CRM({ currentUser, onLogout }) {
             ))}</tbody>
           </table></div></div>
         )}
+
+        {/* ── CONVERSION FUNNEL ── */}
+        {rTab==="conversion"&&(()=>{
+          const totalC = C.length;
+          const contacted = [...new Set(I.map(i=>i.customer_id))].length;
+          const enquired = [...new Set(E.map(e=>e.customer_id))].length;
+          const ordered = [...new Set(periodOrders.map(o=>o.customer_id))].length;
+          const won = E.filter(e=>e.status==="won").length;
+          const steps = [
+            {lbl:"Total Parties", val:totalC, pct:100, c:"#3b82f6", desc:"Database mein sab parties"},
+            {lbl:"Contacted", val:contacted, pct:Math.round(contacted/totalC*100), c:"#a78bfa", desc:"Jinse koi interaction hua"},
+            {lbl:"Gave Enquiry", val:enquired, pct:Math.round(enquired/totalC*100), c:"#f59e0b", desc:"Product enquiry ki"},
+            {lbl:"Placed Order", val:ordered, pct:Math.round(ordered/totalC*100), c:"#10b981", desc:"Actually order diya"},
+            {lbl:"Won Deals", val:won, pct:totalC>0?Math.round(won/totalC*100):0, c:"#10b981", desc:"Pipeline mein won"},
+          ];
+          // Rep-wise conversion
+          const repConv = SALES_PERSONS.map(sp=>{
+            const myCust = C.filter(c=>c.assigned_to===sp);
+            const myInter = [...new Set(I.filter(i=>i.done_by===sp).map(i=>i.customer_id))].length;
+            const myEnq = E.filter(e=>e.assigned_to===sp).length;
+            const myOrd = periodOrders.filter(o=>o.created_by===sp).length;
+            const myOrdVal = periodOrders.filter(o=>o.created_by===sp).reduce((s,o)=>s+(Number(o.total_amount)||0),0);
+            const convRate = myCust.length>0?Math.round(myOrd/myCust.length*100):0;
+            return {name:sp, parties:myCust.length, contacted:myInter, enquiries:myEnq, orders:myOrd, revenue:myOrdVal, convRate};
+          });
+          return (
+            <div>
+              <div className="card" style={{marginBottom:14}}>
+                <div style={{fontWeight:700,fontSize:13,marginBottom:14}}>🔄 Conversion Funnel — Lead to Order</div>
+                {steps.map((s,i)=>(
+                  <div key={i} style={{marginBottom:12}}>
+                    <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
+                      <div>
+                        <span style={{fontWeight:700,fontSize:12}}>{s.lbl}</span>
+                        <span style={{fontSize:10,color:"var(--mut)",marginLeft:8}}>{s.desc}</span>
+                      </div>
+                      <div style={{display:"flex",gap:12,alignItems:"center"}}>
+                        <span style={{fontWeight:800,fontSize:14,color:s.c}}>{s.val}</span>
+                        <span style={{fontSize:11,color:s.c,fontWeight:700}}>{s.pct}%</span>
+                      </div>
+                    </div>
+                    <div style={{height:12,background:"var(--card2)",borderRadius:6,overflow:"hidden"}}>
+                      <div style={{height:"100%",width:s.pct+"%",background:s.c,borderRadius:6,transition:"width .5s"}}/>
+                    </div>
+                    {i<steps.length-1&&(
+                      <div style={{fontSize:10,color:"var(--mut)",textAlign:"right",marginTop:2}}>
+                        ↓ {steps[i+1].val} aage gaye ({steps[i].val>0?Math.round(steps[i+1].val/steps[i].val*100):0}% conversion)
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+              <div className="card" style={{padding:0}}>
+                <div style={{padding:"12px 16px",fontWeight:700,fontSize:13,borderBottom:"1px solid var(--bdr)"}}>
+                  👤 Rep-wise Conversion Rate
+                </div>
+                <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+                  <thead>
+                    <tr style={{background:"var(--card2)"}}>
+                      {["Rep","Parties","Contacted","Enquiries","Orders","Revenue","Conv %"].map(h=>(
+                        <th key={h} style={{padding:"8px 10px",fontSize:10,color:"var(--mut)",textAlign:h==="Rep"?"left":"center"}}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {repConv.map((r,i)=>(
+                      <tr key={i} style={{borderBottom:"1px solid var(--bdr)"}}>
+                        <td style={{padding:"10px",fontWeight:700}}>
+                          <div style={{display:"flex",gap:8,alignItems:"center"}}><Av name={r.name} size={26}/>{r.name}</div>
+                        </td>
+                        <td style={{padding:"10px",textAlign:"center"}}>{r.parties}</td>
+                        <td style={{padding:"10px",textAlign:"center",color:"#a78bfa",fontWeight:700}}>{r.contacted}</td>
+                        <td style={{padding:"10px",textAlign:"center",color:"#f59e0b",fontWeight:700}}>{r.enquiries}</td>
+                        <td style={{padding:"10px",textAlign:"center",color:"#10b981",fontWeight:700}}>{r.orders}</td>
+                        <td style={{padding:"10px",textAlign:"center",fontWeight:700,color:"#10b981"}}>₹{Math.round(r.revenue/1000)}K</td>
+                        <td style={{padding:"10px",textAlign:"center"}}>
+                          <div style={{fontWeight:800,fontSize:13,
+                            color:r.convRate>=10?"#10b981":r.convRate>=5?"#f59e0b":"#ef4444"}}>
+                            {r.convRate}%
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* ── DETAILED REP REPORT ── */}
+        {rTab==="detailed"&&(()=>{
+          const [selRep, setSelRep] = React.useState(SALES_PERSONS[0]||"");
+          const repCust = C.filter(c=>c.assigned_to===selRep);
+          const repInter = I.filter(i=>i.done_by===selRep);
+          const repOrders = ORDERS.filter(o=>o.created_by===selRep);
+          const repEnq = E.filter(e=>e.assigned_to===selRep);
+          const repRev = repOrders.reduce((s,o)=>s+(Number(o.total_amount)||0),0);
+          const periodRep = repOrders.filter(o=>inPeriod(o.order_date));
+          const periodRevRep = periodRep.reduce((s,o)=>s+(Number(o.total_amount)||0),0);
+          const tgt = TARGETS.find(t=>t.user_name===selRep&&t.month===String(rMonth).padStart(2,"0")&&t.year===rYear);
+          const tgtAmt = Number(tgt?.target_amount||0);
+          const achPct = tgtAmt>0?Math.round(periodRevRep/tgtAmt*100):null;
+
+          // Last 7 days activity
+          const last7 = new Date(Date.now()-7*86400000).toISOString();
+          const recentInter = repInter.filter(i=>i.created_at>last7);
+
+          return (
+            <div>
+              {/* Rep selector */}
+              <div style={{display:"flex",gap:8,marginBottom:14,alignItems:"center",flexWrap:"wrap"}}>
+                {SALES_PERSONS.map(sp=>(
+                  <button key={sp} onClick={()=>setSelRep(sp)}
+                    className={"btn btn-sm "+(selRep===sp?"btn-p":"btn-o")}>
+                    <Av name={sp} size={16}/> {sp}
+                  </button>
+                ))}
+              </div>
+
+              {/* Rep KPI cards */}
+              <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10,marginBottom:14}}>
+                {[
+                  ["Parties Assigned", repCust.length, "Total parties", "#3b82f6"],
+                  ["Total Interactions", repInter.length, recentInter.length+" this week", "#a78bfa"],
+                  ["Total Orders", repOrders.length, "₹"+Math.round(repRev/1000)+"K total", "#10b981"],
+                  ["Period Revenue", "₹"+Math.round(periodRevRep/1000)+"K", achPct!==null?achPct+"% of target":"No target", achPct>=100?"#10b981":achPct>=70?"#f59e0b":"#ef4444"],
+                ].map(([lbl,val,sub,c])=>(
+                  <div key={lbl} style={{background:c+"11",border:"1px solid "+c+"33",borderRadius:10,padding:12}}>
+                    <div style={{fontSize:10,color:"var(--mut)",marginBottom:4}}>{lbl}</div>
+                    <div style={{fontSize:18,fontWeight:800,color:c}}>{val}</div>
+                    <div style={{fontSize:10,color:"var(--mut)"}}>{sub}</div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Target progress */}
+              {tgtAmt>0&&(
+                <div className="card" style={{marginBottom:14}}>
+                  <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
+                    <span style={{fontWeight:700}}>Target vs Achievement — {months[rMonth-1]} {rYear}</span>
+                    <span style={{fontWeight:800,color:achPct>=100?"#10b981":achPct>=70?"#f59e0b":"#ef4444"}}>{achPct}%</span>
+                  </div>
+                  <div style={{height:16,background:"var(--card2)",borderRadius:8,overflow:"hidden"}}>
+                    <div style={{height:"100%",width:Math.min(achPct,100)+"%",
+                      background:achPct>=100?"#10b981":achPct>=70?"#f59e0b":"#ef4444",borderRadius:8}}/>
+                  </div>
+                  <div style={{display:"flex",justifyContent:"space-between",fontSize:11,marginTop:4}}>
+                    <span style={{color:"var(--mut)"}}>Achieved: ₹{Math.round(periodRevRep/1000)}K</span>
+                    <span style={{color:"var(--mut)"}}>Target: ₹{Math.round(tgtAmt/1000)}K</span>
+                    <span style={{color:"#ef4444",fontWeight:700}}>Gap: ₹{Math.round(Math.max(0,tgtAmt-periodRevRep)/1000)}K</span>
+                  </div>
+                </div>
+              )}
+
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+                {/* Recent interactions */}
+                <div className="card" style={{padding:0}}>
+                  <div style={{padding:"10px 14px",fontWeight:700,fontSize:12,borderBottom:"1px solid var(--bdr)"}}>
+                    📞 Recent Activity (Last 7 days) — {recentInter.length}
+                  </div>
+                  <div style={{maxHeight:280,overflowY:"auto"}}>
+                    {recentInter.length===0?(
+                      <div style={{padding:16,color:"var(--mut)",fontSize:12,textAlign:"center"}}>
+                        Koi activity nahi last 7 days mein ⚠️
+                      </div>
+                    ):recentInter.slice(0,10).map((i,idx)=>(
+                      <div key={idx} style={{padding:"8px 14px",borderBottom:"1px solid var(--bdr)",fontSize:11}}>
+                        <div style={{display:"flex",justifyContent:"space-between"}}>
+                          <span style={{fontWeight:600}}>{i.customer_name}</span>
+                          <span style={{color:"var(--mut)",fontSize:10}}>{fd(i.created_at)}</span>
+                        </div>
+                        <div style={{color:"var(--mut)",fontSize:10,marginTop:2}}>{TI[i.type]} {i.type} · {i.note?.slice(0,50)}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Orders this period */}
+                <div className="card" style={{padding:0}}>
+                  <div style={{padding:"10px 14px",fontWeight:700,fontSize:12,borderBottom:"1px solid var(--bdr)"}}>
+                    🧾 Orders — {months[rMonth-1]} {rYear} ({periodRep.length})
+                  </div>
+                  <div style={{maxHeight:280,overflowY:"auto"}}>
+                    {periodRep.length===0?(
+                      <div style={{padding:16,color:"var(--mut)",fontSize:12,textAlign:"center"}}>
+                        Is period mein koi order nahi
+                      </div>
+                    ):periodRep.map((o,idx)=>(
+                      <div key={idx} style={{padding:"8px 14px",borderBottom:"1px solid var(--bdr)",fontSize:11,
+                        display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                        <div>
+                          <div style={{fontWeight:600}}>{o.company}</div>
+                          <div style={{color:"var(--mut)",fontSize:10}}>{fd(o.order_date)}</div>
+                        </div>
+                        <div style={{fontWeight:800,color:"#10b981"}}>₹{Math.round(Number(o.total_amount)/1000)}K</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Party list */}
+              <div className="card" style={{marginTop:12,padding:0}}>
+                <div style={{padding:"10px 14px",fontWeight:700,fontSize:12,borderBottom:"1px solid var(--bdr)"}}>
+                  👥 {selRep} ki Parties ({repCust.length})
+                </div>
+                <div className="tw"><table>
+                  <thead><tr>
+                    <th>Party</th><th>Type</th><th>Last Visit</th><th>Orders</th><th>Revenue</th><th>Follow-up</th>
+                  </tr></thead>
+                  <tbody>
+                    {repCust.slice(0,20).map(c=>{
+                      const li=gli(c.id);
+                      const cOrds=ORDERS.filter(o=>o.customer_id===c.id);
+                      const cRev=cOrds.reduce((s,o)=>s+(Number(o.total_amount)||0),0);
+                      return (
+                        <tr key={c.id} onClick={()=>openC(c.id)} style={{cursor:"pointer",borderBottom:"1px solid var(--bdr)"}}>
+                          <td style={{padding:"8px 10px",fontWeight:600,fontSize:12}}>{c.company||c.name}</td>
+                          <td><span style={{fontSize:9,padding:"1px 6px",borderRadius:8,
+                            background:c.type==="crm"?"rgba(16,185,129,.1)":"rgba(59,130,246,.1)",
+                            color:c.type==="crm"?"#10b981":"#60a5fa",fontWeight:700}}>{c.type?.toUpperCase()}</span></td>
+                          <td style={{padding:"8px",fontSize:10,color:"var(--mut)"}}>{fd(li?.created_at)||"—"}</td>
+                          <td style={{padding:"8px",textAlign:"center",fontWeight:700}}>{cOrds.length}</td>
+                          <td style={{padding:"8px",textAlign:"center",color:"#10b981",fontWeight:700}}>{cRev>0?"₹"+Math.round(cRev/1000)+"K":"—"}</td>
+                          <td style={{padding:"8px"}}>{li?.next_follow_up?<span style={{fontSize:10,color:isOD(li.next_follow_up)?"#ef4444":"#10b981",fontWeight:700}}>{isOD(li.next_follow_up)?"🔴":"🟢"} {fd(li.next_follow_up)}</span>:"—"}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table></div>
+                {repCust.length>20&&<div style={{padding:"8px 14px",fontSize:11,color:"var(--mut)"}}>
+                  ... aur {repCust.length-20} parties hain
+                </div>}
+              </div>
+            </div>
+          );
+        })()}
       </div>
     );
   };
