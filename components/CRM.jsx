@@ -3792,12 +3792,18 @@ export default function CRM({ currentUser, onLogout }) {
     const loadDeals = async() => {
       setLoading(true);
       try {
-        let url = "crm_deals?order=updated_at.desc";
-        if(filter==="active") url += "&stage=neq.won&stage=neq.lost";
-        else if(filter==="won") url += "&stage=eq.won";
-        else if(filter==="lost") url += "&stage=eq.lost";
-        const data = await sbFetch(url);
-        setDeals(data||[]);
+        // Supabase: fetch all then filter in JS (avoids complex query issues)
+        let url = "crm_deals?order=updated_at.desc&select=*";
+        const allDeals = await sbFetch(url);
+        let filtered = allDeals||[];
+        if(filter==="active") filtered = filtered.filter(d=>d.stage!=="won"&&d.stage!=="lost");
+        else if(filter==="won") filtered = filtered.filter(d=>d.stage==="won");
+        else if(filter==="lost") filtered = filtered.filter(d=>d.stage==="lost");
+        setDeals(filtered);
+        setLoading(false);
+        return;
+        // fallback (shouldn't reach here)
+        setDeals([]);
       } catch(e){}
       setLoading(false);
     };
