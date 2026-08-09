@@ -114,7 +114,7 @@ export default function CRM({ currentUser, onLogout }) {
 
   // User-wise filtering: sales sees only their own
   const myORDERS = isSales ? ORDERS.filter(o=>o.created_by===myName) : ORDERS;
-  const myC = isSales ? C.filter(c=>c.assigned_to===myName) : C;
+  const myC = isSales ? C.filter(c=>c.assigned_to===myName||c.sales_rep===myName) : C;
   const myI = isSales ? I.filter(i=>i.done_by===myName||(i.customer_id&&myC.find(c=>c.id===i.customer_id))) : I;
   const myE = isSales ? E.filter(e=>e.assigned_to===myName) : E;
   const myS = isSales ? S.filter(s=>myC.find(c=>c.id===s.customer_id||c.company===s.company)) : S;
@@ -1788,13 +1788,23 @@ export default function CRM({ currentUser, onLogout }) {
             <div><label className="lbl">Type</label><select className="inp" value={form.type||"nbd"} onChange={e=>sf("type",e.target.value)}><option value="nbd">NBD</option><option value="crm">CRM</option></select></div>
             <div><label className="lbl">Status</label><select className="inp" value={form.status||"prospect"} onChange={e=>sf("status",e.target.value)}><option value="prospect">Prospect</option><option value="active">Active</option><option value="inactive">Inactive</option></select></div>
           </div>
-          <div className="fr fr2"><div><label className="lbl">Segment</label><input className="inp" value={form.segment||""} onChange={e=>sf("segment",e.target.value)}/></div><div><label className="lbl">Assigned To</label><input className="inp" value={form.assigned_to||""} onChange={e=>sf("assigned_to",e.target.value)}/></div></div>
-          <div className="fr fr2"><div><label className="lbl">GST No</label><input className="inp" placeholder="22AAAAA0000A1Z5" value={form.gst_no||""} onChange={e=>sf("gst_no",e.target.value.toUpperCase())}/></div><div><label className="lbl">Address</label><input className="inp" value={form.address||""} onChange={e=>sf("address",e.target.value)}/></div></div>
+          <div className="fr fr2"><div><label className="lbl">Segment</label><input className="inp" value={form.segment||""} onChange={e=>sf("segment",e.target.value)}/></div><div><label className="lbl">Primary Owner</label>
+              <select className="inp" value={form.assigned_to||""} onChange={e=>sf("assigned_to",e.target.value)}>
+                <option value="">-- Select --</option>
+                {USERS.map(u=><option key={u.name} value={u.name}>{u.name}</option>)}
+              </select></div></div>
+          <div className="fr fr2"><div><label className="lbl">Sales Rep (Follow-up)</label>
+              <select className="inp" value={form.sales_rep||""} onChange={e=>sf("sales_rep",e.target.value)}>
+                <option value="">-- Koi nahi --</option>
+                {USERS.map(u=><option key={u.name} value={u.name}>{u.name}</option>)}
+              </select></div>
+            <div><label className="lbl">GST No</label><input className="inp" placeholder="22AAAAA0000A1Z5" value={form.gst_no||""} onChange={e=>sf("gst_no",e.target.value.toUpperCase())}/></div></div>
+          <div className="fr fr2"><div><label className="lbl">Address</label><input className="inp" value={form.address||""} onChange={e=>sf("address",e.target.value)}/></div></div>
           <button className="btn btn-p" style={{width:"100%",justifyContent:"center",marginTop:8}} disabled={saving} onClick={async()=>{
             if(!form.name||!form.company) return toast$("Name aur Company required!",true);
             setSv(true);
             try {
-              await sbPatch("crm_customers",form.id,{name:form.name,company:form.company,phone:form.phone,email:form.email,city:form.city,type:form.type,status:form.status,segment:form.segment,assigned_to:form.assigned_to,gst_no:form.gst_no,address:form.address});
+              await sbPatch("crm_customers",form.id,{name:form.name,company:form.company,phone:form.phone,email:form.email,city:form.city,type:form.type,status:form.status,segment:form.segment,assigned_to:form.assigned_to,sales_rep:form.sales_rep||null,gst_no:form.gst_no,address:form.address});
               setC(p=>p.map(x=>x.id===form.id?{...x,...form}:x));
               toast$("Customer updated ✓"); setModal("detail");
             } catch(e){toast$(e.message,true);}
@@ -1813,7 +1823,11 @@ export default function CRM({ currentUser, onLogout }) {
           <div className="fr fr2"><div><label className="lbl">GST No</label><input className="inp" placeholder="22AAAAA0000A1Z5" value={form.gst_no||""} onChange={e=>sf("gst_no",e.target.value.toUpperCase())}/></div><div><label className="lbl">Address</label><input className="inp" value={form.address||""} onChange={e=>sf("address",e.target.value)}/></div></div>
           <div className="fr fr2">
             <div><label className="lbl">Type</label><select className="inp" value={form.type||"nbd"} onChange={e=>sf("type",e.target.value)}><option value="nbd">NBD (Prospect)</option><option value="crm">CRM (Existing)</option></select></div>
-            <div><label className="lbl">Assigned To</label><input className="inp" value={form.assigned_to||""} onChange={e=>sf("assigned_to",e.target.value)}/></div>
+            <div><label className="lbl">Primary Owner</label>
+              <select className="inp" value={form.assigned_to||""} onChange={e=>sf("assigned_to",e.target.value)}>
+                <option value="">-- Select --</option>
+                {USERS.map(u=><option key={u.name} value={u.name}>{u.name}</option>)}
+              </select></div>
           </div>
           <button className="btn btn-p" style={{width:"100%",justifyContent:"center",marginTop:6}} disabled={saving} onClick={async()=>{
             if(!form.name||!form.company) return toast$("Name aur Company required!",true);
@@ -1949,7 +1963,11 @@ export default function CRM({ currentUser, onLogout }) {
           <div><label className="lbl">Type</label><select className="inp" value={form.type||"nbd"} onChange={e=>sf("type",e.target.value)}><option value="nbd">NBD</option><option value="crm">CRM</option></select></div>
           <div><label className="lbl">Status</label><select className="inp" value={form.status||"prospect"} onChange={e=>sf("status",e.target.value)}><option value="prospect">Prospect</option><option value="active">Active</option><option value="inactive">Inactive</option></select></div>
         </div>
-        <div className="fr fr2"><div><label className="lbl">Segment</label><input className="inp" value={form.segment||""} onChange={e=>sf("segment",e.target.value)}/></div><div><label className="lbl">Assigned To</label><input className="inp" value={form.assigned_to||""} onChange={e=>sf("assigned_to",e.target.value)}/></div></div>
+        <div className="fr fr2"><div><label className="lbl">Segment</label><input className="inp" value={form.segment||""} onChange={e=>sf("segment",e.target.value)}/></div><div><label className="lbl">Primary Owner</label>
+              <select className="inp" value={form.assigned_to||""} onChange={e=>sf("assigned_to",e.target.value)}>
+                <option value="">-- Select --</option>
+                {USERS.map(u=><option key={u.name} value={u.name}>{u.name}</option>)}
+              </select></div></div>
         <div className="fr fr2"><div><label className="lbl">GST No</label><input className="inp" placeholder="22AAAAA0000A1Z5" value={form.gst_no||""} onChange={e=>sf("gst_no",e.target.value.toUpperCase())}/></div><div><label className="lbl">Address</label><input className="inp" value={form.address||""} onChange={e=>sf("address",e.target.value)}/></div></div>
       </>},
       aenq:{t:"New Enquiry",fn:saveEnq,f:<>
@@ -1958,7 +1976,11 @@ export default function CRM({ currentUser, onLogout }) {
         <div className="fr fr3">
           <div><label className="lbl">Priority</label><select className="inp" value={form.priority||"medium"} onChange={e=>sf("priority",e.target.value)}><option value="high">🔥 High</option><option value="medium">⚡ Medium</option><option value="low">• Low</option></select></div>
           <div><label className="lbl">Status</label><select className="inp" value={form.status||"new"} onChange={e=>sf("status",e.target.value)}>{["new","quoted","negotiating","won","lost"].map(s=><option key={s} value={s}>{s}</option>)}</select></div>
-          <div><label className="lbl">Assigned To</label><input className="inp" value={form.assigned_to||""} onChange={e=>sf("assigned_to",e.target.value)}/></div>
+          <div><label className="lbl">Primary Owner</label>
+              <select className="inp" value={form.assigned_to||""} onChange={e=>sf("assigned_to",e.target.value)}>
+                <option value="">-- Select --</option>
+                {USERS.map(u=><option key={u.name} value={u.name}>{u.name}</option>)}
+              </select></div>
         </div>
       </>},
       ainter:{t:"Log Interaction",fn:()=>saveInter(false),f:<>
@@ -4778,8 +4800,10 @@ export default function CRM({ currentUser, onLogout }) {
           {
             time:"🚗 FIELD MEIN — Har Visit Ke Baad", color:"#f59e0b",
             steps:[
-              {icon:"📝",title:"Visit log karo (5 min)",desc:'CRM → Party dhundho → Log Interaction → Type: Visit → Note: kya baat hui → Follow-up date daalo'},
-              {icon:"💡",title:"Note example",desc:'"500ml Milky ka sample diya. Price ₹2050 discuss ki. Next visit mein order confirm hoga."'},
+               {icon:"🔍",title:"Party dhundho — Step 1",desc:'CRM kholo → Customers tab → Search bar mein party ka naam type karo → Party ke naam pe click karo'},
+               {icon:"📝",title:"Log Interaction — Step 2",desc:"Party ke page pe 'Log Interaction' button dabao (upar right corner mein) → Form khulega"},
+               {icon:"📋",title:"Form bharo — Step 3",desc:"Type = Visit select karo → Note mein kya baat hui likho (2-3 lines) → Follow-up date daalo → Save dabao"},
+               {icon:"💡",title:"Note kaise likhein",desc:'"500ml Milky sample diya. Price ₹2050 discuss ki. 15 Aug tak order confirm hoga."'},
             ]
           },
           {
@@ -4854,8 +4878,10 @@ export default function CRM({ currentUser, onLogout }) {
           {
             time:"📞 DIN MEIN — Har Call/WA Ke Baad", color:"#f59e0b",
             steps:[
-              {icon:"📝",title:"Interaction log karo (2 min)",desc:'CRM → Party dhundho → Log Interaction → Type: Call/WhatsApp → Note likhो → Follow-up date daalo'},
-              {icon:"💡",title:"Note example",desc:'"Price enquiry — 300ml Milky 10,000 pcs. ₹1750 quote kiya. 2 din mein confirm."'},
+               {icon:"🔍",title:"Party dhundho — Step 1",desc:'CRM kholo → Customers tab → Search bar mein party ka naam type karo → Party pe click karo'},
+               {icon:"📝",title:"Log Interaction — Step 2",desc:"Party detail page pe 'Log Interaction' button dabao (upar right side) → Ek popup form khulega"},
+               {icon:"📋",title:"Form bharo — Step 3",desc:"Type select karo: Call ya WhatsApp → Note mein kya baat hui likho → Follow-up date zaroori daalo → Save dabao"},
+               {icon:"💡",title:"Note kaise likhein",desc:'"300ml Milky 10,000 pcs enquiry. ₹1750 quote kiya. 12 Aug tak confirm karenge."'},
             ]
           },
           {
