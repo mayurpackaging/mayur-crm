@@ -2223,7 +2223,7 @@ export default function CRM({ currentUser, onLogout }) {
                       model:"claude-sonnet-4-6",
                       max_tokens:200,
                       system:"Convert Hinglish/Hindi follow-up notes to professional English. Keep dates and specifics. Output only the note.",
-                      messages:[{role:"user",content:form.follow_up_note}]
+                      messages:[{role:"user",content:"Convert to professional English, keep specifics: "+String(form.follow_up_note||"")}]
                     })
                   });
                   const d = await res.json();
