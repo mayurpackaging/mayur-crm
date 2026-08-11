@@ -312,9 +312,9 @@ export default function CRM({ currentUser, onLogout }) {
   const orderTotal = useMemo(()=>orderItems.reduce((s,i)=>s+(Number(i.amount)||0),0),[orderItems]);
   const eprAmount    = useMemo(()=>form.epr?Math.round(orderTotal*0.01):0,[orderTotal,form.epr]);
   const freightAmt   = useMemo(()=>Number(form.freight)||0,[form.freight]);
-  const freightGst   = useMemo(()=>form.freight_gst?Math.round(freightAmt*0.18):0,[freightAmt,form.freight_gst]);
+  const freightGst   = useMemo(()=>form.freight_gst_type==="including"?0:Math.round(freightAmt*0.18),[freightAmt,form.freight_gst_type]);
   const gstAmount    = useMemo(()=>form.gst==="including"?0:Math.round(orderTotal*0.18),[orderTotal,form.gst]);
-  const grandTotal   = useMemo(()=>orderTotal+eprAmount+freightAmt+freightGst+(form.gst==="including"?0:gstAmount),[orderTotal,eprAmount,freightAmt,freightGst,gstAmount,form.gst]);
+  const grandTotal   = useMemo(()=>orderTotal+eprAmount+freightAmt+freightGst+(form.gst==="including"?0:gstAmount),[orderTotal,eprAmount,freightAmt,freightGst,gstAmount,form.gst,form.freight_gst_type]);
 
   const saveOrder = async() => {
     if(!form.customer_id) return toast$("Customer select karo",true);
@@ -323,7 +323,7 @@ export default function CRM({ currentUser, onLogout }) {
     setSv(true);
     try {
       const totalCases=orderItems.reduce((s,i)=>s+(Number(i.qty_cases)||0),0);
-      const orderData={customer_id:form.customer_id,customer_name:c?.name,company:c?.company,order_date:form.order_date||new Date().toISOString().split("T")[0],status:"draft",total_amount:grandTotal,total_cases:totalCases,payment_mode:form.payment_mode||"cash",epr_applied:!!form.epr,gst_type:form.gst||"excluding",freight:freightAmt||null,freight_gst:freightGst||null,notes:form.notes||"",created_by:currentUser?.name||""};
+      const orderData={customer_id:form.customer_id,customer_name:c?.name,company:c?.company,order_date:form.order_date||new Date().toISOString().split("T")[0],status:"draft",total_amount:grandTotal,total_cases:totalCases,payment_mode:form.payment_mode||"cash",epr_applied:!!form.epr,gst_type:form.gst||"excluding",freight:freightAmt||null,freight_gst:freightGst||null,freight_gst_type:form.freight_gst_type||"excluding",notes:form.notes||"",created_by:currentUser?.name||""};
       const orderRes=await sbInsert("crm_orders",orderData);
       const orderId=orderRes[0].id;
       const items=orderItems.map(i=>({...i,order_id:orderId}));
@@ -372,10 +372,15 @@ export default function CRM({ currentUser, onLogout }) {
   };
 
   const printProforma = () => {
+    if(!selOrder) return;
     const win=window.open("","_blank");
+    if(!win) { toast$("Popup blocked! Browser settings mein allow karo.",true); return; }
     const subtotal=selOrder?.items?.reduce((s,i)=>s+(Number(i.amount)||0),0)||0;
     const epr=selOrder?.epr_applied?Math.round(subtotal*0.01):0;
+    const freight=Number(selOrder?.freight)||0;
+    const freightGstAmt=Number(selOrder?.freight_gst)||0;
     const gst=selOrder?.gst_type==="including"?0:Math.round(subtotal*0.18);
+    const grandTotal=subtotal+epr+freight+freightGstAmt+gst;
     win.document.write(`<html><head><title>Proforma - ${selOrder?.company}</title>
     <style>body{font-family:Arial,sans-serif;padding:24px;color:#000;}h2{text-align:center;margin-bottom:4px;}.sub{text-align:center;font-size:12px;margin-bottom:20px;color:#555;}.info{display:flex;justify-content:space-between;margin-bottom:16px;font-size:13px;}table{width:100%;border-collapse:collapse;font-size:12px;}th{background:#f59e0b;padding:8px;text-align:left;border:1px solid #ddd;}td{padding:7px 8px;border:1px solid #ddd;}.total{text-align:right;margin-top:12px;font-size:14px;}.footer{margin-top:30px;font-size:11px;color:#888;border-top:1px solid #ddd;padding-top:10px;}</style></head><body>
     <h2>Shreeja Packaging Industries Pvt. Ltd.</h2>
@@ -387,8 +392,16 @@ export default function CRM({ currentUser, onLogout }) {
     <table><thead><tr><th>#</th><th>SKU</th><th>Product</th><th>Packing</th><th>Cases</th><th>Price/Pcs (₹)</th><th>CTN Price (₹)</th><th>Amount (₹)</th></tr></thead>
     <tbody>${(selOrder?.items||[]).map((item,idx)=>`<tr><td>${idx+1}</td><td>${item.sku_code||""}</td><td>${item.product_name||""}</td><td>${item.packing||""}</td><td>${item.qty_cases||""}</td><td>${item.price_per_pcs||""}</td><td>${item.ctn_price||""}</td><td><b>₹${Number(item.amount||0).toLocaleString("en-IN")}</b></td></tr>`).join("")}</tbody></table>
     <div class="total">Subtotal: ₹${subtotal.toLocaleString("en-IN")}<br/>${epr>0?`EPR @1%: ₹${epr.toLocaleString("en-IN")}<br/>`:""}${freight>0?`Freight & Forwarding: ₹${freight.toLocaleString("en-IN")}<br/>`:""}${freightGstAmt>0?`Freight GST @18%: ₹${freightGstAmt.toLocaleString("en-IN")}<br/>`:""}${gst>0?`GST @18%: ₹${gst.toLocaleString("en-IN")}<br/>`:""}
-    <b>Total: ₹${(subtotal+epr+gst).toLocaleString("en-IN")}</b></div>
+    <b>Grand Total: ₹${grandTotal.toLocaleString("en-IN")}</b></div>
     ${selOrder?.notes?`<div style="margin-top:12px;font-size:12px;"><b>Notes:</b> ${selOrder.notes}</div>`:""}
+    <div style="margin-top:20px;padding:12px;background:#f8f9fa;border:1px solid #dee2e6;border-radius:6px;font-size:12px;">
+      <b>Bank Details:</b><br/>
+      Account Name: Shreeja Packaging Industries Pvt. Ltd.<br/>
+      Bank Name: Indian Bank<br/>
+      Account No: 7037726473<br/>
+      IFSC: IDIB000M175<br/>
+      Branch: Ind MSME Delhi Erstwhile Microstate Branch, Inder Enclave
+    </div>
     <div class="footer">Payment Terms: As agreed | Computer generated proforma invoice.</div>
     </body></html>`);
     win.document.close(); win.print();
@@ -1788,11 +1801,20 @@ export default function CRM({ currentUser, onLogout }) {
                         style={{width:90,padding:"3px 8px",borderRadius:6,border:"1px solid var(--bdr)",fontSize:12,textAlign:"right"}}/>
                     </div>
                     {freightAmt>0&&<div style={{display:"flex",alignItems:"center",justifyContent:"space-between",fontSize:12,marginBottom:6,gap:8}}>
-                      <label style={{display:"flex",alignItems:"center",gap:5,cursor:"pointer",color:"var(--mut)"}}>
-                        <input type="checkbox" checked={!!form.freight_gst} onChange={e=>sf("freight_gst",e.target.checked)} style={{accentColor:"var(--acc)",width:14,height:14}}/>
-                        Freight GST @18%
-                      </label>
-                      <span style={{fontWeight:600,color:form.freight_gst?"var(--txt)":"var(--mut)"}}>₹{freightGst.toLocaleString("en-IN")}</span>
+                      <div style={{display:"flex",alignItems:"center",gap:8}}>
+                        <span style={{color:"var(--mut)"}}>Freight GST @18%:</span>
+                        <label style={{display:"flex",alignItems:"center",gap:4,cursor:"pointer"}}>
+                          <input type="radio" name="freight_gst_type" value="excluding" checked={form.freight_gst_type!=="including"} onChange={()=>sf("freight_gst_type","excluding")} style={{accentColor:"var(--acc)",width:14,height:14}}/>
+                          <span style={{fontSize:11}}>Excluding</span>
+                        </label>
+                        <label style={{display:"flex",alignItems:"center",gap:4,cursor:"pointer"}}>
+                          <input type="radio" name="freight_gst_type" value="including" checked={form.freight_gst_type==="including"} onChange={()=>sf("freight_gst_type","including")} style={{accentColor:"var(--acc)",width:14,height:14}}/>
+                          <span style={{fontSize:11}}>Including</span>
+                        </label>
+                      </div>
+                      <span style={{fontWeight:600,color:form.freight_gst_type!=="including"?"var(--txt)":"var(--mut)"}}>
+                        {form.freight_gst_type==="including"?"(included)":"₹"+freightGst.toLocaleString("en-IN")}
+                      </span>
                     </div>}
                     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",fontSize:12,marginBottom:6}}>
                       <div style={{display:"flex",alignItems:"center",gap:8}}>
@@ -1828,6 +1850,7 @@ export default function CRM({ currentUser, onLogout }) {
     const epr=selOrder.epr_applied?Math.round(subtotal*0.01):0;
     const freight=Number(selOrder.freight)||0;
     const freightGstAmt=Number(selOrder.freight_gst)||0;
+    const freightGstType=selOrder.freight_gst_type||"excluding";
     const gst=selOrder.gst_type==="including"?0:Math.round(subtotal*0.18);
     const grandTotalPro=subtotal+epr+freight+freightGstAmt+gst;
     return (
