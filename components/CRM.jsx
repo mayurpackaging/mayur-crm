@@ -4947,8 +4947,8 @@ export default function CRM({ currentUser, onLogout }) {
   const SOP = () => {
     const isFieldSales = ["Akhilesh"].includes(currentUser?.name);
     const isInsideSales = ["Karan"].includes(currentUser?.name);
-    const isAashi = currentUser?.name==="Aashi";
-    const [sopTab, setSopTab] = useState(isFieldSales?"field":isInsideSales?"inside":isAashi?"aashi":"field");
+    const isPooja = currentUser?.name==="Pooja";
+    const [sopTab, setSopTab] = useState(isFieldSales?"field":isInsideSales?"inside":isPooja?"aashi":"field");
 
     const FieldSOP = () => (
       <div style={{fontSize:13,lineHeight:1.9}}>
@@ -5135,16 +5135,16 @@ export default function CRM({ currentUser, onLogout }) {
     );
 
 
-    const AashiSOP = () => (
+    const PoojaSOP = () => (
       <div style={{fontSize:13,lineHeight:1.9}}>
         <div style={{background:"rgba(168,85,247,.08)",border:"1px solid rgba(168,85,247,.2)",borderRadius:10,padding:14,marginBottom:16}}>
-          <div style={{fontWeight:800,fontSize:15,marginBottom:4}}>🌟 Aashi — CRM + NBD</div>
+          <div style={{fontWeight:800,fontSize:15,marginBottom:4}}>🌟 Pooja — CRM + NBD</div>
           <div>Aap <b>existing customers (CRM)</b> maintain karogi aur <b>new parties (NBD)</b> develop karogi.</div>
         </div>
         {[
           {time:"🌅 SUBAH (9:30 AM)", color:"#a855f7", steps:[
             {icon:"📅",title:"Planner check karo",desc:"Step 1: CRM → Planner tab → 🔴 Overdue → Aaj ki visits + calls plan karo"},
-            {icon:"👥",title:"CRM parties dekho",desc:"Step 2: Customers → CRM tab → Aashi filter → Follow-up pending list banao"},
+            {icon:"👥",title:"CRM parties dekho",desc:"Step 2: Customers → CRM tab → Pooja filter → Follow-up pending list banao"},
           ]},
           {time:"🏢 CRM — Existing Customers", color:"#10b981", steps:[
             {icon:"🔍",title:"Party dhundho — Step 1",desc:"Customers → Search → Party click → Detail page"},
@@ -5153,7 +5153,7 @@ export default function CRM({ currentUser, onLogout }) {
             {icon:"🧾",title:"Order — Step 3",desc:"New Order → Party → Items + price → WA Message → Save"},
           ]},
           {time:"🌱 NBD — New Parties", color:"#3b82f6", steps:[
-            {icon:"➕",title:"New party add — Step 1",desc:"Customers → Add Customer → Name, Company, Phone → Type: NBD → Sales Rep: Aashi → Save"},
+            {icon:"➕",title:"New party add — Step 1",desc:"Customers → Add Customer → Name, Company, Phone → Type: NBD → Sales Rep: Pooja → Save"},
             {icon:"📝",title:"Pehli visit — Step 2",desc:"Party → Log Interaction → Visit → Kya interest hai → Follow-up date"},
             {icon:"🎯",title:"Pipeline — Step 3",desc:"Pipeline → New Deal → Title, Value, Stage: Lead → Close date → Save"},
           ]},
@@ -5174,7 +5174,7 @@ export default function CRM({ currentUser, onLogout }) {
         ))}
         <div style={{background:"rgba(239,68,68,.08)",border:"1px solid rgba(239,68,68,.2)",borderRadius:10,padding:14}}>
           <div style={{fontWeight:800,marginBottom:8}}>⚠️ 5 Rules</div>
-          {["Har visit note karo","Follow-up date hamesha","NBD add: Type=NBD + Rep=Aashi","Order same din enter karo","Pipeline weekly update"].map((r,i)=>(
+          {["Har visit note karo","Follow-up date hamesha","NBD add: Type=NBD + Rep=Pooja","Order same din enter karo","Pipeline weekly update"].map((r,i)=>(
             <div key={i} style={{display:"flex",gap:8,marginBottom:6,fontSize:12}}>
               <span style={{color:"#ef4444",fontWeight:700}}>{i+1}.</span><span>{r}</span>
             </div>
@@ -5201,13 +5201,13 @@ export default function CRM({ currentUser, onLogout }) {
             📞 Inside Sales (Karan)
           </div>
           <div className={"tab "+(sopTab==="aashi"?"a":"")} onClick={()=>setSopTab("aashi")}>
-            🌟 CRM+NBD (Aashi)
+            🌟 CRM+NBD (Pooja)
           </div>
         </div>
 
         {sopTab==="field"&&<FieldSOP/>}
         {sopTab==="inside"&&<InsideSOP/>}
-        {sopTab==="aashi"&&<AashiSOP/>}
+        {sopTab==="aashi"&&<PoojaSOP/>}
       </div>
     );
   };
