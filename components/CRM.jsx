@@ -2178,11 +2178,69 @@ export default function CRM({ currentUser, onLogout }) {
       ainter:{t:"Log Interaction",fn:()=>saveInter(false),f:<>
         <div className="fr"><label className="lbl">Customer *</label><CustomerSearch value={form.customer_id||""} onChange={v=>sf("customer_id",v)}/></div>
         <div className="fr"><label className="lbl">Type</label><select className="inp" value={form.type||"call"} onChange={e=>sf("type",e.target.value)}>{["call","visit","whatsapp","email","meeting"].map(t=><option key={t} value={t}>{TI[t]} {t}</option>)}</select></div>
-        <div className="fr"><label className="lbl">Note *</label><textarea className="inp" value={form.note||""} onChange={e=>sf("note",e.target.value)}/></div>
+        <div className="fr">
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+            <label className="lbl" style={{margin:0}}>Note *</label>
+            <button onClick={async()=>{
+              if(!form.note?.trim()) return toast$("Pehle note likho",true);
+              toast$("AI polish kar raha hai...");
+              try {
+                const res = await fetch("https://api.anthropic.com/v1/messages",{
+                  method:"POST",
+                  headers:{"Content-Type":"application/json"},
+                  body:JSON.stringify({
+                    model:"claude-sonnet-4-6",
+                    max_tokens:500,
+                    system:"You are a professional CRM assistant. Convert Hinglish/Hindi sales notes into concise, professional English. Keep all facts, numbers, dates intact. Output only the polished note, nothing else.",
+                    messages:[{role:"user",content:"Polish this sales note to professional English:
+
+"+form.note}]
+                  })
+                });
+                const d = await res.json();
+                const polished = d.content?.[0]?.text;
+                if(polished) { sf("note", polished); toast$("✨ Note polished!"); }
+              } catch(e){ toast$("AI error: "+e.message,true); }
+            }} style={{padding:"2px 10px",borderRadius:6,fontSize:11,border:"1px solid var(--acc)",
+              background:"rgba(139,92,246,.1)",color:"var(--acc)",cursor:"pointer",fontWeight:600}}>
+              ✨ AI Polish
+            </button>
+          </div>
+          <textarea className="inp" value={form.note||""} onChange={e=>sf("note",e.target.value)} rows={3}/>
+        </div>
         <div className="fr fr3">
           <div><label className="lbl">Follow-up Date</label><input type="date" className="inp" value={form.next_follow_up||""} onChange={e=>sf("next_follow_up",e.target.value)}/></div>
-          <div><label className="lbl">Follow-up Note</label><input className="inp" value={form.follow_up_note||""} onChange={e=>sf("follow_up_note",e.target.value)}/></div>
-          <div><label className="lbl">Done By</label><input className="inp" value={form.done_by||""} onChange={e=>sf("done_by",e.target.value)}/></div>
+          <div>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+              <label className="lbl" style={{margin:0}}>Follow-up Note</label>
+              <button onClick={async()=>{
+                if(!form.follow_up_note?.trim()) return toast$("Follow-up note likho pehle",true);
+                try {
+                  const res = await fetch("https://api.anthropic.com/v1/messages",{
+                    method:"POST",
+                    headers:{"Content-Type":"application/json"},
+                    body:JSON.stringify({
+                      model:"claude-sonnet-4-6",
+                      max_tokens:200,
+                      system:"Convert Hinglish/Hindi follow-up notes to professional English. Keep dates and specifics. Output only the note.",
+                      messages:[{role:"user",content:form.follow_up_note}]
+                    })
+                  });
+                  const d = await res.json();
+                  const p = d.content?.[0]?.text;
+                  if(p) { sf("follow_up_note", p); toast$("✨ Polished!"); }
+                } catch(e){ toast$("Error",true); }
+              }} style={{padding:"1px 8px",borderRadius:5,fontSize:10,border:"1px solid var(--acc)",
+                background:"rgba(139,92,246,.1)",color:"var(--acc)",cursor:"pointer"}}>✨</button>
+            </div>
+            <input className="inp" value={form.follow_up_note||""} onChange={e=>sf("follow_up_note",e.target.value)}/>
+          </div>
+          <div><label className="lbl">Done By</label>
+            <select className="inp" value={form.done_by||currentUser?.name||""} onChange={e=>sf("done_by",e.target.value)}>
+              <option value="">-- Select --</option>
+              {USERS.map(u=><option key={u.name} value={u.name}>{u.name}</option>)}
+            </select>
+          </div>
         </div>
         <button className="btn btn-p" style={{width:"100%",justifyContent:"center",marginTop:6}} disabled={saving} onClick={()=>saveInter(false)}>{saving?<Spin/>:"Save"}</button>
       </>},
