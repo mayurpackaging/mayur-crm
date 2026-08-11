@@ -216,7 +216,7 @@ export default function CRM({ currentUser, onLogout }) {
     const c=gc(cid);
     setSv(true);
     try {
-      const r=await sbInsert("crm_interactions",{...form,customer_id:cid,customer_name:c?.name,company:c?.company,type:form.type||"call"});
+      const r=await sbInsert("crm_interactions",{...form,customer_id:cid,customer_name:c?.name,company:c?.company,type:form.type||"call",done_by:form.done_by||myName});
       setI(p=>[r[0],...p]);
       // Auto-create Planner task if follow-up date set
       if(form.next_follow_up) {
@@ -883,7 +883,10 @@ export default function CRM({ currentUser, onLogout }) {
             background:c.type==="crm"?"rgba(16,185,129,.1)":"rgba(59,130,246,.1)",
             color:c.type==="crm"?"#10b981":"#60a5fa"}}>{c.type?.toUpperCase()}</span></td>
           <td style={{fontSize:10,color:"var(--mut)",fontFamily:"monospace"}}>{c.gst_no||"—"}</td>
-          <td><span style={{fontSize:11,fontWeight:600,color:c.assigned_to?"var(--txt)":"var(--mut)"}}>{c.assigned_to||"—"}</span></td>
+          <td>
+            <div style={{fontSize:11,fontWeight:600}}>{c.assigned_to||"—"}</div>
+            {c.sales_rep&&<div style={{fontSize:10,color:"#10b981",fontWeight:600}}>🎯 {c.sales_rep}</div>}
+          </td>
           <td>{li?<div><span style={{color:TC[li.type],fontSize:11}}>{TI[li.type]} {li.type}</span><div style={{color:"var(--mut)",fontSize:9.5}}>{fd(li.created_at)}</div></div>:<span style={{color:"var(--mut)"}}>—</span>}</td>
           <td>{li?.next_follow_up?<span style={{fontSize:10,fontWeight:800,
             color:isOD(li.next_follow_up)?"#ef4444":isTD(li.next_follow_up)?"#f59e0b":"#10b981"}}>
@@ -1881,7 +1884,11 @@ export default function CRM({ currentUser, onLogout }) {
           <div className="fr"><label className="lbl">Note *</label><textarea className="inp" value={form.note||""} onChange={e=>sf("note",e.target.value)}/></div>
           <div className="fr fr2">
             <div><label className="lbl">Follow-up Date</label><input type="date" className="inp" value={form.next_follow_up||""} onChange={e=>sf("next_follow_up",e.target.value)}/></div>
-            <div><label className="lbl">Done By</label><input className="inp" value={form.done_by||""} onChange={e=>sf("done_by",e.target.value)}/></div>
+            <div><label className="lbl">Done By</label>
+            <select className="inp" value={form.done_by||currentUser?.name||""} onChange={e=>sf("done_by",e.target.value)}>
+              <option value="">-- Select --</option>
+              {USERS.map(u=><option key={u.name} value={u.name}>{u.name}</option>)}
+            </select></div>
           </div>
           <div className="fr"><label className="lbl">Follow-up Note</label><input className="inp" value={form.follow_up_note||""} onChange={e=>sf("follow_up_note",e.target.value)}/></div>
           <button className="btn btn-p" style={{width:"100%",justifyContent:"center",marginTop:6}} disabled={saving} onClick={()=>saveInter(true)}>{saving?<Spin/>:"Save"}</button>
