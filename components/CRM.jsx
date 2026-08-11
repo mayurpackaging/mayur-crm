@@ -1564,6 +1564,8 @@ export default function CRM({ currentUser, onLogout }) {
                     <span style={{fontSize:9.5,fontWeight:800,padding:"2px 8px",borderRadius:12,background:c.type==="crm"?"rgba(16,185,129,.1)":"rgba(59,130,246,.1)",color:c.type==="crm"?"#10b981":"#60a5fa"}}>{c.type?.toUpperCase()}</span>
                     {c.segment&&<span style={{fontSize:9.5,padding:"2px 8px",borderRadius:12,background:"var(--card2)",color:"var(--mut)",border:"1px solid var(--bdr)"}}>{c.segment}</span>}
                     {c.assigned_to&&<span style={{fontSize:9.5,padding:"2px 8px",borderRadius:12,background:"var(--card2)",color:"var(--mut)",border:"1px solid var(--bdr)"}}>👤 {c.assigned_to}</span>}
+                    {c.sales_rep&&<span style={{fontSize:9.5,padding:"2px 8px",borderRadius:12,background:"rgba(16,185,129,.1)",color:"#10b981",fontWeight:700}}>🎯 Rep: {c.sales_rep}</span>}
+                    {Number(c.discount_per_ctn)>0&&<span style={{fontSize:9.5,padding:"2px 8px",borderRadius:12,background:"rgba(245,158,11,.1)",color:"#f59e0b",fontWeight:800}}>🏷️ ₹{c.discount_per_ctn}/ctn discount</span>}
                   </div>
                 </div>
                 <div style={{display:"flex",gap:6}}>
@@ -1931,7 +1933,11 @@ export default function CRM({ currentUser, onLogout }) {
                 <option value="">-- Select --</option>
                 {USERS.map(u=><option key={u.name} value={u.name}>{u.name}</option>)}
               </select></div></div>
-          <div className="fr fr2"><div><label className="lbl">Sales Rep (Follow-up)</label>
+          <div className="fr fr2"><div><label className="lbl">Discount (₹/ctn)</label>
+              <input type="number" className="inp" placeholder="0" value={form.discount_per_ctn||""} onChange={e=>sf("discount_per_ctn",Number(e.target.value))}/>
+              <div style={{fontSize:10,color:"var(--mut)",marginTop:2}}>Party ko har carton pe kitna discount</div>
+            </div>
+            <div><label className="lbl">Sales Rep (Follow-up)</label>
               <select className="inp" value={form.sales_rep||""} onChange={e=>sf("sales_rep",e.target.value)}>
                 <option value="">-- Koi nahi --</option>
                 {USERS.map(u=><option key={u.name} value={u.name}>{u.name}</option>)}
@@ -1942,7 +1948,7 @@ export default function CRM({ currentUser, onLogout }) {
             if(!form.name||!form.company) return toast$("Name aur Company required!",true);
             setSv(true);
             try {
-              await sbPatch("crm_customers",form.id,{name:form.name,company:form.company,phone:form.phone,email:form.email,city:form.city,type:form.type,status:form.status,segment:form.segment,assigned_to:form.assigned_to,sales_rep:form.sales_rep||null,gst_no:form.gst_no,address:form.address});
+              await sbPatch("crm_customers",form.id,{name:form.name,company:form.company,phone:form.phone,email:form.email,city:form.city,type:form.type,status:form.status,segment:form.segment,assigned_to:form.assigned_to,sales_rep:form.sales_rep||null,gst_no:form.gst_no,address:form.address,discount_per_ctn:Number(form.discount_per_ctn)||0});
               setC(p=>p.map(x=>x.id===form.id?{...x,...form}:x));
               toast$("Customer updated ✓"); setModal("detail");
             } catch(e){toast$(e.message,true);}
@@ -4916,7 +4922,8 @@ export default function CRM({ currentUser, onLogout }) {
   const SOP = () => {
     const isFieldSales = ["Akhilesh"].includes(currentUser?.name);
     const isInsideSales = ["Karan"].includes(currentUser?.name);
-    const [sopTab, setSopTab] = useState(isFieldSales?"field":isInsideSales?"inside":"field");
+    const isAashi = currentUser?.name==="Aashi";
+    const [sopTab, setSopTab] = useState(isFieldSales?"field":isInsideSales?"inside":isAashi?"aashi":"field");
 
     const FieldSOP = () => (
       <div style={{fontSize:13,lineHeight:1.9}}>
@@ -5102,6 +5109,55 @@ export default function CRM({ currentUser, onLogout }) {
       </div>
     );
 
+
+    const AashiSOP = () => (
+      <div style={{fontSize:13,lineHeight:1.9}}>
+        <div style={{background:"rgba(168,85,247,.08)",border:"1px solid rgba(168,85,247,.2)",borderRadius:10,padding:14,marginBottom:16}}>
+          <div style={{fontWeight:800,fontSize:15,marginBottom:4}}>🌟 Aashi — CRM + NBD</div>
+          <div>Aap <b>existing customers (CRM)</b> maintain karogi aur <b>new parties (NBD)</b> develop karogi.</div>
+        </div>
+        {[
+          {time:"🌅 SUBAH (9:30 AM)", color:"#a855f7", steps:[
+            {icon:"📅",title:"Planner check karo",desc:"Step 1: CRM → Planner tab → 🔴 Overdue → Aaj ki visits + calls plan karo"},
+            {icon:"👥",title:"CRM parties dekho",desc:"Step 2: Customers → CRM tab → Aashi filter → Follow-up pending list banao"},
+          ]},
+          {time:"🏢 CRM — Existing Customers", color:"#10b981", steps:[
+            {icon:"🔍",title:"Party dhundho — Step 1",desc:"Customers → Search → Party click → Detail page"},
+            {icon:"📝",title:"Log Interaction — Step 2",desc:"Log Interaction → Type: Visit/Call/WA → Note → Follow-up date → Save"},
+            {icon:"💡",title:"Note example",desc:'"500ml Milky 500 pcs confirm. Delivery 15 Aug. Next visit 1 Sep."'},
+            {icon:"🧾",title:"Order — Step 3",desc:"New Order → Party → Items + price → WA Message → Save"},
+          ]},
+          {time:"🌱 NBD — New Parties", color:"#3b82f6", steps:[
+            {icon:"➕",title:"New party add — Step 1",desc:"Customers → Add Customer → Name, Company, Phone → Type: NBD → Sales Rep: Aashi → Save"},
+            {icon:"📝",title:"Pehli visit — Step 2",desc:"Party → Log Interaction → Visit → Kya interest hai → Follow-up date"},
+            {icon:"🎯",title:"Pipeline — Step 3",desc:"Pipeline → New Deal → Title, Value, Stage: Lead → Close date → Save"},
+          ]},
+          {time:"🌆 SHAM (6 PM)", color:"#f59e0b", steps:[
+            {icon:"✓",title:"Tasks done",desc:"Planner → ✓ → Kal check karo"},
+            {icon:"🎯",title:"Pipeline update",desc:"Deals → Stage move → Nitin bhai ko update do"},
+          ]},
+        ].map((section,si)=>(
+          <div key={si} style={{marginBottom:20}}>
+            <div style={{fontWeight:800,fontSize:13,color:section.color,background:section.color+"11",padding:"8px 14px",borderRadius:8,marginBottom:10}}>{section.time}</div>
+            {section.steps.map((step,i)=>(
+              <div key={i} style={{display:"flex",gap:12,marginBottom:10,background:"var(--card2)",borderRadius:8,padding:"10px 14px"}}>
+                <div style={{fontSize:20,flexShrink:0}}>{step.icon}</div>
+                <div><div style={{fontWeight:700,marginBottom:2}}>{step.title}</div><div style={{fontSize:12,color:"var(--mut)"}}>{step.desc}</div></div>
+              </div>
+            ))}
+          </div>
+        ))}
+        <div style={{background:"rgba(239,68,68,.08)",border:"1px solid rgba(239,68,68,.2)",borderRadius:10,padding:14}}>
+          <div style={{fontWeight:800,marginBottom:8}}>⚠️ 5 Rules</div>
+          {["Har visit note karo","Follow-up date hamesha","NBD add: Type=NBD + Rep=Aashi","Order same din enter karo","Pipeline weekly update"].map((r,i)=>(
+            <div key={i} style={{display:"flex",gap:8,marginBottom:6,fontSize:12}}>
+              <span style={{color:"#ef4444",fontWeight:700}}>{i+1}.</span><span>{r}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+
     return (
       <div>
         <div className="sh">
@@ -5119,10 +5175,14 @@ export default function CRM({ currentUser, onLogout }) {
           <div className={"tab "+(sopTab==="inside"?"a":"")} onClick={()=>setSopTab("inside")}>
             📞 Inside Sales (Karan)
           </div>
+          <div className={"tab "+(sopTab==="aashi"?"a":"")} onClick={()=>setSopTab("aashi")}>
+            🌟 CRM+NBD (Aashi)
+          </div>
         </div>
 
         {sopTab==="field"&&<FieldSOP/>}
         {sopTab==="inside"&&<InsideSOP/>}
+        {sopTab==="aashi"&&<AashiSOP/>}
       </div>
     );
   };
@@ -5369,6 +5429,275 @@ export default function CRM({ currentUser, onLogout }) {
   };
 
 
+
+  // ══════════════════════════════════════════════
+  // AASHI CALLING DASHBOARD + DISCOUNT APPROVAL
+  // ══════════════════════════════════════════════
+  const CallingDashboard = () => {
+    const [discReqs, setDiscReqs] = useState([]);
+    const [loadingReqs, setLoadingReqs] = useState(false);
+    const [showDiscReq, setShowDiscReq] = useState(null); // party for discount request
+    const [reqDiscount, setReqDiscount] = useState("");
+    const [reqReason, setReqReason] = useState("");
+    const [adminNote, setAdminNote] = useState("");
+
+    const myParties = myC.filter(c=>c.sales_rep===myName||c.assigned_to===myName);
+
+    const loadReqs = async() => {
+      setLoadingReqs(true);
+      try {
+        const url = isAdmin
+          ? "crm_discount_requests?order=created_at.desc"
+          : "crm_discount_requests?requested_by=eq."+myName+"&order=created_at.desc";
+        const d = await sbFetch(url);
+        setDiscReqs(d||[]);
+      } catch(e){}
+      setLoadingReqs(false);
+    };
+
+    useEffect(()=>{ loadReqs(); },[]);
+
+    const pendingReqs = discReqs.filter(r=>r.status==="pending");
+
+    const submitDiscountReq = async() => {
+      if(!showDiscReq||!reqDiscount) return toast$("Discount amount daalo",true);
+      try {
+        await sbFetch("crm_discount_requests", {method:"POST", body:{
+          customer_id: showDiscReq.id,
+          customer_name: showDiscReq.name,
+          company: showDiscReq.company,
+          requested_by: myName,
+          requested_discount: Number(reqDiscount),
+          current_discount: Number(showDiscReq.discount_per_ctn)||0,
+          reason: reqReason,
+          status: "pending"
+        }});
+        toast$("Discount request bhej di! Nitin bhai approve karenge.");
+        setShowDiscReq(null); setReqDiscount(""); setReqReason("");
+        loadReqs();
+      } catch(e){ toast$("Error: "+e.message,true); }
+    };
+
+    const approveReq = async(req, approved, disc) => {
+      try {
+        await sbFetch("crm_discount_requests?id=eq."+req.id, {method:"PATCH", body:{
+          status: approved?"approved":"rejected",
+          approved_by: myName,
+          approved_discount: approved?Number(disc):0,
+          admin_note: adminNote,
+          updated_at: new Date().toISOString()
+        }});
+        if(approved) {
+          // Update customer discount
+          await sbFetch("crm_customers?id=eq."+req.customer_id, {method:"PATCH", body:{
+            discount_per_ctn: Number(disc)
+          }});
+          // Update local C array
+          setC(prev=>prev.map(c=>c.id===req.customer_id?{...c,discount_per_ctn:Number(disc)}:c));
+        }
+        toast$(approved?"✅ Discount approved!":"❌ Rejected");
+        setAdminNote("");
+        loadReqs();
+      } catch(e){ toast$("Error: "+e.message,true); }
+    };
+
+    const today = new Date().toISOString().slice(0,10);
+    const todayInter = I.filter(i=>i.created_at?.startsWith(today)&&i.done_by===myName);
+    const calledToday = new Set(todayInter.map(i=>i.customer_id));
+
+    return (
+      <div>
+        <div className="sh">
+          <div>
+            <div className="sh-t">📞 Calling Dashboard</div>
+            <div className="sh-s">Aaj ki calling list · Discount requests · Performance</div>
+          </div>
+        </div>
+
+        {/* ── ADMIN: Pending Discount Approvals ── */}
+        {isAdmin&&pendingReqs.length>0&&(
+          <div style={{marginBottom:14,background:"rgba(245,158,11,.08)",border:"2px solid #f59e0b",borderRadius:12,padding:14}}>
+            <div style={{fontWeight:800,fontSize:14,color:"#f59e0b",marginBottom:12}}>
+              🔔 Discount Approvals Pending ({pendingReqs.length})
+            </div>
+            {pendingReqs.map((req,i)=>(
+              <div key={i} style={{background:"var(--card)",borderRadius:10,padding:12,marginBottom:10}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8,marginBottom:8}}>
+                  <div>
+                    <div style={{fontWeight:700,fontSize:13}}>{req.company||req.customer_name}</div>
+                    <div style={{fontSize:11,color:"var(--mut)"}}>Requested by: {req.requested_by} · {new Date(req.created_at).toLocaleDateString("en-IN")}</div>
+                    <div style={{fontSize:12,marginTop:4}}>
+                      Current: <b>₹{req.current_discount}/ctn</b> → Requested: <b style={{color:"#f59e0b"}}>₹{req.requested_discount}/ctn</b>
+                    </div>
+                    {req.reason&&<div style={{fontSize:11,color:"var(--mut)",marginTop:2,fontStyle:"italic"}}>Reason: {req.reason}</div>}
+                  </div>
+                </div>
+                <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+                  <input className="inp" type="number" placeholder="Approved discount ₹/ctn"
+                    style={{width:180,fontSize:11}} defaultValue={req.requested_discount}
+                    id={"disc_"+req.id}/>
+                  <input className="inp" placeholder="Note (optional)" style={{flex:1,fontSize:11}}
+                    value={adminNote} onChange={e=>setAdminNote(e.target.value)}/>
+                  <button className="btn btn-p btn-sm" onClick={()=>{
+                    const val = document.getElementById("disc_"+req.id)?.value||req.requested_discount;
+                    approveReq(req, true, val);
+                  }}>✅ Approve</button>
+                  <button className="btn btn-sm" style={{background:"#ef4444",color:"#fff",border:"none"}}
+                    onClick={()=>approveReq(req, false, 0)}>❌ Reject</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* ── TODAY STATS ── */}
+        <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10,marginBottom:14}}>
+          {[
+            ["📋 Assigned Parties", myParties.length, "Total", "#3b82f6"],
+            ["✅ Called Today", calledToday.size, "Interactions logged", "#10b981"],
+            ["⏳ Remaining", Math.max(0,myParties.length-calledToday.size), "Call karni hain", "#f59e0b"],
+          ].map(([lbl,val,sub,c])=>(
+            <div key={lbl} style={{background:c+"11",border:"1px solid "+c+"33",borderRadius:10,padding:12,textAlign:"center"}}>
+              <div style={{fontSize:10,color:"var(--mut)",marginBottom:4}}>{lbl}</div>
+              <div style={{fontSize:22,fontWeight:800,color:c}}>{val}</div>
+              <div style={{fontSize:10,color:"var(--mut)"}}>{sub}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* ── CALLING LIST ── */}
+        <div className="card" style={{padding:0}}>
+          <div style={{padding:"12px 16px",fontWeight:700,fontSize:13,borderBottom:"1px solid var(--bdr)",display:"flex",justifyContent:"space-between"}}>
+            <span>📋 Calling List — {myParties.length} Parties</span>
+            <span style={{fontSize:11,color:"var(--mut)",fontWeight:400}}>{calledToday.size} called today</span>
+          </div>
+          {myParties.length===0?(
+            <div style={{padding:24,textAlign:"center",color:"var(--mut)"}}>
+              <div style={{fontSize:32,marginBottom:8}}>📭</div>
+              <div>Abhi koi party assign nahi hui</div>
+              <div style={{fontSize:11,marginTop:4}}>Nitin bhai aapko parties assign karenge</div>
+            </div>
+          ):(
+            <div>
+              {myParties.map((c,i)=>{
+                const called = calledToday.has(c.id);
+                const li = gli(c.id);
+                const hasDiscount = Number(c.discount_per_ctn)>0;
+                return (
+                  <div key={c.id} style={{padding:"12px 16px",borderBottom:"1px solid var(--bdr)",
+                    background:called?"rgba(16,185,129,.03)":"transparent",
+                    display:"flex",gap:10,alignItems:"center"}}>
+                    {/* Status indicator */}
+                    <div style={{width:32,height:32,borderRadius:"50%",flexShrink:0,
+                      background:called?"#10b981":"var(--card2)",
+                      display:"flex",alignItems:"center",justifyContent:"center",
+                      fontSize:16,fontWeight:800,color:called?"#fff":"var(--mut)"}}>
+                      {called?"✓":i+1}
+                    </div>
+                    {/* Party info */}
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
+                        <span style={{fontWeight:700,fontSize:13}}>{c.company||c.name}</span>
+                        {hasDiscount&&<span style={{fontSize:10,background:"rgba(245,158,11,.15)",color:"#f59e0b",padding:"1px 7px",borderRadius:6,fontWeight:700}}>🏷️ ₹{c.discount_per_ctn}/ctn</span>}
+                        {called&&<span style={{fontSize:10,background:"rgba(16,185,129,.1)",color:"#10b981",padding:"1px 7px",borderRadius:6,fontWeight:700}}>✅ Called</span>}
+                      </div>
+                      <div style={{fontSize:11,color:"var(--mut)",marginTop:2}}>
+                        {c.city&&c.city+" · "}{c.phone||"No phone"}
+                        {li&&<span style={{marginLeft:8}}>Last: {li.type} {fd(li.created_at)}</span>}
+                      </div>
+                      {li?.next_follow_up&&(
+                        <div style={{fontSize:10,color:isOD(li.next_follow_up)?"#ef4444":"#10b981",fontWeight:700,marginTop:2}}>
+                          📌 Follow-up: {fd(li.next_follow_up)}
+                        </div>
+                      )}
+                    </div>
+                    {/* Actions */}
+                    <div style={{display:"flex",gap:6,flexShrink:0,flexWrap:"wrap",justifyContent:"flex-end"}}>
+                      <button className="btn btn-o btn-sm" onClick={()=>openC(c.id)}>👁 View</button>
+                      <button className="btn btn-o btn-sm" onClick={()=>{setForm({customer_id:c.id,done_by:myName});setModal("ainter");}}>📝 Log</button>
+                      {!hasDiscount&&<button onClick={()=>setShowDiscReq(c)}
+                        style={{padding:"4px 10px",borderRadius:6,fontSize:11,border:"1px solid #f59e0b",
+                          background:"rgba(245,158,11,.1)",color:"#f59e0b",cursor:"pointer",fontWeight:600}}>
+                        🏷️ Discount Maango
+                      </button>}
+                      {hasDiscount&&<button onClick={()=>setShowDiscReq(c)}
+                        style={{padding:"4px 10px",borderRadius:6,fontSize:11,border:"1px solid #f59e0b",
+                          background:"rgba(245,158,11,.1)",color:"#f59e0b",cursor:"pointer",fontWeight:600}}>
+                        🏷️ ₹{c.discount_per_ctn} · Change?
+                      </button>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* ── MY DISCOUNT REQUESTS ── */}
+        {!isAdmin&&discReqs.length>0&&(
+          <div className="card" style={{marginTop:14,padding:0}}>
+            <div style={{padding:"12px 16px",fontWeight:700,fontSize:13,borderBottom:"1px solid var(--bdr)"}}>
+              🏷️ Meri Discount Requests
+            </div>
+            {discReqs.map((req,i)=>(
+              <div key={i} style={{padding:"10px 16px",borderBottom:"1px solid var(--bdr)",
+                display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <div>
+                  <div style={{fontWeight:600,fontSize:12}}>{req.company}</div>
+                  <div style={{fontSize:11,color:"var(--mut)"}}>₹{req.current_discount} → ₹{req.requested_discount}/ctn</div>
+                  {req.reason&&<div style={{fontSize:10,color:"var(--mut)",fontStyle:"italic"}}>{req.reason}</div>}
+                </div>
+                <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                  <span style={{padding:"3px 10px",borderRadius:8,fontSize:11,fontWeight:700,
+                    background:req.status==="approved"?"rgba(16,185,129,.1)":req.status==="rejected"?"rgba(239,68,68,.1)":"rgba(245,158,11,.1)",
+                    color:req.status==="approved"?"#10b981":req.status==="rejected"?"#ef4444":"#f59e0b"}}>
+                    {req.status==="approved"?"✅ Approved":req.status==="rejected"?"❌ Rejected":"⏳ Pending"}
+                  </span>
+                  {req.status==="approved"&&<span style={{fontSize:11,fontWeight:700,color:"#10b981"}}>₹{req.approved_discount}/ctn</span>}
+                  {req.admin_note&&<span style={{fontSize:10,color:"var(--mut)"}}>Note: {req.admin_note}</span>}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* ── DISCOUNT REQUEST MODAL ── */}
+        {showDiscReq&&(
+          <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:"rgba(0,0,0,.5)",
+            zIndex:200,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+            <div style={{background:"var(--card)",borderRadius:16,padding:20,width:"100%",maxWidth:420}}>
+              <div style={{fontWeight:700,fontSize:15,marginBottom:4}}>🏷️ Discount Request</div>
+              <div style={{fontSize:12,color:"var(--mut)",marginBottom:16}}>{showDiscReq.company}</div>
+              <div style={{display:"flex",flexDirection:"column",gap:10}}>
+                <div>
+                  <div style={{fontSize:11,color:"var(--mut)",marginBottom:4}}>Current Discount</div>
+                  <div style={{fontWeight:700,fontSize:16}}>₹{showDiscReq.discount_per_ctn||0}/ctn</div>
+                </div>
+                <div>
+                  <label className="lbl">Requested Discount (₹/ctn)</label>
+                  <input type="number" className="inp" placeholder="e.g. 100"
+                    value={reqDiscount} onChange={e=>setReqDiscount(e.target.value)}/>
+                </div>
+                <div>
+                  <label className="lbl">Reason (optional)</label>
+                  <input className="inp" placeholder="e.g. Party competitor se compare kar rahi hai"
+                    value={reqReason} onChange={e=>setReqReason(e.target.value)}/>
+                </div>
+                <div style={{display:"flex",gap:8,marginTop:4}}>
+                  <button className="btn btn-p" style={{flex:1,justifyContent:"center"}} onClick={submitDiscountReq}>
+                    📤 Request Bhejo
+                  </button>
+                  <button className="btn btn-o" onClick={()=>setShowDiscReq(null)}>Cancel</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+
   /* ── NAV ── */
   const navs = [
     {id:"dashboard",lbl:"Dashboard",ic:"🏠",roles:["admin","sales","dataentry"]},
@@ -5388,6 +5717,7 @@ export default function CRM({ currentUser, onLogout }) {
     {id:"forecast",lbl:"Forecast",ic:"📈",roles:["admin","sales"]},
     {id:"sop",lbl:"SOP",ic:"📋",roles:["admin","sales","dataentry"]},
     {id:"daily",lbl:"Daily Report",ic:"📊",roles:["admin"]},
+    {id:"calling",lbl:"Calling",ic:"📞",roles:["admin","sales"]},
     {id:"analytics",lbl:"Analytics",ic:"📊",roles:["admin"]},
   ].filter(n=>n.roles?.includes(userRole)||userRole==="viewer");
 
@@ -5446,6 +5776,7 @@ export default function CRM({ currentUser, onLogout }) {
           {view==="forecast"&&<Forecast/>}
           {view==="sop"&&<SOP/>}
           {view==="daily"&&<DailyReport/>}
+          {view==="calling"&&<CallingDashboard/>}
         </div>
       </div>
       {renderModal()}
