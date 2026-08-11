@@ -1949,23 +1949,56 @@ export default function CRM({ currentUser, onLogout }) {
         <div className="mod mod-sm" onClick={e=>e.stopPropagation()}>
           <div className="mod-ttl">Add Interaction <button className="btn btn-o btn-sm" onClick={()=>setModal("detail")}><X size={13}/></button></div>
           <div className="fr"><label className="lbl">Type</label><select className="inp" value={form.type||"call"} onChange={e=>sf("type",e.target.value)}>{["call","visit","whatsapp","email","meeting"].map(t=><option key={t} value={t}>{TI[t]} {t}</option>)}</select></div>
-          <div className="fr"><label className="lbl">Note *</label><textarea className="inp" value={form.note||""} onChange={e=>sf("note",e.target.value)}/></div>
+          <div className="fr">
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+              <label className="lbl" style={{margin:0}}>Note *</label>
+              <button onClick={async()=>{
+                if(!form.note?.trim()) return toast$("Note likho pehle",true);
+                toast$("AI polish kar raha hai...");
+                try {
+                  const res = await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:400,system:"Convert Hinglish/Hindi sales notes to professional English. Keep all facts and numbers. Output only the polished note.",messages:[{role:"user",content:"Polish: "+String(form.note||"")}]})});
+                  const d = await res.json();
+                  const p = d.content?.[0]?.text;
+                  if(p){sf("note",p);toast$("✨ Note polished!");}
+                }catch(e){toast$("Error",true);}
+              }} style={{padding:"2px 10px",borderRadius:6,fontSize:11,border:"1px solid var(--acc)",background:"rgba(139,92,246,.1)",color:"var(--acc)",cursor:"pointer",fontWeight:600}}>✨ AI Polish</button>
+            </div>
+            <textarea className="inp" value={form.note||""} onChange={e=>sf("note",e.target.value)} rows={3}/>
+          </div>
           <div className="fr fr2">
             <div>
-            <label className="lbl">Follow-up Date</label>
-            <input type="date" className="inp" value={form.next_follow_up||""} onChange={e=>sf("next_follow_up",e.target.value)}/>
-          </div>
-          <div>
-            <label className="lbl">Follow-up Time</label>
-            <input type="time" className="inp" value={form.follow_up_time||"10:00"} onChange={e=>sf("follow_up_time",e.target.value)}/>
-          </div>
+              <label className="lbl">Follow-up Date</label>
+              <input type="date" className="inp" value={form.next_follow_up||""} onChange={e=>sf("next_follow_up",e.target.value)}/>
+            </div>
+            <div>
+              <label className="lbl">Follow-up Time</label>
+              <input type="time" className="inp" value={form.follow_up_time||"10:00"} onChange={e=>sf("follow_up_time",e.target.value)}/>
+            </div>
             <div><label className="lbl">Done By</label>
-            <select className="inp" value={form.done_by||currentUser?.name||""} onChange={e=>sf("done_by",e.target.value)}>
-              <option value="">-- Select --</option>
-              {USERS.map(u=><option key={u.name} value={u.name}>{u.name}</option>)}
-            </select></div>
+              <select className="inp" value={form.done_by||currentUser?.name||""} onChange={e=>sf("done_by",e.target.value)}>
+                <option value="">-- Select --</option>
+                {USERS.map(u=><option key={u.name} value={u.name}>{u.name}</option>)}
+              </select>
+            </div>
           </div>
-          <div className="fr"><label className="lbl">Follow-up Note</label><input className="inp" value={form.follow_up_note||""} onChange={e=>sf("follow_up_note",e.target.value)}/></div>
+          <div className="fr fr2">
+            <div>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+                <label className="lbl" style={{margin:0}}>Follow-up Note</label>
+                <button onClick={async()=>{
+                  if(!form.follow_up_note?.trim()) return;
+                  try{const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:200,system:"Convert to professional English follow-up note.",messages:[{role:"user",content:String(form.follow_up_note||"")}]})});const d=await res.json();const p=d.content?.[0]?.text;if(p){sf("follow_up_note",p);toast$("✨");}}catch(e){}
+                }} style={{padding:"1px 8px",borderRadius:5,fontSize:10,border:"1px solid var(--acc)",background:"rgba(139,92,246,.1)",color:"var(--acc)",cursor:"pointer"}}>✨</button>
+              </div>
+              <input className="inp" value={form.follow_up_note||""} onChange={e=>sf("follow_up_note",e.target.value)}/>
+            </div>
+            <div><label className="lbl">Assign Follow-up To</label>
+              <select className="inp" value={form.assign_followup_to||myName||""} onChange={e=>sf("assign_followup_to",e.target.value)}>
+                <option value="">-- Select --</option>
+                {USERS.map(u=><option key={u.name} value={u.name}>{u.name}</option>)}
+              </select>
+            </div>
+          </div>
           <button className="btn btn-p" style={{width:"100%",justifyContent:"center",marginTop:6}} disabled={saving} onClick={()=>saveInter(true)}>{saving?<Spin/>:"Save"}</button>
         </div>
       </div>
