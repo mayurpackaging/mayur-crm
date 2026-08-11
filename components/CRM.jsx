@@ -2242,19 +2242,9 @@ export default function CRM({ currentUser, onLogout }) {
               if(!form.note?.trim()) return toast$("Pehle note likho",true);
               toast$("AI polish kar raha hai...");
               try {
-                const res = await fetch("https://api.anthropic.com/v1/messages",{
-                  method:"POST",
-                  headers:{"Content-Type":"application/json"},
-                  body:JSON.stringify({
-                    model:"claude-sonnet-4-6",
-                    max_tokens:500,
-                    system:"You are a professional CRM assistant. Convert Hinglish/Hindi sales notes into concise, professional English. Keep all facts, numbers, dates intact. Output only the polished note, nothing else.",
-                    messages:[{role:"user",content:"Polish this sales note to professional English. Keep all facts. Output only polished note: "+String(form.note||"")}]
-                  })
-                });
+                const res = await fetch("/api/ai-polish",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({text:String(form.note||""),type:"note"})});
                 const d = await res.json();
-                const polished = d.content?.[0]?.text;
-                if(polished) { sf("note", polished); toast$("✨ Note polished!"); }
+                if(d.polished){sf("note",d.polished);toast$("✨ Note polished!");}
               } catch(e){ toast$("AI error: "+e.message,true); }
             }} style={{padding:"2px 10px",borderRadius:6,fontSize:11,border:"1px solid var(--acc)",
               background:"rgba(139,92,246,.1)",color:"var(--acc)",cursor:"pointer",fontWeight:600}}>
@@ -2271,19 +2261,9 @@ export default function CRM({ currentUser, onLogout }) {
               <button onClick={async()=>{
                 if(!form.follow_up_note?.trim()) return toast$("Follow-up note likho pehle",true);
                 try {
-                  const res = await fetch("https://api.anthropic.com/v1/messages",{
-                    method:"POST",
-                    headers:{"Content-Type":"application/json"},
-                    body:JSON.stringify({
-                      model:"claude-sonnet-4-6",
-                      max_tokens:200,
-                      system:"Convert Hinglish/Hindi follow-up notes to professional English. Keep dates and specifics. Output only the note.",
-                      messages:[{role:"user",content:"Convert to professional English, keep specifics: "+String(form.follow_up_note||"")}]
-                    })
-                  });
+                  const res = await fetch("/api/ai-polish",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({text:String(form.follow_up_note||""),type:"followup"})});
                   const d = await res.json();
-                  const p = d.content?.[0]?.text;
-                  if(p) { sf("follow_up_note", p); toast$("✨ Polished!"); }
+                  if(d.polished){sf("follow_up_note",d.polished);toast$("✨ Polished!");}
                 } catch(e){ toast$("Error",true); }
               }} style={{padding:"1px 8px",borderRadius:5,fontSize:10,border:"1px solid var(--acc)",
                 background:"rgba(139,92,246,.1)",color:"var(--acc)",cursor:"pointer"}}>✨</button>
@@ -5577,18 +5557,7 @@ export default function CRM({ currentUser, onLogout }) {
 
               const context = "Sales Team Daily Report for "+selDate+" - "+repData.map(r=>"Rep: "+r.name+", Interactions: "+r.interactions+" ("+r.calls+" calls, "+r.visits+" visits, "+r.whatsapp+" WA), Orders: "+r.orders+", Revenue: Rs."+Math.round(r.revenue/1000)+"K, Parties assigned: "+r.assigned+(r.notes?" | Notes: "+r.notes:"")).join(". ")+" Total parties in CRM: "+totalParties+". Pending follow-ups today: "+pendingFU+"."
 
-              const res = await fetch("https://api.anthropic.com/v1/messages", {
-                method:"POST",
-                headers:{"Content-Type":"application/json"},
-                body: JSON.stringify({
-                  model:"claude-sonnet-4-6",
-                  max_tokens:800,
-                  system:"You are a sales manager assistant for Mayur Food Packaging Products (plastic containers manufacturer). Write a concise daily sales report summary in English. Include: 1) What was accomplished 2) Key highlights 3) What was not done / gaps 4) Action items for tomorrow. Be specific with numbers. Keep it professional and under 300 words.",
-                  messages:[{role:"user",content:"Generate daily sales summary: "+context}]
-
-
-                })
-              });
+              const res = await fetch("/api/ai-polish",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({text:context,type:"daily_summary"})});
               const d = await res.json();
               setAiSummary(d.content?.[0]?.text||"Could not generate summary");
             } catch(e){ setAiSummary("Error: "+e.message); }
