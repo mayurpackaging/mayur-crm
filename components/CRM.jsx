@@ -5580,9 +5580,9 @@ export default function CRM({ currentUser, onLogout }) {
                   model:"claude-sonnet-4-6",
                   max_tokens:800,
                   system:"You are a sales manager assistant for Mayur Food Packaging Products (plastic containers manufacturer). Write a concise daily sales report summary in English. Include: 1) What was accomplished 2) Key highlights 3) What was not done / gaps 4) Action items for tomorrow. Be specific with numbers. Keep it professional and under 300 words.",
-                  messages:[{role:"user",content:"Generate daily sales summary:
+                  messages:[{role:"user",content:"Generate daily sales summary: "+context}]
 
-"+context}]
+
                 })
               });
               const d = await res.json();
