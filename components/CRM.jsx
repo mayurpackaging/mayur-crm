@@ -1956,10 +1956,9 @@ export default function CRM({ currentUser, onLogout }) {
                 if(!form.note?.trim()) return toast$("Note likho pehle",true);
                 toast$("AI polish kar raha hai...");
                 try {
-                  const res = await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:400,system:"Convert Hinglish/Hindi sales notes to professional English. Keep all facts and numbers. Output only the polished note.",messages:[{role:"user",content:"Polish: "+String(form.note||"")}]})});
+                  const res = await fetch("/api/ai-polish",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({text:String(form.note||""),type:"note"})});
                   const d = await res.json();
-                  const p = d.content?.[0]?.text;
-                  if(p){sf("note",p);toast$("✨ Note polished!");}
+                  if(d.polished){sf("note",d.polished);toast$("✨ Note polished!");}
                 }catch(e){toast$("Error",true);}
               }} style={{padding:"2px 10px",borderRadius:6,fontSize:11,border:"1px solid var(--acc)",background:"rgba(139,92,246,.1)",color:"var(--acc)",cursor:"pointer",fontWeight:600}}>✨ AI Polish</button>
             </div>
@@ -1987,7 +1986,7 @@ export default function CRM({ currentUser, onLogout }) {
                 <label className="lbl" style={{margin:0}}>Follow-up Note</label>
                 <button onClick={async()=>{
                   if(!form.follow_up_note?.trim()) return;
-                  try{const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:200,system:"Convert to professional English follow-up note.",messages:[{role:"user",content:String(form.follow_up_note||"")}]})});const d=await res.json();const p=d.content?.[0]?.text;if(p){sf("follow_up_note",p);toast$("✨");}}catch(e){}
+                  try{const res=await fetch("/api/ai-polish",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({text:String(form.follow_up_note||""),type:"followup"})});const d=await res.json();if(d.polished){sf("follow_up_note",d.polished);toast$("✨");}}catch(e){}
                 }} style={{padding:"1px 8px",borderRadius:5,fontSize:10,border:"1px solid var(--acc)",background:"rgba(139,92,246,.1)",color:"var(--acc)",cursor:"pointer"}}>✨</button>
               </div>
               <input className="inp" value={form.follow_up_note||""} onChange={e=>sf("follow_up_note",e.target.value)}/>
