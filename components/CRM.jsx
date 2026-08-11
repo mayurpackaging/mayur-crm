@@ -220,22 +220,29 @@ export default function CRM({ currentUser, onLogout }) {
       setI(p=>[r[0],...p]);
       // Auto-create Planner task if follow-up date set
       if(form.next_follow_up) {
-        const taskTitle = form.follow_up_note || `Follow-up: ${c?.name||"Customer"}`;
+        const dueTime = form.follow_up_time||"10:00";
+        const taskTitle = form.follow_up_note||("Follow-up: "+(c?.name||"Customer"));
+        const remindAt = form.next_follow_up+"T"+dueTime+":00";
         await sbFetch("crm_tasks", {method:"POST", body:{
           title: taskTitle,
-          description: `Re: ${form.note?.slice(0,100)}`,
+          description: "Re: "+(form.note?.slice(0,100)||""),
           due_date: form.next_follow_up,
-          due_time: "10:00",
+          due_time: dueTime,
           type: form.type||"call",
           priority: "medium",
           customer_name: c?.name||"",
           customer_id: cid,
           status: "pending",
-          remind_at: form.next_follow_up+"T10:00:00",
+          remind_at: remindAt,
           created_by: userRole
         }});
+        // Auto-clear old follow-up from previous interaction of same customer
+        const prevInter = I.find(i=>i.customer_id===cid&&i.next_follow_up&&i.id!==r[0]?.id);
+        if(prevInter?.id) {
+          await sbFetch("crm_interactions?id=eq."+prevInter.id, {method:"PATCH", body:{next_follow_up:null}});
+          setI(p=>p.map(i=>i.id===prevInter.id?{...i,next_follow_up:null}:i));
+        }
         toast$("Interaction + Follow-up task created!");
-        // Update badge
         setTodayTaskCount(n=>form.next_follow_up===new Date().toISOString().slice(0,10)?n+1:n);
       } else {
         toast$("Interaction save!");
@@ -1933,7 +1940,14 @@ export default function CRM({ currentUser, onLogout }) {
           <div className="fr"><label className="lbl">Type</label><select className="inp" value={form.type||"call"} onChange={e=>sf("type",e.target.value)}>{["call","visit","whatsapp","email","meeting"].map(t=><option key={t} value={t}>{TI[t]} {t}</option>)}</select></div>
           <div className="fr"><label className="lbl">Note *</label><textarea className="inp" value={form.note||""} onChange={e=>sf("note",e.target.value)}/></div>
           <div className="fr fr2">
-            <div><label className="lbl">Follow-up Date</label><input type="date" className="inp" value={form.next_follow_up||""} onChange={e=>sf("next_follow_up",e.target.value)}/></div>
+            <div>
+            <label className="lbl">Follow-up Date</label>
+            <input type="date" className="inp" value={form.next_follow_up||""} onChange={e=>sf("next_follow_up",e.target.value)}/>
+          </div>
+          <div>
+            <label className="lbl">Follow-up Time</label>
+            <input type="time" className="inp" value={form.follow_up_time||"10:00"} onChange={e=>sf("follow_up_time",e.target.value)}/>
+          </div>
             <div><label className="lbl">Done By</label>
             <select className="inp" value={form.done_by||currentUser?.name||""} onChange={e=>sf("done_by",e.target.value)}>
               <option value="">-- Select --</option>
@@ -4245,7 +4259,7 @@ export default function CRM({ currentUser, onLogout }) {
           {task.description&&<div style={{fontSize:11,color:"var(--mut)",marginBottom:4}}>{task.description}</div>}
           <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
             <span style={{fontSize:10,color:task.due_date<today?"#ef4444":"var(--mut)"}}>
-              📅 {task.due_date} {task.due_time?task.due_time.slice(0,5):""}
+              📅 {task.due_date} {task.due_time&&task.due_time!=="10:00"?task.due_time.slice(0,5):""}
             </span>
             <button onClick={()=>snooze(task.id,60)} style={{fontSize:10,padding:"1px 8px",borderRadius:6,
               border:"1px solid var(--bdr)",background:"transparent",cursor:"pointer",color:"var(--mut)"}}>
