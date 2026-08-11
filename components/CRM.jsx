@@ -310,8 +310,11 @@ export default function CRM({ currentUser, onLogout }) {
   const removeOrderItem = (pid) => setOrderItems(p=>p.filter(i=>i.product_id!==pid));
 
   const orderTotal = useMemo(()=>orderItems.reduce((s,i)=>s+(Number(i.amount)||0),0),[orderItems]);
-  const eprAmount  = useMemo(()=>form.epr?Math.round(orderTotal*0.01):0,[orderTotal,form.epr]);
-  const gstAmount  = useMemo(()=>form.gst==="including"?0:Math.round(orderTotal*0.18),[orderTotal,form.gst]);
+  const eprAmount    = useMemo(()=>form.epr?Math.round(orderTotal*0.01):0,[orderTotal,form.epr]);
+  const freightAmt   = useMemo(()=>Number(form.freight)||0,[form.freight]);
+  const freightGst   = useMemo(()=>form.freight_gst?Math.round(freightAmt*0.18):0,[freightAmt,form.freight_gst]);
+  const gstAmount    = useMemo(()=>form.gst==="including"?0:Math.round(orderTotal*0.18),[orderTotal,form.gst]);
+  const grandTotal   = useMemo(()=>orderTotal+eprAmount+freightAmt+freightGst+(form.gst==="including"?0:gstAmount),[orderTotal,eprAmount,freightAmt,freightGst,gstAmount,form.gst]);
 
   const saveOrder = async() => {
     if(!form.customer_id) return toast$("Customer select karo",true);
@@ -320,7 +323,7 @@ export default function CRM({ currentUser, onLogout }) {
     setSv(true);
     try {
       const totalCases=orderItems.reduce((s,i)=>s+(Number(i.qty_cases)||0),0);
-      const orderData={customer_id:form.customer_id,customer_name:c?.name,company:c?.company,order_date:form.order_date||new Date().toISOString().split("T")[0],status:"draft",total_amount:orderTotal+eprAmount+(form.gst==="including"?0:gstAmount),total_cases:totalCases,payment_mode:form.payment_mode||"cash",epr_applied:!!form.epr,gst_type:form.gst||"excluding",notes:form.notes||"",created_by:currentUser?.name||""};
+      const orderData={customer_id:form.customer_id,customer_name:c?.name,company:c?.company,order_date:form.order_date||new Date().toISOString().split("T")[0],status:"draft",total_amount:grandTotal,total_cases:totalCases,payment_mode:form.payment_mode||"cash",epr_applied:!!form.epr,gst_type:form.gst||"excluding",freight:freightAmt||null,freight_gst:freightGst||null,notes:form.notes||"",created_by:currentUser?.name||""};
       const orderRes=await sbInsert("crm_orders",orderData);
       const orderId=orderRes[0].id;
       const items=orderItems.map(i=>({...i,order_id:orderId}));
@@ -383,7 +386,7 @@ export default function CRM({ currentUser, onLogout }) {
     </div>
     <table><thead><tr><th>#</th><th>SKU</th><th>Product</th><th>Packing</th><th>Cases</th><th>Price/Pcs (₹)</th><th>CTN Price (₹)</th><th>Amount (₹)</th></tr></thead>
     <tbody>${(selOrder?.items||[]).map((item,idx)=>`<tr><td>${idx+1}</td><td>${item.sku_code||""}</td><td>${item.product_name||""}</td><td>${item.packing||""}</td><td>${item.qty_cases||""}</td><td>${item.price_per_pcs||""}</td><td>${item.ctn_price||""}</td><td><b>₹${Number(item.amount||0).toLocaleString("en-IN")}</b></td></tr>`).join("")}</tbody></table>
-    <div class="total">Subtotal: ₹${subtotal.toLocaleString("en-IN")}<br/>${epr>0?`EPR @1%: ₹${epr.toLocaleString("en-IN")}<br/>`:""}${gst>0?`GST @18%: ₹${gst.toLocaleString("en-IN")}<br/>`:""}
+    <div class="total">Subtotal: ₹${subtotal.toLocaleString("en-IN")}<br/>${epr>0?`EPR @1%: ₹${epr.toLocaleString("en-IN")}<br/>`:""}${freight>0?`Freight & Forwarding: ₹${freight.toLocaleString("en-IN")}<br/>`:""}${freightGstAmt>0?`Freight GST @18%: ₹${freightGstAmt.toLocaleString("en-IN")}<br/>`:""}${gst>0?`GST @18%: ₹${gst.toLocaleString("en-IN")}<br/>`:""}
     <b>Total: ₹${(subtotal+epr+gst).toLocaleString("en-IN")}</b></div>
     ${selOrder?.notes?`<div style="margin-top:12px;font-size:12px;"><b>Notes:</b> ${selOrder.notes}</div>`:""}
     <div class="footer">Payment Terms: As agreed | Computer generated proforma invoice.</div>
@@ -411,7 +414,11 @@ export default function CRM({ currentUser, onLogout }) {
     msg += NL + "Subtotal: Rs." + subtotal.toLocaleString("en-IN") + NL;
     if(epr>0) msg += "EPR @1%: Rs." + epr.toLocaleString("en-IN") + NL;
     if(gst>0) msg += "GST @18%: Rs." + gst.toLocaleString("en-IN") + NL;
-    msg += "*Total: Rs." + total.toLocaleString("en-IN") + "*" + NL + NL;
+    const freight2 = Number(order.freight)||0;
+    const freightGst2 = Number(order.freight_gst)||0;
+    if(freight2>0) msg += "Freight & Forwarding: Rs." + freight2.toLocaleString("en-IN") + NL;
+    if(freightGst2>0) msg += "Freight GST @18%: Rs." + freightGst2.toLocaleString("en-IN") + NL;
+    msg += "*Total: Rs." + (Number(order.total_amount)||0).toLocaleString("en-IN") + "*" + NL + NL;
     msg += "Payment: " + (order.payment_mode||"").replace("_"," ") + NL;
     if(order.notes) msg += "Note: " + order.notes + NL;
     msg += NL + "_Please confirm the order._" + NL + "Thank you!";
@@ -1774,6 +1781,19 @@ export default function CRM({ currentUser, onLogout }) {
                       </label>
                       <span style={{fontWeight:600,color:form.epr?"var(--txt)":"var(--mut)"}}>₹{eprAmount.toLocaleString("en-IN")}</span>
                     </div>
+                    {/* Freight & Forwarding */}
+                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",fontSize:12,marginBottom:4,gap:8}}>
+                      <span style={{color:"var(--mut)",flexShrink:0}}>Freight & Forwarding</span>
+                      <input type="number" placeholder="0" value={form.freight||""} onChange={e=>sf("freight",e.target.value)}
+                        style={{width:90,padding:"3px 8px",borderRadius:6,border:"1px solid var(--bdr)",fontSize:12,textAlign:"right"}}/>
+                    </div>
+                    {freightAmt>0&&<div style={{display:"flex",alignItems:"center",justifyContent:"space-between",fontSize:12,marginBottom:6,gap:8}}>
+                      <label style={{display:"flex",alignItems:"center",gap:5,cursor:"pointer",color:"var(--mut)"}}>
+                        <input type="checkbox" checked={!!form.freight_gst} onChange={e=>sf("freight_gst",e.target.checked)} style={{accentColor:"var(--acc)",width:14,height:14}}/>
+                        Freight GST @18%
+                      </label>
+                      <span style={{fontWeight:600,color:form.freight_gst?"var(--txt)":"var(--mut)"}}>₹{freightGst.toLocaleString("en-IN")}</span>
+                    </div>}
                     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",fontSize:12,marginBottom:6}}>
                       <div style={{display:"flex",alignItems:"center",gap:8}}>
                         <span style={{color:"var(--mut)"}}>GST @18%:</span>
@@ -1782,7 +1802,7 @@ export default function CRM({ currentUser, onLogout }) {
                       </div>
                       <span style={{fontWeight:600,color:form.gst!=="including"?"var(--txt)":"var(--mut)"}}>{form.gst==="including"?"(included)":"₹"+gstAmount.toLocaleString("en-IN")}</span>
                     </div>
-                    <div style={{display:"flex",justifyContent:"space-between",fontSize:14,borderTop:"1px solid var(--bdr)",paddingTop:6}}><span style={{fontWeight:700}}>Total</span><span style={{fontWeight:800,color:"#10b981"}}>₹{(orderTotal+eprAmount+(form.gst==="including"?0:gstAmount)).toLocaleString("en-IN")}</span></div>
+                    <div style={{display:"flex",justifyContent:"space-between",fontSize:14,borderTop:"1px solid var(--bdr)",paddingTop:6}}><span style={{fontWeight:700}}>Total</span><span style={{fontWeight:800,color:"#10b981"}}>₹{grandTotal.toLocaleString("en-IN")}</span></div>
                   </div>
                 </div>}
             </div>
@@ -1806,7 +1826,10 @@ export default function CRM({ currentUser, onLogout }) {
     if(!selOrder) return null;
     const subtotal=selOrder.items?.reduce((s,i)=>s+(Number(i.amount)||0),0)||0;
     const epr=selOrder.epr_applied?Math.round(subtotal*0.01):0;
+    const freight=Number(selOrder.freight)||0;
+    const freightGstAmt=Number(selOrder.freight_gst)||0;
     const gst=selOrder.gst_type==="including"?0:Math.round(subtotal*0.18);
+    const grandTotalPro=subtotal+epr+freight+freightGstAmt+gst;
     return (
       <div className="ov" onClick={closeM}>
         <div className="mod mod-lg" onClick={e=>e.stopPropagation()}>
