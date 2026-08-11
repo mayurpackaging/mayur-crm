@@ -5571,16 +5571,7 @@ export default function CRM({ currentUser, onLogout }) {
               const pendingFU = I.filter(i=>i.next_follow_up===selDate&&i.next_follow_up).length;
               const totalParties = C.length;
 
-              const context = "Sales Team Daily Report for "+selDate+":
-
-"+
-                repData.map(r=>"- "+r.name+": "+r.interactions+" interactions ("+r.calls+" calls, "+r.visits+" visits, "+r.whatsapp+" WA), "+r.orders+" orders, Revenue: Rs."+Math.round(r.revenue/1000)+"K, Assigned parties: "+r.assigned+(r.notes?" | Notes: "+r.notes:"")).join("
-")+
-                "
-
-Total parties in CRM: "+totalParties+
-                "
-Pending follow-ups due today: "+pendingFU;
+              const context = "Sales Team Daily Report for "+selDate+" - "+repData.map(r=>"Rep: "+r.name+", Interactions: "+r.interactions+" ("+r.calls+" calls, "+r.visits+" visits, "+r.whatsapp+" WA), Orders: "+r.orders+", Revenue: Rs."+Math.round(r.revenue/1000)+"K, Parties assigned: "+r.assigned+(r.notes?" | Notes: "+r.notes:"")).join(". ")+" Total parties in CRM: "+totalParties+". Pending follow-ups today: "+pendingFU+"."
 
               const res = await fetch("https://api.anthropic.com/v1/messages", {
                 method:"POST",
