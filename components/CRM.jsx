@@ -5508,6 +5508,163 @@ export default function CRM({ currentUser, onLogout }) {
           </table>
         </div>
 
+        {/* ── AI SUMMARY + PRINT ── */}
+        {(()=>{
+          const [aiSummary, setAiSummary] = React.useState("");
+          const [aiLoading, setAiLoading] = React.useState(false);
+
+          const generateSummary = async() => {
+            setAiLoading(true);
+            try {
+              // Build context for AI
+              const repData = USERS.filter(u=>u.role==="sales"||u.role==="admin").map(u=>{
+                const rInter = I.filter(i=>i.created_at?.startsWith(selDate)&&i.done_by===u.name);
+                const rOrders = ORDERS.filter(o=>o.order_date===selDate&&o.created_by===u.name);
+                const rRev = rOrders.reduce((s,o)=>s+(Number(o.total_amount)||0),0);
+                const myAssigned = C.filter(c=>c.assigned_to===u.name||c.sales_rep===u.name).length;
+                return {
+                  name: u.name,
+                  interactions: rInter.length,
+                  calls: rInter.filter(i=>i.type==="call").length,
+                  visits: rInter.filter(i=>i.type==="visit").length,
+                  whatsapp: rInter.filter(i=>i.type==="whatsapp").length,
+                  orders: rOrders.length,
+                  revenue: rRev,
+                  assigned: myAssigned,
+                  notes: rInter.slice(0,3).map(i=>i.customer_name+": "+i.note?.slice(0,60)).join(" | ")
+                };
+              }).filter(r=>r.interactions>0||r.orders>0);
+
+              const pendingFU = I.filter(i=>i.next_follow_up===selDate&&i.next_follow_up).length;
+              const totalParties = C.length;
+
+              const context = "Sales Team Daily Report for "+selDate+":
+
+"+
+                repData.map(r=>"- "+r.name+": "+r.interactions+" interactions ("+r.calls+" calls, "+r.visits+" visits, "+r.whatsapp+" WA), "+r.orders+" orders, Revenue: Rs."+Math.round(r.revenue/1000)+"K, Assigned parties: "+r.assigned+(r.notes?" | Notes: "+r.notes:"")).join("
+")+
+                "
+
+Total parties in CRM: "+totalParties+
+                "
+Pending follow-ups due today: "+pendingFU;
+
+              const res = await fetch("https://api.anthropic.com/v1/messages", {
+                method:"POST",
+                headers:{"Content-Type":"application/json"},
+                body: JSON.stringify({
+                  model:"claude-sonnet-4-6",
+                  max_tokens:800,
+                  system:"You are a sales manager assistant for Mayur Food Packaging Products (plastic containers manufacturer). Write a concise daily sales report summary in English. Include: 1) What was accomplished 2) Key highlights 3) What was not done / gaps 4) Action items for tomorrow. Be specific with numbers. Keep it professional and under 300 words.",
+                  messages:[{role:"user",content:"Generate daily sales summary:
+
+"+context}]
+                })
+              });
+              const d = await res.json();
+              setAiSummary(d.content?.[0]?.text||"Could not generate summary");
+            } catch(e){ setAiSummary("Error: "+e.message); }
+            setAiLoading(false);
+          };
+
+          const printReport = () => {
+            const win = window.open("","_blank");
+            if(!win) return toast$("Popup blocked!",true);
+            const repRows = USERS.filter(u=>u.role==="sales"||u.role==="admin").map(u=>{
+              const rInter = I.filter(i=>i.created_at?.startsWith(selDate)&&i.done_by===u.name);
+              const rOrders = ORDERS.filter(o=>o.order_date===selDate&&o.created_by===u.name);
+              const rRev = rOrders.reduce((s,o)=>s+(Number(o.total_amount)||0),0);
+              return {name:u.name, inter:rInter, orders:rOrders, rev:rRev};
+            }).filter(r=>r.inter.length>0||r.orders.length>0);
+
+            win.document.write(`
+              <html><head><title>Daily Report - ${selDate}</title>
+              <style>
+                body{font-family:Arial,sans-serif;padding:24px;color:#000;font-size:13px;}
+                h1{font-size:18px;margin-bottom:4px;}
+                .sub{color:#666;font-size:12px;margin-bottom:20px;}
+                table{width:100%;border-collapse:collapse;margin-bottom:16px;}
+                th{background:#f59e0b;padding:8px;text-align:left;border:1px solid #ddd;font-size:12px;}
+                td{padding:7px 8px;border:1px solid #ddd;font-size:12px;vertical-align:top;}
+                .summary{background:#f8f9fa;border:1px solid #dee2e6;padding:14px;border-radius:6px;margin-bottom:16px;font-size:12px;line-height:1.7;}
+                .rep-section{margin-bottom:20px;}
+                .rep-name{font-size:14px;font-weight:bold;margin-bottom:8px;color:#1a1a2a;border-bottom:2px solid #f59e0b;padding-bottom:4px;}
+                .stat-row{display:flex;gap:20px;margin-bottom:8px;font-size:12px;}
+                .stat{background:#f0f0f0;padding:4px 10px;border-radius:4px;}
+                @media print{body{padding:12px;}}
+              </style></head><body>
+              <h1>Mayur Food Packaging — Daily Sales Report</h1>
+              <div class="sub">Date: ${selDate} | Generated: ${new Date().toLocaleString("en-IN")}</div>
+              
+              ${aiSummary?`<div class="summary"><b>AI Summary:</b><br/>${aiSummary.replace(/
+/g,"<br/>")}</div>`:""}
+              
+              <table>
+                <thead><tr><th>Rep</th><th>Calls</th><th>Visits</th><th>WA</th><th>Total</th><th>Orders</th><th>Revenue</th></tr></thead>
+                <tbody>
+                  ${USERS.filter(u=>u.role==="sales"||u.role==="admin").map(u=>{
+                    const rI=I.filter(i=>i.created_at?.startsWith(selDate)&&i.done_by===u.name);
+                    const rO=ORDERS.filter(o=>o.order_date===selDate&&o.created_by===u.name);
+                    const rev=rO.reduce((s,o)=>s+(Number(o.total_amount)||0),0);
+                    return "<tr><td><b>"+u.name+"</b></td><td>"+rI.filter(i=>i.type==="call").length+"</td><td>"+rI.filter(i=>i.type==="visit").length+"</td><td>"+rI.filter(i=>i.type==="whatsapp").length+"</td><td><b>"+rI.length+"</b></td><td>"+rO.length+"</td><td>Rs."+Math.round(rev/1000)+"K</td></tr>";
+                  }).join("")}
+                </tbody>
+              </table>
+
+              ${repRows.map(r=>`
+                <div class="rep-section">
+                  <div class="rep-name">${r.name} — Activity Log</div>
+                  ${r.inter.map((i,idx)=>`
+                    <div style="margin-bottom:8px;padding:6px 10px;border-left:3px solid #f59e0b;background:#fffbf0;">
+                      <b>${idx+1}. ${i.customer_name||""}</b> · ${i.type} · ${i.created_at?.slice(0,10)||""}<br/>
+                      ${i.note?`<span style="color:#555;">${i.note}</span>`:""}
+                      ${i.next_follow_up?`<br/><span style="color:#10b981;">📌 Follow-up: ${i.next_follow_up}</span>`:""}
+                    </div>
+                  `).join("")}
+                  ${r.orders.map(o=>`
+                    <div style="margin-bottom:8px;padding:6px 10px;border-left:3px solid #10b981;background:#f0fff4;">
+                      <b>🧾 Order: ${o.company}</b> · Rs.${Math.round(Number(o.total_amount)/1000)}K
+                    </div>
+                  `).join("")}
+                </div>
+              `).join("")}
+
+              <div style="margin-top:20px;font-size:11px;color:#888;border-top:1px solid #ddd;padding-top:10px;">
+                Mayur Food Packaging Products | Shreeja Packaging Industries Pvt. Ltd. | Confidential
+              </div>
+              </body></html>
+            `);
+            win.document.close();
+            win.print();
+          };
+
+          return (
+            <div className="card" style={{marginBottom:14}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+                <div style={{fontWeight:700,fontSize:13}}>🤖 AI Summary + Print Report</div>
+                <div style={{display:"flex",gap:8}}>
+                  <button className="btn btn-o btn-sm" onClick={generateSummary} disabled={aiLoading}>
+                    {aiLoading?"⏳ Generating...":"✨ Generate AI Summary"}
+                  </button>
+                  <button className="btn btn-p btn-sm" onClick={printReport}>
+                    🖨️ Print Report
+                  </button>
+                </div>
+              </div>
+              {aiSummary&&(
+                <div style={{background:"var(--card2)",borderRadius:8,padding:12,fontSize:12,lineHeight:1.8,whiteSpace:"pre-wrap"}}>
+                  {aiSummary}
+                </div>
+              )}
+              {!aiSummary&&!aiLoading&&(
+                <div style={{fontSize:11,color:"var(--mut)",textAlign:"center",padding:8}}>
+                  "✨ Generate AI Summary" dabao — AI aaj ka poora report summarize karega
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
         {/* ── FULL INTERACTION LOG ── */}
         <div className="card" style={{padding:0}}>
           <div style={{padding:"12px 16px",fontWeight:700,fontSize:13,borderBottom:"1px solid var(--bdr)",display:"flex",justifyContent:"space-between"}}>
