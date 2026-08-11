@@ -438,6 +438,8 @@ export default function CRM({ currentUser, onLogout }) {
         {[
           {lbl:"CRM Customers",val:myC.filter(c=>c.type==="crm").length,sub:"Active accounts",col:"#10b981",ic:"👥",fn:()=>{setCTab("crm");setView("customers");}},
           {lbl:"NBD Prospects",val:myC.filter(c=>c.type==="nbd").length,sub:"In pipeline",col:"#60a5fa",ic:"🎯",fn:()=>{setCTab("nbd");setView("customers");}},
+          {lbl:"Retail Parties",val:myC.filter(c=>c.type==="retail").length,sub:"Retail group",col:"#a855f7",ic:"🏪",fn:()=>{setCTab("retail");setView("customers");}},
+          {lbl:"Direct Parties",val:myC.filter(c=>c.type==="direct").length,sub:"Direct group",col:"#f97316",ic:"🏢",fn:()=>{setCTab("direct");setView("customers");}},
           {lbl:"Open Enquiries",val:myE.filter(e=>!["won","lost"].includes(e.status)).length,sub:"Active leads",col:"#f59e0b",ic:"📋",fn:()=>setView("enquiries")},
           {lbl:"Urgent Follow-ups",val:urgN,sub:urgN>0?"⚠️ Act now":"All clear ✅",col:urgN>0?"#ef4444":"#10b981",ic:"⚡",fn:()=>setView("followups")},
         ].map(s=>(
@@ -788,8 +790,8 @@ export default function CRM({ currentUser, onLogout }) {
         </div>
 
         {/* Type tabs */}
-        <div className="tabs">
-          {[["all","All"],["crm","CRM"],["enduser","End Users"],["nbd","NBD"]].map(([id,l])=>(
+        <div className="tabs" style={{flexWrap:"wrap"}}>
+          {[["all","All"],["crm","CRM"],["retail","Retail"],["direct","Direct"],["enduser","End Users"],["nbd","NBD"]].map(([id,l])=>(
             <div key={id} className={`tab ${typeFilter===id?"a":""}`} onClick={()=>{setTypeFilter(id);setCTab(id);}}>{l} ({id==="all"?myC.length:myC.filter(c=>c.type===id).length})</div>
           ))}
         </div>
@@ -1114,7 +1116,7 @@ export default function CRM({ currentUser, onLogout }) {
             <tbody>{partyWise.map(c=>(
               <tr key={c.id} onClick={()=>openC(c.id)} style={{cursor:"pointer"}}>
                 <td><div style={{fontWeight:700,fontSize:12.5}}>{c.company}</div><div style={{fontSize:10.5,color:"var(--mut)"}}>{c.name}</div></td>
-                <td><span style={{fontSize:9.5,fontWeight:800,padding:"2px 8px",borderRadius:12,background:c.type==="crm"?"rgba(16,185,129,.1)":"rgba(59,130,246,.1)",color:c.type==="crm"?"#10b981":"#60a5fa"}}>{c.type?.toUpperCase()}</span></td>
+                <td><span style={{fontSize:9.5,fontWeight:800,padding:"2px 8px",borderRadius:12,background:c.type==="crm"?"rgba(16,185,129,.1)":c.type==="retail"?"rgba(168,85,247,.1)":c.type==="direct"?"rgba(249,115,22,.1)":"rgba(59,130,246,.1)",color:c.type==="crm"?"#10b981":c.type==="retail"?"#a855f7":c.type==="direct"?"#f97316":"#60a5fa"}}>{c.type?.toUpperCase()}</span></td>
                 <td style={{fontSize:11,color:"var(--mut)"}}>{c.city||"—"}</td>
                 <td style={{fontSize:11.5}}>{c.assigned_to||"—"}</td>
                 <td style={{textAlign:"center",fontWeight:700}}>{c.orderCount}</td>
@@ -1561,7 +1563,7 @@ export default function CRM({ currentUser, onLogout }) {
                   <div style={{fontSize:12,color:"var(--mut)",marginTop:2}}>{c.company} · {c.city}</div>
                   <div style={{display:"flex",gap:6,marginTop:7,flexWrap:"wrap"}}>
                     <Bdg s={c.status}/>
-                    <span style={{fontSize:9.5,fontWeight:800,padding:"2px 8px",borderRadius:12,background:c.type==="crm"?"rgba(16,185,129,.1)":"rgba(59,130,246,.1)",color:c.type==="crm"?"#10b981":"#60a5fa"}}>{c.type?.toUpperCase()}</span>
+                    <span style={{fontSize:9.5,fontWeight:800,padding:"2px 8px",borderRadius:12,background:c.type==="crm"?"rgba(16,185,129,.1)":c.type==="retail"?"rgba(168,85,247,.1)":c.type==="direct"?"rgba(249,115,22,.1)":"rgba(59,130,246,.1)",color:c.type==="crm"?"#10b981":c.type==="retail"?"#a855f7":c.type==="direct"?"#f97316":"#60a5fa"}}>{c.type?.toUpperCase()}</span>
                     {c.segment&&<span style={{fontSize:9.5,padding:"2px 8px",borderRadius:12,background:"var(--card2)",color:"var(--mut)",border:"1px solid var(--bdr)"}}>{c.segment}</span>}
                     {c.assigned_to&&<span style={{fontSize:9.5,padding:"2px 8px",borderRadius:12,background:"var(--card2)",color:"var(--mut)",border:"1px solid var(--bdr)"}}>👤 {c.assigned_to}</span>}
                     {c.sales_rep&&<span style={{fontSize:9.5,padding:"2px 8px",borderRadius:12,background:"rgba(16,185,129,.1)",color:"#10b981",fontWeight:700}}>🎯 Rep: {c.sales_rep}</span>}
@@ -1925,7 +1927,7 @@ export default function CRM({ currentUser, onLogout }) {
           <div className="fr fr2"><div><label className="lbl">Phone</label><input className="inp" value={form.phone||""} onChange={e=>sf("phone",e.target.value)}/></div><div><label className="lbl">Email</label><input className="inp" value={form.email||""} onChange={e=>sf("email",e.target.value)}/></div></div>
           <div className="fr fr3">
             <div><label className="lbl">City</label><input className="inp" value={form.city||""} onChange={e=>sf("city",e.target.value)}/></div>
-            <div><label className="lbl">Type</label><select className="inp" value={form.type||"nbd"} onChange={e=>sf("type",e.target.value)}><option value="nbd">NBD</option><option value="crm">CRM</option></select></div>
+            <div><label className="lbl">Type</label><select className="inp" value={form.type||"nbd"} onChange={e=>sf("type",e.target.value)}><option value="crm">CRM</option><option value="retail">Retail</option><option value="direct">Direct</option><option value="nbd">NBD</option><option value="enduser">End User</option></select></div>
             <div><label className="lbl">Status</label><select className="inp" value={form.status||"prospect"} onChange={e=>sf("status",e.target.value)}><option value="prospect">Prospect</option><option value="active">Active</option><option value="inactive">Inactive</option></select></div>
           </div>
           <div className="fr fr2"><div><label className="lbl">Segment</label><input className="inp" value={form.segment||""} onChange={e=>sf("segment",e.target.value)}/></div><div><label className="lbl">Primary Owner</label>
@@ -1966,7 +1968,7 @@ export default function CRM({ currentUser, onLogout }) {
           <div className="fr fr2"><div><label className="lbl">Phone</label><input className="inp" value={form.phone||""} onChange={e=>sf("phone",e.target.value)}/></div><div><label className="lbl">City</label><input className="inp" value={form.city||""} onChange={e=>sf("city",e.target.value)}/></div></div>
           <div className="fr fr2"><div><label className="lbl">GST No</label><input className="inp" placeholder="22AAAAA0000A1Z5" value={form.gst_no||""} onChange={e=>sf("gst_no",e.target.value.toUpperCase())}/></div><div><label className="lbl">Address</label><input className="inp" value={form.address||""} onChange={e=>sf("address",e.target.value)}/></div></div>
           <div className="fr fr2">
-            <div><label className="lbl">Type</label><select className="inp" value={form.type||"nbd"} onChange={e=>sf("type",e.target.value)}><option value="nbd">NBD (Prospect)</option><option value="crm">CRM (Existing)</option></select></div>
+            <div><label className="lbl">Type</label><select className="inp" value={form.type||"nbd"} onChange={e=>sf("type",e.target.value)}><option value="crm">CRM</option><option value="retail">Retail</option><option value="direct">Direct</option><option value="nbd">NBD</option><option value="enduser">End User</option></select></div>
             <div><label className="lbl">Primary Owner</label>
               <select className="inp" value={form.assigned_to||""} onChange={e=>sf("assigned_to",e.target.value)}>
                 <option value="">-- Select --</option>
@@ -2104,7 +2106,7 @@ export default function CRM({ currentUser, onLogout }) {
         <div className="fr fr2"><div><label className="lbl">Phone</label><input className="inp" value={form.phone||""} onChange={e=>sf("phone",e.target.value)}/></div><div><label className="lbl">Email</label><input className="inp" value={form.email||""} onChange={e=>sf("email",e.target.value)}/></div></div>
         <div className="fr fr3">
           <div><label className="lbl">City</label><input className="inp" value={form.city||""} onChange={e=>sf("city",e.target.value)}/></div>
-          <div><label className="lbl">Type</label><select className="inp" value={form.type||"nbd"} onChange={e=>sf("type",e.target.value)}><option value="nbd">NBD</option><option value="crm">CRM</option></select></div>
+          <div><label className="lbl">Type</label><select className="inp" value={form.type||"nbd"} onChange={e=>sf("type",e.target.value)}><option value="crm">CRM</option><option value="retail">Retail</option><option value="direct">Direct</option><option value="nbd">NBD</option><option value="enduser">End User</option></select></div>
           <div><label className="lbl">Status</label><select className="inp" value={form.status||"prospect"} onChange={e=>sf("status",e.target.value)}><option value="prospect">Prospect</option><option value="active">Active</option><option value="inactive">Inactive</option></select></div>
         </div>
         <div className="fr fr2"><div><label className="lbl">Segment</label><input className="inp" value={form.segment||""} onChange={e=>sf("segment",e.target.value)}/></div><div><label className="lbl">Primary Owner</label>
