@@ -5620,8 +5620,8 @@ export default function CRM({ currentUser, onLogout }) {
               <h1>Mayur Food Packaging — Daily Sales Report</h1>
               <div class="sub">Date: ${selDate} | Generated: ${new Date().toLocaleString("en-IN")}</div>
               
-              ${aiSummary?`<div class="summary"><b>AI Summary:</b><br/>${aiSummary.replace(/
-/g,"<br/>")}</div>`:""}
+              ${aiSummary?`<div class="summary"><b>AI Summary:</b><br/>${aiSummary.replace(/\n/g,"<br/>")}</div>`:""}
+
               
               <table>
                 <thead><tr><th>Rep</th><th>Calls</th><th>Visits</th><th>WA</th><th>Total</th><th>Orders</th><th>Revenue</th></tr></thead>
