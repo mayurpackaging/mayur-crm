@@ -5559,7 +5559,7 @@ export default function CRM({ currentUser, onLogout }) {
 
               const res = await fetch("/api/ai-polish",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({text:context,type:"daily_summary"})});
               const d = await res.json();
-              setAiSummary(d.content?.[0]?.text||"Could not generate summary");
+              setAiSummary(d.polished||d.error||"Could not generate summary");
             } catch(e){ setAiSummary("Error: "+e.message); }
             setAiLoading(false);
           };
