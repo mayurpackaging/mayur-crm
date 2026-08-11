@@ -2192,9 +2192,7 @@ export default function CRM({ currentUser, onLogout }) {
                     model:"claude-sonnet-4-6",
                     max_tokens:500,
                     system:"You are a professional CRM assistant. Convert Hinglish/Hindi sales notes into concise, professional English. Keep all facts, numbers, dates intact. Output only the polished note, nothing else.",
-                    messages:[{role:"user",content:"Polish this sales note to professional English:
-
-"+form.note}]
+                    messages:[{role:"user",content:"Polish this sales note to professional English. Keep all facts. Output only polished note: "+String(form.note||"")}]
                   })
                 });
                 const d = await res.json();
