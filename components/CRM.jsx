@@ -158,7 +158,10 @@ export default function CRM({ currentUser, onLogout }) {
   // Load today task count for dashboard badge
   useEffect(()=>{
     const today = new Date().toISOString().slice(0,10);
-    sbFetch(`crm_tasks?due_date=eq.${today}&status=eq.pending&select=id`)
+    const taskUrl = isAdmin
+      ? "crm_tasks?due_date=eq."+today+"&status=eq.pending&select=id"
+      : "crm_tasks?due_date=eq."+today+"&status=eq.pending&assigned_to=eq."+myName+"&select=id";
+    sbFetch(taskUrl)
       .then(d=>setTodayTaskCount((d||[]).length))
       .catch(()=>{});
   },[]);
@@ -223,6 +226,7 @@ export default function CRM({ currentUser, onLogout }) {
         const dueTime = form.follow_up_time||"10:00";
         const taskTitle = form.follow_up_note||("Follow-up: "+(c?.name||"Customer"));
         const remindAt = form.next_follow_up+"T"+dueTime+":00";
+        const assignTo = form.assign_followup_to||myName;
         await sbFetch("crm_tasks", {method:"POST", body:{
           title: taskTitle,
           description: "Re: "+(form.note?.slice(0,100)||""),
@@ -234,7 +238,8 @@ export default function CRM({ currentUser, onLogout }) {
           customer_id: cid,
           status: "pending",
           remind_at: remindAt,
-          created_by: userRole
+          assigned_to: assignTo,
+          created_by: myName
         }});
         // Auto-clear old follow-up from previous interaction of same customer
         const prevInter = I.find(i=>i.customer_id===cid&&i.next_follow_up&&i.id!==r[0]?.id);
@@ -2253,6 +2258,12 @@ export default function CRM({ currentUser, onLogout }) {
               {USERS.map(u=><option key={u.name} value={u.name}>{u.name}</option>)}
             </select>
           </div>
+          <div><label className="lbl">Follow-up Assign To</label>
+            <select className="inp" value={form.assign_followup_to||myName||""} onChange={e=>sf("assign_followup_to",e.target.value)}>
+              <option value="">-- Select Rep --</option>
+              {USERS.map(u=><option key={u.name} value={u.name}>{u.name}</option>)}
+            </select>
+          </div>
         </div>
         <button className="btn btn-p" style={{width:"100%",justifyContent:"center",marginTop:6}} disabled={saving} onClick={()=>saveInter(false)}>{saving?<Spin/>:"Save"}</button>
       </>},
@@ -4158,9 +4169,11 @@ export default function CRM({ currentUser, onLogout }) {
       setLoading(true);
       try {
         const today = new Date().toISOString().slice(0,10);
+        // Admin sees all tasks, sales sees own assigned tasks
         let url = "crm_tasks?order=due_date.asc,due_time.asc&status=neq.done";
-        if(view==="today") url += `&due_date=eq.${today}`;
-        else if(view==="upcoming") url += `&due_date=gte.${today}`;
+        if(!isAdmin) url += "&assigned_to=eq."+myName;
+        if(view==="today") url += "&due_date=eq."+today;
+        else if(view==="upcoming") url += "&due_date=gte."+today;
         const data = await sbFetch(url);
         setTasks(data||[]);
       } catch(e){}
@@ -4256,6 +4269,7 @@ export default function CRM({ currentUser, onLogout }) {
             </span>
           </div>
           {task.customer_name&&<div style={{fontSize:11,color:"var(--mut)",marginBottom:2}}>👤 {task.customer_name}</div>}
+          {isAdmin&&task.assigned_to&&<div style={{fontSize:10,color:"#3b82f6",marginBottom:2}}>🎯 Assigned: <b>{task.assigned_to}</b> {task.created_by&&task.created_by!==task.assigned_to?"· by "+task.created_by:""}</div>}
           {task.description&&<div style={{fontSize:11,color:"var(--mut)",marginBottom:4}}>{task.description}</div>}
           <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
             <span style={{fontSize:10,color:task.due_date<today?"#ef4444":"var(--mut)"}}>
