@@ -4208,13 +4208,18 @@ export default function CRM({ currentUser, onLogout }) {
       setLoading(true);
       try {
         const today = new Date().toISOString().slice(0,10);
-        // Admin sees all tasks, sales sees own assigned tasks
+        // Admin sees all tasks, sales sees own + unassigned tasks
         let url = "crm_tasks?order=due_date.asc,due_time.asc&status=neq.done";
-        if(!isAdmin) url += "&assigned_to=eq."+myName;
         if(view==="today") url += "&due_date=eq."+today;
         else if(view==="upcoming") url += "&due_date=gte."+today;
         const data = await sbFetch(url);
-        setTasks(data||[]);
+        // Filter in JS — show tasks assigned to me OR unassigned (created_by me)
+        const filtered = isAdmin ? (data||[]) : (data||[]).filter(t=>
+          t.assigned_to===myName ||
+          (!t.assigned_to && t.created_by===myName) ||
+          (!t.assigned_to && !t.created_by)
+        );
+        setTasks(filtered);
       } catch(e){}
       setLoading(false);
     };
@@ -4260,7 +4265,7 @@ export default function CRM({ currentUser, onLogout }) {
           ? new Date(form.due_date+"T"+form.due_time+":00").toISOString()
           : null;
         await sbFetch("crm_tasks", {method:"POST", body:{
-          ...form, remind_at, created_by: userRole
+          ...form, remind_at, created_by: myName, assigned_to: form.assigned_to||myName
         }});
         setShowAdd(false);
         setForm({title:"",description:"",due_date:new Date().toISOString().slice(0,10),due_time:"09:00",type:"call",priority:"medium",customer_name:""});
