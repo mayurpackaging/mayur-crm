@@ -43,6 +43,8 @@ export default function CRM({ currentUser, onLogout }) {
   const [ORDERS,setORDERS] = useState([]);
   const [TARGETS,setTARGETS] = useState([]);
   const [USERS,setUSERS] = useState([]);
+  const [STOCK,setSTOCK] = useState([]);
+  const [convertCust, setConvertCust] = useState(null);
   const [prodData,setProdData] = useState(null);
   const [prodLoad,setProdLoad] = useState(false);
   const [allOrdersLoaded,setAllOrdersLoaded] = useState(false);
@@ -133,12 +135,13 @@ export default function CRM({ currentUser, onLogout }) {
   const load = useCallback(async()=>{
     setLd(true);
     try {
-      const [c,e,i,s,p,pr,o,t] = await Promise.all([
+      const [c,e,i,s,p,pr,o,t,stk] = await Promise.all([
         sbGet("crm_customers"), sbGet("crm_enquiries"), sbGet("crm_interactions"),
-        sbGet("crm_samples"), sbGetPay(), sbGetProducts(), sbGetOrders(), sbGetTargets()
+        sbGet("crm_samples"), sbGetPay(), sbGetProducts(), sbGetOrders(), sbGetTargets(),
+        sbFetch("crm_stock?order=product_name.asc")
       ]);
       setC(c||[]); setE(e||[]); setI(i||[]); setS(s||[]); setP(p||[]);
-      setPRODS(pr||[]); setORDERS(o||[]); setTARGETS(t||[]);
+      setPRODS(pr||[]); setORDERS(o||[]); setTARGETS(t||[]); setSTOCK(stk||[]);
       // Load sales users from crm_users
       try {
         const users = await sbFetch("crm_users?select=name,role&order=name.asc");
@@ -215,7 +218,27 @@ export default function CRM({ currentUser, onLogout }) {
     if(!form.customer_id||!form.product) return toast$("Customer aur Product required!",true);
     const c=gc(form.customer_id);
     setSv(true);
-    try { const r=await sbInsert("crm_enquiries",{...form,customer_name:`${c?.name} / ${c?.company}`,status:form.status||"new",priority:form.priority||"medium"}); setE(p=>[r[0],...p]); toast$("Enquiry add ✓"); closeM(); }
+    try {
+      const r=await sbInsert("crm_enquiries",{...form,customer_name:c?.name+" / "+c?.company,status:form.status||"new",priority:form.priority||"medium"});
+      setE(p=>[r[0],...p]);
+      // Auto-create Pipeline deal
+      try {
+        await sbFetch("crm_deals", {method:"POST", body:{
+          title: (form.product||"Enquiry")+" — "+(c?.company||c?.name||""),
+          customer_name: c?.name||"",
+          company: c?.company||"",
+          stage: "lead",
+          probability: 10,
+          product_mix: form.product||"",
+          assigned_to: form.assigned_to||c?.assigned_to||myName,
+          notes: "Auto-created from Enquiry. Qty: "+(form.qty||"—")+", Priority: "+(form.priority||"medium")
+        }});
+        toast$("Enquiry add ✓ + Pipeline mein deal bana!");
+      } catch(e2) {
+        toast$("Enquiry add ✓ (Pipeline deal nahi bana)");
+      }
+      closeM();
+    }
     catch(e){ toast$(e.message,true); }
     setSv(false);
   };
@@ -357,7 +380,14 @@ export default function CRM({ currentUser, onLogout }) {
       toast$("Order save ho gaya ✓");
       const custData=gc(form.customer_id)||{};
       setSelOrder({...orderData,id:orderId,items,customerData:{phone:custData.phone,address:custData.address,gst_no:custData.gst_no}});
-      setModal("proforma");
+      // Check if customer needs to be formally added
+      const ordCust = gc(form.customer_id);
+      if(ordCust && (ordCust.type==="nbd"||!ordCust.type)) {
+        setConvertCust(ordCust);
+        setModal("convert_customer");
+      } else {
+        setModal("proforma");
+      }
     } catch(e){ toast$(e.message,true); }
     setSv(false);
   };
@@ -1753,6 +1783,26 @@ export default function CRM({ currentUser, onLogout }) {
       }}/>;
   };
 
+  const ProductStockRow = ({p, stock, onAdd}) => {
+    const stk = stock.find(s=>s.product_id===p.id||s.sku_code===p.sku_code||s.product_name===p.name);
+    const packed = stk?.packed_qty||0;
+    const unpacked = stk?.unpacked_qty||0;
+    return (
+      <div style={{padding:"8px 10px",borderBottom:"1px solid var(--bdr)",fontSize:11.5}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:stk?4:0}}>
+          <div><div style={{fontWeight:600}}>{p.name}</div><div style={{fontSize:10,color:"var(--mut)"}}>{p.sku_code} · ₹{p.ctn_price}/ctn</div></div>
+          <button className="btn btn-g btn-sm" onClick={()=>onAdd(p)}>+ Add</button>
+        </div>
+        {stk&&(
+          <div style={{display:"flex",gap:8}}>
+            <span style={{fontSize:10,padding:"2px 8px",borderRadius:6,background:packed>0?"rgba(16,185,129,.1)":"rgba(239,68,68,.1)",color:packed>0?"#10b981":"#ef4444",fontWeight:700}}>📦 Packed: {packed.toLocaleString()} pcs</span>
+            <span style={{fontSize:10,padding:"2px 8px",borderRadius:6,background:"rgba(245,158,11,.1)",color:"#f59e0b",fontWeight:700}}>🔧 Unpacked: {unpacked.toLocaleString()} pcs</span>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   /* ── ORDER MODAL ── */
   const OrderModal = () => {
     const [prodQ,setProdQ]=useState("");
@@ -1779,10 +1829,7 @@ export default function CRM({ currentUser, onLogout }) {
               <input className="inp" placeholder="SKU ya product search..." value={prodQ} onChange={e=>setProdQ(e.target.value)} style={{marginBottom:8}}/>
               <div style={{maxHeight:260,overflowY:"auto",border:"1px solid var(--bdr)",borderRadius:8}}>
                 {filtProd.map(p=>(
-                  <div key={p.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 10px",borderBottom:"1px solid var(--bdr)",fontSize:11.5}}>
-                    <div><div style={{fontWeight:600}}>{p.name}</div><div style={{fontSize:10,color:"var(--mut)"}}>{p.sku_code} · ₹{p.ctn_price}/ctn</div></div>
-                    <button className="btn btn-g btn-sm" onClick={()=>addOrderItem(p)}>+ Add</button>
-                  </div>
+                  <ProductStockRow key={p.id} p={p} stock={STOCK} onAdd={addOrderItem}/>
                 ))}
               </div>
             </div>
@@ -1941,6 +1988,41 @@ export default function CRM({ currentUser, onLogout }) {
   const renderModal = () => {
     if(!modal) return null;
     if(modal==="detail") return <Detail/>;
+    if(modal==="convert_customer") return (
+      <div className="ov" onClick={()=>setModal("proforma")}>
+        <div className="mod mod-sm" onClick={e=>e.stopPropagation()} style={{maxWidth:420}}>
+          <div className="mod-ttl">🎉 Order Mila! Customer List Mein Add Karein?</div>
+          <div style={{padding:"12px 0",fontSize:13,lineHeight:1.8}}>
+            <div style={{fontWeight:700,fontSize:14,marginBottom:8}}>{convertCust?.company||convertCust?.name}</div>
+            <div style={{color:"var(--mut)",marginBottom:16}}>Ye party abhi NBD mein hai. Order de diya — ab customer list mein add karein?</div>
+            <div style={{marginBottom:12}}>
+              <label className="lbl">Group/Type select karo</label>
+              <select className="inp" id="convert_type" defaultValue="crm">
+                <option value="crm">CRM — Regular Customer</option>
+                <option value="retail">Retail — Retail Party</option>
+                <option value="direct">Direct — Direct Party</option>
+                <option value="enduser">End User</option>
+              </select>
+            </div>
+          </div>
+          <div style={{display:"flex",gap:8}}>
+            <button className="btn btn-p" style={{flex:1,justifyContent:"center"}} onClick={async()=>{
+              const newType = document.getElementById("convert_type")?.value||"crm";
+              try {
+                await sbPatch("crm_customers", convertCust.id, {type:newType, status:"active"});
+                setC(p=>p.map(x=>x.id===convertCust.id?{...x,type:newType,status:"active"}:x));
+                toast$("✅ Customer "+newType.toUpperCase()+" group mein add ho gaya!");
+              } catch(e){ toast$("Error: "+e.message,true); }
+              setConvertCust(null);
+              setModal("proforma");
+            }}>✅ Haan, Add Karo</button>
+            <button className="btn btn-o" onClick={()=>{setConvertCust(null);setModal("proforma");}}>
+              Baad Mein
+            </button>
+          </div>
+        </div>
+      </div>
+    );
     if(modal==="aorder") return <OrderModal/>;
     if(modal==="proforma") return <ProformaModal/>;
 
@@ -5990,6 +6072,166 @@ export default function CRM({ currentUser, onLogout }) {
   };
 
 
+
+  // ══════════════════════════════════════════════
+  // STOCK MANAGEMENT
+  // ══════════════════════════════════════════════
+  const StockMgmt = () => {
+    const [sForm, setSForm] = useState({product_id:"", product_name:"", sku_code:"", packed_qty:0, unpacked_qty:0});
+    const [saving, setSaving] = useState(false);
+    const [editId, setEditId] = useState(null);
+
+    const saveStock = async() => {
+      if(!sForm.product_id) return toast$("Product select karo", true);
+      setSaving(true);
+      try {
+        const existing = STOCK.find(s=>s.product_id===sForm.product_id);
+        if(existing || editId) {
+          const id = editId || existing.id;
+          await sbFetch("crm_stock?id=eq."+id, {method:"PATCH", body:{
+            packed_qty: Number(sForm.packed_qty)||0,
+            unpacked_qty: Number(sForm.unpacked_qty)||0,
+            updated_at: new Date().toISOString(),
+            updated_by: myName
+          }});
+          setSTOCK(p=>p.map(s=>s.id===id?{...s,...sForm,updated_by:myName}:s));
+          toast$("Stock updated ✓");
+        } else {
+          const r = await sbFetch("crm_stock", {method:"POST", body:{
+            product_id: sForm.product_id,
+            product_name: sForm.product_name,
+            sku_code: sForm.sku_code,
+            packed_qty: Number(sForm.packed_qty)||0,
+            unpacked_qty: Number(sForm.unpacked_qty)||0,
+            updated_by: myName
+          }});
+          setSTOCK(p=>[...(r||[]),  ...p]);
+          toast$("Stock add ✓");
+        }
+        setSForm({product_id:"",product_name:"",sku_code:"",packed_qty:0,unpacked_qty:0});
+        setEditId(null);
+      } catch(e){ toast$("Error: "+e.message, true); }
+      setSaving(false);
+    };
+
+    const totalPacked = STOCK.reduce((s,x)=>s+(Number(x.packed_qty)||0), 0);
+    const totalUnpacked = STOCK.reduce((s,x)=>s+(Number(x.unpacked_qty)||0), 0);
+    const lowStock = STOCK.filter(s=>(s.packed_qty||0)<500);
+
+    return (
+      <div>
+        <div className="sh">
+          <div>
+            <div className="sh-t">📦 Stock Management</div>
+            <div className="sh-s">Packed aur Unpacked stock daily update karo</div>
+          </div>
+        </div>
+
+        {/* Summary cards */}
+        <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10,marginBottom:14}}>
+          {[
+            ["📦 Total Packed", totalPacked.toLocaleString()+" pcs", "Ready to dispatch", "#10b981"],
+            ["🔧 Total Unpacked", totalUnpacked.toLocaleString()+" pcs", "In production", "#f59e0b"],
+            ["⚠️ Low Stock Items", lowStock.length, "Below 500 pcs packed", "#ef4444"],
+          ].map(([lbl,val,sub,c])=>(
+            <div key={lbl} style={{background:c+"11",border:"1px solid "+c+"33",borderRadius:10,padding:12,textAlign:"center"}}>
+              <div style={{fontSize:10,color:"var(--mut)",marginBottom:4}}>{lbl}</div>
+              <div style={{fontSize:20,fontWeight:800,color:c}}>{val}</div>
+              <div style={{fontSize:10,color:"var(--mut)"}}>{sub}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Add/Edit stock */}
+        {isAdmin&&(
+          <div className="card" style={{marginBottom:14}}>
+            <div style={{fontWeight:700,fontSize:13,marginBottom:12}}>
+              {editId?"✏️ Update Stock":"➕ Stock Entry"}
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"2fr 1fr 1fr auto",gap:10,alignItems:"flex-end"}}>
+              <div>
+                <label className="lbl">Product *</label>
+                <select className="inp" value={sForm.product_id||""} onChange={e=>{
+                  const prod = PRODS.find(p=>p.id===e.target.value);
+                  setSForm({...sForm, product_id:e.target.value, product_name:prod?.name||"", sku_code:prod?.sku_code||""});
+                }}>
+                  <option value="">-- Product Select Karo --</option>
+                  {PRODS.map(p=><option key={p.id} value={p.id}>{p.name} ({p.sku_code})</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="lbl">Packed Qty (pcs)</label>
+                <input type="number" className="inp" placeholder="0" value={sForm.packed_qty||""} onChange={e=>setSForm({...sForm,packed_qty:e.target.value})}/>
+              </div>
+              <div>
+                <label className="lbl">Unpacked Qty (pcs)</label>
+                <input type="number" className="inp" placeholder="0" value={sForm.unpacked_qty||""} onChange={e=>setSForm({...sForm,unpacked_qty:e.target.value})}/>
+              </div>
+              <div>
+                <button className="btn btn-p" disabled={saving} onClick={saveStock}>{saving?"...":"Save"}</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Stock table */}
+        <div className="card" style={{padding:0}}>
+          <div style={{padding:"12px 16px",fontWeight:700,fontSize:13,borderBottom:"1px solid var(--bdr)"}}>
+            📋 Current Stock — {STOCK.length} items
+          </div>
+          {STOCK.length===0?(
+            <div style={{padding:24,textAlign:"center",color:"var(--mut)"}}>
+              {isAdmin?"Stock entry karo upar se":"Koi stock data nahi"}
+            </div>
+          ):(
+            <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+              <thead>
+                <tr style={{background:"var(--card2)"}}>
+                  {["Product","SKU","📦 Packed","🔧 Unpacked","Total","Status","Updated",""].map(h=>(
+                    <th key={h} style={{padding:"8px 10px",fontSize:10,color:"var(--mut)",textAlign:h==="Product"||h===""?"left":"center"}}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {STOCK.map(s=>{
+                  const total = (s.packed_qty||0)+(s.unpacked_qty||0);
+                  const isLow = (s.packed_qty||0)<500;
+                  return (
+                    <tr key={s.id} style={{borderBottom:"1px solid var(--bdr)",background:isLow?"rgba(239,68,68,.03)":"transparent"}}>
+                      <td style={{padding:"10px",fontWeight:600}}>{s.product_name}</td>
+                      <td style={{padding:"10px",textAlign:"center",color:"var(--mut)",fontSize:10}}>{s.sku_code}</td>
+                      <td style={{padding:"10px",textAlign:"center",fontWeight:800,color:s.packed_qty>0?"#10b981":"#ef4444"}}>
+                        {(s.packed_qty||0).toLocaleString()}
+                      </td>
+                      <td style={{padding:"10px",textAlign:"center",fontWeight:700,color:"#f59e0b"}}>
+                        {(s.unpacked_qty||0).toLocaleString()}
+                      </td>
+                      <td style={{padding:"10px",textAlign:"center",fontWeight:600}}>{total.toLocaleString()}</td>
+                      <td style={{padding:"10px",textAlign:"center"}}>
+                        {isLow
+                          ?<span style={{fontSize:10,background:"rgba(239,68,68,.1)",color:"#ef4444",padding:"2px 8px",borderRadius:6,fontWeight:700}}>⚠️ Low</span>
+                          :<span style={{fontSize:10,background:"rgba(16,185,129,.1)",color:"#10b981",padding:"2px 8px",borderRadius:6,fontWeight:700}}>✅ OK</span>
+                        }
+                      </td>
+                      <td style={{padding:"10px",textAlign:"center",fontSize:10,color:"var(--mut)"}}>
+                        {s.updated_by&&<div>{s.updated_by}</div>}
+                        {s.updated_at&&<div>{new Date(s.updated_at).toLocaleDateString("en-IN")}</div>}
+                      </td>
+                      <td style={{padding:"10px"}}>
+                        {isAdmin&&<button className="btn btn-o btn-sm" onClick={()=>{setEditId(s.id);setSForm({product_id:s.product_id,product_name:s.product_name,sku_code:s.sku_code,packed_qty:s.packed_qty||0,unpacked_qty:s.unpacked_qty||0});}}>✏️</button>}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+
   /* ── NAV ── */
   const navs = [
     {id:"dashboard",lbl:"Dashboard",ic:"🏠",roles:["admin","sales","dataentry"]},
@@ -6010,6 +6252,7 @@ export default function CRM({ currentUser, onLogout }) {
     {id:"sop",lbl:"SOP",ic:"📋",roles:["admin","sales","dataentry"]},
     {id:"daily",lbl:"Daily Report",ic:"📊",roles:["admin"]},
     {id:"calling",lbl:"Calling",ic:"📞",roles:["admin","sales"]},
+    {id:"stock",lbl:"Stock",ic:"📦",roles:["admin","sales"]},
     {id:"analytics",lbl:"Analytics",ic:"📊",roles:["admin"]},
   ].filter(n=>n.roles?.includes(userRole)||userRole==="viewer");
 
@@ -6069,6 +6312,7 @@ export default function CRM({ currentUser, onLogout }) {
           {view==="sop"&&<SOP/>}
           {view==="daily"&&<DailyReport/>}
           {view==="calling"&&<CallingDashboard/>}
+          {view==="stock"&&<StockMgmt/>}
         </div>
       </div>
       {renderModal()}
