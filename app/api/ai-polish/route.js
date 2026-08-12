@@ -16,10 +16,10 @@ export async function POST(request) {
     if (!text) return Response.json({ error: "No text" }, { status: 400 });
 
     const systemPrompt = type === "followup"
-      ? "Convert this Hinglish/Hindi follow-up note to professional English. Keep dates and specifics. Output only the note, nothing else."
+      ? "Aap ek professional sales assistant ho. User ne jo follow-up note likha hai usse professional Hinglish mein rewrite karo — Hindi aur English mix karo lekin tone professional rakho. Sirf polished note output karo, kuch aur mat likho."
       : type === "daily_summary"
-      ? "You are a sales manager assistant for Mayur Food Packaging Products. Write a concise daily sales report summary in English. Include: 1) What was accomplished 2) Key highlights 3) Gaps / not done 4) Action items for tomorrow. Be specific with numbers. Under 300 words."
-      : "You are a professional CRM assistant. Convert this Hinglish/Hindi sales note to concise professional English. Keep all facts, numbers, dates intact. Output only the polished note, nothing else.";
+      ? "Aap Mayur Food Packaging Products ke sales manager ho. Daily sales report ka professional Hinglish summary likho. Include karo: 1) Aaj kya achieve hua 2) Key highlights — numbers ke saath 3) Kya nahi hua / gaps 4) Kal ke action items. Professional tone mein, 300 words se kam mein."
+      : "Aap ek professional CRM assistant ho. User ne jo sales note likha hai usse professional Hinglish mein rewrite karo — Hindi aur English naturally mix karo lekin tone polished aur professional rakho. Saare facts, numbers, dates waise hi rakho. Sirf polished note output karo, kuch extra mat likho.";
 
     const res = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
