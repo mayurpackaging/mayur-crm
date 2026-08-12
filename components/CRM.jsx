@@ -764,7 +764,7 @@ export default function CRM({ currentUser, onLogout }) {
           </div>
           <button className="btn btn-p" onClick={()=>{setForm({order_date:new Date().toISOString().split("T")[0],epr:false});setOrderItems([]);if(pxRows.length===0)loadPricing();setModal("aorder");}}><Plus size={13}/> New Order</button>
         </div>
-        <div className="sr"><Search size={13} className="sr-ic"/><input className="inp" placeholder="Search customer..." value={q} onChange={e=>setQ(e.target.value)}/></div>
+        <div className="sr"><Search size={13} className="sr-ic"/><input className="inp" placeholder="Search customer..." defaultValue={q} onChange={e=>setQ(e.target.value)}/></div>
         {list.length===0?<div className="card empty"><p>Koi order nahi</p></div>
           :<div style={{display:"flex",flexDirection:"column",gap:10}}>
             {list.map(o=>{
@@ -813,6 +813,7 @@ export default function CRM({ currentUser, onLogout }) {
     const [alphaFilter, setAlphaFilter] = useState("all"); // all | A | B | C ...
     const [assignFilter, setAssignFilter] = useState("all");
     const [typeFilter, setTypeFilter] = useState(cTab);
+    const [localQ, setLocalQ] = useState(""); // local search — prevents cursor jump
 
     // Sync typeFilter with cTab
     React.useEffect(()=>setTypeFilter(cTab),[cTab]);
@@ -830,7 +831,7 @@ export default function CRM({ currentUser, onLogout }) {
       .filter(c=>typeFilter==="all"||c.type===typeFilter)
       .filter(c=>assignFilter==="all"||c.assigned_to===assignFilter)
       .filter(c=>alphaFilter==="all"||(getFirst(c)===alphaFilter)||(alphaFilter==="#"&&getFirst(c)==="#"))
-      .filter(c=>!q||[c.name,c.company,c.city,c.assigned_to].some(v=>v?.toLowerCase().includes(q.toLowerCase())))
+      .filter(c=>!localQ||[c.name,c.company,c.city,c.assigned_to].some(v=>v?.toLowerCase().includes(localQ.toLowerCase())))
       .sort((a,b)=>{
         if(sortBy==="company") return (a.company||"").localeCompare(b.company||"");
         if(sortBy==="assigned") return (a.assigned_to||"").localeCompare(b.assigned_to||"");
@@ -878,12 +879,14 @@ export default function CRM({ currentUser, onLogout }) {
             <option value="assigned">A-Z Rep</option>
             <option value="status">Status</option>
           </select>
-          {/* Search */}
+          {/* Search — local state to prevent cursor jump */}
           <div className="sr" style={{flex:1,marginBottom:0}}>
             <Search size={13} className="sr-ic"/>
-            <input className="inp" placeholder="Search party, city, rep..." value={q} onChange={e=>setQ(e.target.value)}/>
+            <input className="inp" placeholder="Search party, city, rep..."
+              value={localQ}
+              onChange={e=>setLocalQ(e.target.value)}/>
           </div>
-          {q&&<button className="btn btn-o btn-sm" onClick={()=>setQ("")}>✕ Clear</button>}
+          {localQ&&<button className="btn btn-o btn-sm" onClick={()=>setLocalQ("")}>✕ Clear</button>}
         </div>
 
         {/* Alphabet filter */}
