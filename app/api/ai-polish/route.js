@@ -44,6 +44,7 @@ export default function CRM({ currentUser, onLogout }) {
   const [TARGETS,setTARGETS] = useState([]);
   const [USERS,setUSERS] = useState([]);
   const [STOCK,setSTOCK] = useState([]);
+  const [convertCust, setConvertCust] = useState(null);
   const [prodData,setProdData] = useState(null);
   const [prodLoad,setProdLoad] = useState(false);
   const [allOrdersLoaded,setAllOrdersLoaded] = useState(false);
@@ -217,7 +218,27 @@ export default function CRM({ currentUser, onLogout }) {
     if(!form.customer_id||!form.product) return toast$("Customer aur Product required!",true);
     const c=gc(form.customer_id);
     setSv(true);
-    try { const r=await sbInsert("crm_enquiries",{...form,customer_name:`${c?.name} / ${c?.company}`,status:form.status||"new",priority:form.priority||"medium"}); setE(p=>[r[0],...p]); toast$("Enquiry add ✓"); closeM(); }
+    try {
+      const r=await sbInsert("crm_enquiries",{...form,customer_name:c?.name+" / "+c?.company,status:form.status||"new",priority:form.priority||"medium"});
+      setE(p=>[r[0],...p]);
+      // Auto-create Pipeline deal
+      try {
+        await sbFetch("crm_deals", {method:"POST", body:{
+          title: (form.product||"Enquiry")+" — "+(c?.company||c?.name||""),
+          customer_name: c?.name||"",
+          company: c?.company||"",
+          stage: "lead",
+          probability: 10,
+          product_mix: form.product||"",
+          assigned_to: form.assigned_to||c?.assigned_to||myName,
+          notes: "Auto-created from Enquiry. Qty: "+(form.qty||"—")+", Priority: "+(form.priority||"medium")
+        }});
+        toast$("Enquiry add ✓ + Pipeline mein deal bana!");
+      } catch(e2) {
+        toast$("Enquiry add ✓ (Pipeline deal nahi bana)");
+      }
+      closeM();
+    }
     catch(e){ toast$(e.message,true); }
     setSv(false);
   };
@@ -359,7 +380,14 @@ export default function CRM({ currentUser, onLogout }) {
       toast$("Order save ho gaya ✓");
       const custData=gc(form.customer_id)||{};
       setSelOrder({...orderData,id:orderId,items,customerData:{phone:custData.phone,address:custData.address,gst_no:custData.gst_no}});
-      setModal("proforma");
+      // Check if customer needs to be formally added
+      const ordCust = gc(form.customer_id);
+      if(ordCust && (ordCust.type==="nbd"||!ordCust.type)) {
+        setConvertCust(ordCust);
+        setModal("convert_customer");
+      } else {
+        setModal("proforma");
+      }
     } catch(e){ toast$(e.message,true); }
     setSv(false);
   };
@@ -1965,6 +1993,41 @@ export default function CRM({ currentUser, onLogout }) {
   const renderModal = () => {
     if(!modal) return null;
     if(modal==="detail") return <Detail/>;
+    if(modal==="convert_customer") return (
+      <div className="ov" onClick={()=>setModal("proforma")}>
+        <div className="mod mod-sm" onClick={e=>e.stopPropagation()} style={{maxWidth:420}}>
+          <div className="mod-ttl">🎉 Order Mila! Customer List Mein Add Karein?</div>
+          <div style={{padding:"12px 0",fontSize:13,lineHeight:1.8}}>
+            <div style={{fontWeight:700,fontSize:14,marginBottom:8}}>{convertCust?.company||convertCust?.name}</div>
+            <div style={{color:"var(--mut)",marginBottom:16}}>Ye party abhi NBD mein hai. Order de diya — ab customer list mein add karein?</div>
+            <div style={{marginBottom:12}}>
+              <label className="lbl">Group/Type select karo</label>
+              <select className="inp" id="convert_type" defaultValue="crm">
+                <option value="crm">CRM — Regular Customer</option>
+                <option value="retail">Retail — Retail Party</option>
+                <option value="direct">Direct — Direct Party</option>
+                <option value="enduser">End User</option>
+              </select>
+            </div>
+          </div>
+          <div style={{display:"flex",gap:8}}>
+            <button className="btn btn-p" style={{flex:1,justifyContent:"center"}} onClick={async()=>{
+              const newType = document.getElementById("convert_type")?.value||"crm";
+              try {
+                await sbPatch("crm_customers", convertCust.id, {type:newType, status:"active"});
+                setC(p=>p.map(x=>x.id===convertCust.id?{...x,type:newType,status:"active"}:x));
+                toast$("✅ Customer "+newType.toUpperCase()+" group mein add ho gaya!");
+              } catch(e){ toast$("Error: "+e.message,true); }
+              setConvertCust(null);
+              setModal("proforma");
+            }}>✅ Haan, Add Karo</button>
+            <button className="btn btn-o" onClick={()=>{setConvertCust(null);setModal("proforma");}}>
+              Baad Mein
+            </button>
+          </div>
+        </div>
+      </div>
+    );
     if(modal==="aorder") return <OrderModal/>;
     if(modal==="proforma") return <ProformaModal/>;
 
