@@ -1711,7 +1711,7 @@ export default function CRM({ currentUser, onLogout }) {
                       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                         <span style={{fontSize:11,color:TC[i.type],fontWeight:700,textTransform:"capitalize"}}>{i.type}</span>
                         <div style={{display:"flex",gap:6,alignItems:"center"}}>
-                          <span style={{fontSize:10,color:"var(--mut)"}}>{fd(i.created_at)} · {i.done_by}</span>
+                          <span style={{fontSize:10,color:"var(--mut)"}}>{fd(i.created_at)} {i.created_at?new Date(i.created_at).toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit",hour12:true}):""} · {i.done_by}</span>
                           {isAdmin&&<>
                             <button onClick={()=>{setForm({...i,customer_id:selId});setModal("ainter");}} style={{padding:"1px 6px",borderRadius:4,fontSize:9,border:"1px solid var(--bdr)",background:"transparent",cursor:"pointer"}}>✏️</button>
                             <button onClick={async()=>{if(!window.confirm("Delete?"))return;await sbFetch("crm_interactions?id=eq."+i.id,{method:"DELETE"});setI(p=>p.filter(x=>x.id!==i.id));toast$("Deleted!");}} style={{padding:"1px 6px",borderRadius:4,fontSize:9,border:"1px solid #ef4444",background:"transparent",color:"#ef4444",cursor:"pointer"}}>🗑</button>
