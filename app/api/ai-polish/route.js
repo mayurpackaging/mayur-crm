@@ -1783,6 +1783,26 @@ export default function CRM({ currentUser, onLogout }) {
       }}/>;
   };
 
+  const ProductStockRow = ({p, stock, onAdd}) => {
+    const stk = stock.find(s=>s.product_id===p.id||s.sku_code===p.sku_code||s.product_name===p.name);
+    const packed = stk?.packed_qty||0;
+    const unpacked = stk?.unpacked_qty||0;
+    return (
+      <div style={{padding:"8px 10px",borderBottom:"1px solid var(--bdr)",fontSize:11.5}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:stk?4:0}}>
+          <div><div style={{fontWeight:600}}>{p.name}</div><div style={{fontSize:10,color:"var(--mut)"}}>{p.sku_code} · ₹{p.ctn_price}/ctn</div></div>
+          <button className="btn btn-g btn-sm" onClick={()=>onAdd(p)}>+ Add</button>
+        </div>
+        {stk&&(
+          <div style={{display:"flex",gap:8}}>
+            <span style={{fontSize:10,padding:"2px 8px",borderRadius:6,background:packed>0?"rgba(16,185,129,.1)":"rgba(239,68,68,.1)",color:packed>0?"#10b981":"#ef4444",fontWeight:700}}>📦 Packed: {packed.toLocaleString()} pcs</span>
+            <span style={{fontSize:10,padding:"2px 8px",borderRadius:6,background:"rgba(245,158,11,.1)",color:"#f59e0b",fontWeight:700}}>🔧 Unpacked: {unpacked.toLocaleString()} pcs</span>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   /* ── ORDER MODAL ── */
   const OrderModal = () => {
     const [prodQ,setProdQ]=useState("");
@@ -1809,32 +1829,7 @@ export default function CRM({ currentUser, onLogout }) {
               <input className="inp" placeholder="SKU ya product search..." value={prodQ} onChange={e=>setProdQ(e.target.value)} style={{marginBottom:8}}/>
               <div style={{maxHeight:260,overflowY:"auto",border:"1px solid var(--bdr)",borderRadius:8}}>
                 {filtProd.map(p=>(
-                  {(()=>{
-                    const stk = STOCK.find(s=>s.product_id===p.id||s.sku_code===p.sku_code||s.product_name===p.name);
-                    const packed = stk?.packed_qty||0;
-                    const unpacked = stk?.unpacked_qty||0;
-                    return (
-                      <div key={p.id} style={{padding:"8px 10px",borderBottom:"1px solid var(--bdr)",fontSize:11.5}}>
-                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:stk?4:0}}>
-                          <div><div style={{fontWeight:600}}>{p.name}</div><div style={{fontSize:10,color:"var(--mut)"}}>{p.sku_code} · ₹{p.ctn_price}/ctn</div></div>
-                          <button className="btn btn-g btn-sm" onClick={()=>addOrderItem(p)}>+ Add</button>
-                        </div>
-                        {stk&&(
-                          <div style={{display:"flex",gap:8}}>
-                            <span style={{fontSize:10,padding:"2px 8px",borderRadius:6,
-                              background:packed>0?"rgba(16,185,129,.1)":"rgba(239,68,68,.1)",
-                              color:packed>0?"#10b981":"#ef4444",fontWeight:700}}>
-                              📦 Packed: {packed.toLocaleString()} pcs
-                            </span>
-                            <span style={{fontSize:10,padding:"2px 8px",borderRadius:6,
-                              background:"rgba(245,158,11,.1)",color:"#f59e0b",fontWeight:700}}>
-                              🔧 Unpacked: {unpacked.toLocaleString()} pcs
-                            </span>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })()}
+                  <ProductStockRow key={p.id} p={p} stock={STOCK} onAdd={addOrderItem}/>
                 ))}
               </div>
             </div>
