@@ -4258,6 +4258,7 @@ export default function CRM({ currentUser, onLogout }) {
   const CalendarView = ({tasks}) => {
     const [calMonth, setCalMonth] = useState(new Date().getMonth());
     const [calYear, setCalYear] = useState(new Date().getFullYear());
+    const [selDate, setSelDate] = useState(null);
     const months=["January","February","March","April","May","June","July","August","September","October","November","December"];
     const days=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
     const firstDay=new Date(calYear,calMonth,1).getDay();
@@ -4268,6 +4269,9 @@ export default function CRM({ currentUser, onLogout }) {
     const cells=[];
     for(let i=0;i<firstDay;i++) cells.push(null);
     for(let d=1;d<=daysInMonth;d++) cells.push(d);
+
+    const PRIORITY_C = {high:"#ef4444",medium:"#f59e0b",low:"#10b981"};
+
     return (
       <div className="card">
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
@@ -4285,32 +4289,71 @@ export default function CRM({ currentUser, onLogout }) {
             const dayTasks=tasksByDate[dateStr]||[];
             const isToday=dateStr===todayStr;
             const isPast=dateStr<todayStr;
+            const isSel=selDate===dateStr;
             return (
-              <div key={day} style={{minHeight:64,padding:4,borderRadius:8,
-                background:isToday?"rgba(245,158,11,.12)":dayTasks.length>0?"var(--card2)":"transparent",
-                border:isToday?"2px solid #f59e0b":"1px solid var(--bdr)"}}>
-                <div style={{fontWeight:isToday?800:400,fontSize:12,marginBottom:3,
-                  color:isToday?"#f59e0b":isPast&&dayTasks.length>0?"#ef4444":"var(--txt)"}}>{day}</div>
+              <div key={day} onClick={()=>setSelDate(isSel?null:dateStr)}
+                style={{minHeight:64,padding:4,borderRadius:8,cursor:"pointer",
+                  background:isSel?"rgba(59,130,246,.15)":isToday?"rgba(245,158,11,.12)":dayTasks.length>0?"var(--card2)":"transparent",
+                  border:isSel?"2px solid #3b82f6":isToday?"2px solid #f59e0b":"1px solid var(--bdr)",
+                  transition:"all .15s"}}>
+                <div style={{fontWeight:isToday||isSel?800:400,fontSize:12,marginBottom:3,
+                  color:isSel?"#3b82f6":isToday?"#f59e0b":isPast&&dayTasks.length>0?"#ef4444":"var(--txt)"}}>{day}</div>
                 {dayTasks.slice(0,2).map((t,ti)=>(
-                  <div key={ti} title={t.title} style={{fontSize:9,padding:"1px 4px",borderRadius:3,marginBottom:2,
-                    background:t.priority==="high"?"rgba(239,68,68,.2)":t.priority==="medium"?"rgba(245,158,11,.2)":"rgba(16,185,129,.2)",
-                    color:t.priority==="high"?"#ef4444":t.priority==="medium"?"#f59e0b":"#10b981",
-                    overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontWeight:600}}>
+                  <div key={ti} title={t.title+(t.assigned_to?" — "+t.assigned_to:"")}
+                    style={{fontSize:9,padding:"1px 4px",borderRadius:3,marginBottom:2,
+                      background:(PRIORITY_C[t.priority]||"#10b981")+"22",
+                      color:PRIORITY_C[t.priority]||"#10b981",
+                      overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontWeight:600}}>
                     {t.due_time&&t.due_time!=="10:00"?t.due_time.slice(0,5)+" ":""}{t.title}
                   </div>
                 ))}
-                {dayTasks.length>2&&<div style={{fontSize:9,color:"var(--mut)",fontWeight:700}}>+{dayTasks.length-2}</div>}
+                {dayTasks.length>2&&<div style={{fontSize:9,color:"var(--mut)",fontWeight:700}}>+{dayTasks.length-2} more</div>}
               </div>
             );
           })}
         </div>
+
+        {/* Selected date popup */}
+        {selDate&&tasksByDate[selDate]&&(
+          <div style={{marginTop:14,background:"var(--card2)",borderRadius:10,padding:14,border:"1px solid #3b82f6"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+              <div style={{fontWeight:700,fontSize:13,color:"#3b82f6"}}>
+                📅 {new Date(selDate+"T00:00:00").toLocaleDateString("en-IN",{weekday:"long",day:"2-digit",month:"long"})}
+                <span style={{fontWeight:400,fontSize:11,color:"var(--mut)",marginLeft:8}}>{tasksByDate[selDate].length} tasks</span>
+              </div>
+              <button onClick={()=>setSelDate(null)} style={{background:"none",border:"none",cursor:"pointer",color:"var(--mut)",fontSize:16}}>✕</button>
+            </div>
+            {tasksByDate[selDate].map((t,i)=>(
+              <div key={i} style={{padding:"10px 12px",background:"var(--card)",borderRadius:8,marginBottom:8,
+                borderLeft:"3px solid "+(PRIORITY_C[t.priority]||"#10b981")}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
+                  <div style={{flex:1}}>
+                    <div style={{fontWeight:700,fontSize:12,marginBottom:2}}>{t.title}</div>
+                    {t.customer_name&&<div style={{fontSize:11,color:"var(--mut)"}}>👤 {t.customer_name}</div>}
+                    {t.description&&<div style={{fontSize:11,color:"var(--mut)",marginTop:2}}>{t.description}</div>}
+                    <div style={{display:"flex",gap:8,marginTop:4,flexWrap:"wrap"}}>
+                      {t.due_time&&<span style={{fontSize:10,color:"var(--acc)"}}>⏰ {t.due_time.slice(0,5)}</span>}
+                      {isAdmin&&t.assigned_to&&<span style={{fontSize:10,background:"rgba(59,130,246,.1)",color:"#3b82f6",padding:"1px 6px",borderRadius:4,fontWeight:600}}>👤 {t.assigned_to}</span>}
+                      {isAdmin&&t.created_by&&t.created_by!==t.assigned_to&&<span style={{fontSize:10,color:"var(--mut)"}}>by {t.created_by}</span>}
+                      <span style={{fontSize:10,padding:"1px 6px",borderRadius:4,fontWeight:600,
+                        background:(PRIORITY_C[t.priority]||"#10b981")+"22",
+                        color:PRIORITY_C[t.priority]||"#10b981"}}>{t.priority}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
         <div style={{display:"flex",gap:12,marginTop:10,flexWrap:"wrap"}}>
-          {[["#ef4444","High Priority"],["#f59e0b","Medium"],["#10b981","Low"]].map(([c,l])=>(
+          {[["#ef4444","High"],["#f59e0b","Medium"],["#10b981","Low"]].map(([c,l])=>(
             <div key={l} style={{display:"flex",gap:4,alignItems:"center",fontSize:10,color:"var(--mut)"}}>
               <div style={{width:10,height:10,borderRadius:2,background:c+"33",border:"1px solid "+c}}/>
               {l}
             </div>
           ))}
+          <span style={{fontSize:10,color:"var(--mut)"}}>· Date click karo tasks dekhne ke liye</span>
         </div>
       </div>
     );
