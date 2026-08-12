@@ -4253,6 +4253,68 @@ export default function CRM({ currentUser, onLogout }) {
 
 
   // ══════════════════════════════════════════════
+  // CALENDAR VIEW COMPONENT
+  // ══════════════════════════════════════════════
+  const CalendarView = ({tasks, calMonth, calYear, setCalMonth, setCalYear}) => {
+    const months=["January","February","March","April","May","June","July","August","September","October","November","December"];
+    const days=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+    const firstDay=new Date(calYear,calMonth,1).getDay();
+    const daysInMonth=new Date(calYear,calMonth+1,0).getDate();
+    const todayStr=new Date().toISOString().slice(0,10);
+    const tasksByDate={};
+    tasks.forEach(t=>{if(t.due_date){if(!tasksByDate[t.due_date])tasksByDate[t.due_date]=[];tasksByDate[t.due_date].push(t);}});
+    const cells=[];
+    for(let i=0;i<firstDay;i++) cells.push(null);
+    for(let d=1;d<=daysInMonth;d++) cells.push(d);
+    return (
+      <div className="card">
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+          <button className="btn btn-o btn-sm" onClick={()=>{if(calMonth===0){setCalMonth(11);setCalYear(y=>y-1);}else setCalMonth(m=>m-1);}}>◀</button>
+          <div style={{fontWeight:800,fontSize:15}}>{months[calMonth]} {calYear}</div>
+          <button className="btn btn-o btn-sm" onClick={()=>{if(calMonth===11){setCalMonth(0);setCalYear(y=>y+1);}else setCalMonth(m=>m+1);}}>▶</button>
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2,marginBottom:6}}>
+          {days.map(d=><div key={d} style={{textAlign:"center",fontSize:10,fontWeight:700,color:"var(--mut)",padding:"4px 0"}}>{d}</div>)}
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:3}}>
+          {cells.map((day,idx)=>{
+            if(!day) return <div key={"e"+idx} style={{minHeight:64}}/>;
+            const dateStr=calYear+"-"+String(calMonth+1).padStart(2,"0")+"-"+String(day).padStart(2,"0");
+            const dayTasks=tasksByDate[dateStr]||[];
+            const isToday=dateStr===todayStr;
+            const isPast=dateStr<todayStr;
+            return (
+              <div key={day} style={{minHeight:64,padding:4,borderRadius:8,
+                background:isToday?"rgba(245,158,11,.12)":dayTasks.length>0?"var(--card2)":"transparent",
+                border:isToday?"2px solid #f59e0b":"1px solid var(--bdr)"}}>
+                <div style={{fontWeight:isToday?800:400,fontSize:12,marginBottom:3,
+                  color:isToday?"#f59e0b":isPast&&dayTasks.length>0?"#ef4444":"var(--txt)"}}>{day}</div>
+                {dayTasks.slice(0,2).map((t,ti)=>(
+                  <div key={ti} title={t.title} style={{fontSize:9,padding:"1px 4px",borderRadius:3,marginBottom:2,
+                    background:t.priority==="high"?"rgba(239,68,68,.2)":t.priority==="medium"?"rgba(245,158,11,.2)":"rgba(16,185,129,.2)",
+                    color:t.priority==="high"?"#ef4444":t.priority==="medium"?"#f59e0b":"#10b981",
+                    overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontWeight:600}}>
+                    {t.due_time&&t.due_time!=="10:00"?t.due_time.slice(0,5)+" ":""}{t.title}
+                  </div>
+                ))}
+                {dayTasks.length>2&&<div style={{fontSize:9,color:"var(--mut)",fontWeight:700}}>+{dayTasks.length-2}</div>}
+              </div>
+            );
+          })}
+        </div>
+        <div style={{display:"flex",gap:12,marginTop:10,flexWrap:"wrap"}}>
+          {[["#ef4444","High Priority"],["#f59e0b","Medium"],["#10b981","Low"]].map(([c,l])=>(
+            <div key={l} style={{display:"flex",gap:4,alignItems:"center",fontSize:10,color:"var(--mut)"}}>
+              <div style={{width:10,height:10,borderRadius:2,background:c+"33",border:"1px solid "+c}}/>
+              {l}
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
+  // ══════════════════════════════════════════════
   // PLANNER + REMINDERS
   // ══════════════════════════════════════════════
   const Planner = () => {
@@ -4481,7 +4543,7 @@ export default function CRM({ currentUser, onLogout }) {
 
         {/* View toggle */}
         <div style={{display:"flex",gap:6,marginBottom:12}}>
-          {[["today","📅 Aaj"],["upcoming","📆 Upcoming"],["all","📋 Sab"]].map(([v,l])=>(
+          {[["today","📅 Aaj"],["upcoming","📆 Upcoming"],["all","📋 Sab"],["calendar","🗓️ Calendar"]].map(([v,l])=>(
             <button key={v} className={`btn btn-sm ${view===v?"btn-p":"btn-o"}`}
               onClick={()=>setView(v)}>{l}</button>
           ))}
@@ -4517,10 +4579,15 @@ export default function CRM({ currentUser, onLogout }) {
                 {upcoming.map(t=><TaskCard key={t.id} task={t}/>)}
               </div>
             )}
-            {tasks.length===0&&!loading&&(
+            {tasks.length===0&&!loading&&view!=="calendar"&&(
               <div className="card empty"><p>Koi task nahi — "Add Task" dabao!</p></div>
             )}
           </div>
+        )}
+
+        {/* ── CALENDAR VIEW ── */}
+        {view==="calendar"&&(
+          <CalendarView tasks={tasks} calMonth={calMonth} calYear={calYear} setCalMonth={setCalMonth} setCalYear={setCalYear}/>
         )}
       </div>
     );
