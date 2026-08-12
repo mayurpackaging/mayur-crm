@@ -4,7 +4,7 @@ import { Plus, Search, X, Eye, CheckCircle, Loader, Printer, Trash2, Edit } from
 import { sbFetch, sbGet, sbGetPay, sbGetProducts, sbGetOrders, sbGetAllOrders, sbGetOrderItems, sbGetTargets, sbInsert, sbPatch, sbDelete } from "../lib/supabase";
 
 /* ─── HELPERS ─────────────────────────────────────── */
-const fd  = s => s ? new Date(s).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"}) : "—";
+const fd  = s => s ? new Date(s).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit",timeZone:"Asia/Kolkata"}) : "—";
 const fr  = n => n!=null && n!=="" ? "₹"+Number(n).toLocaleString("en-IN") : "₹0";
 const ini = s => s?.split(" ").map(w=>w[0]).join("").toUpperCase().slice(0,2)||"?";
 const AVC = ["#f59e0b","#10b981","#3b82f6","#8b5cf6","#ef4444","#06b6d4","#f97316"];
@@ -1711,7 +1711,7 @@ export default function CRM({ currentUser, onLogout }) {
                       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                         <span style={{fontSize:11,color:TC[i.type],fontWeight:700,textTransform:"capitalize"}}>{i.type}</span>
                         <div style={{display:"flex",gap:6,alignItems:"center"}}>
-                          <span style={{fontSize:10,color:"var(--mut)"}}>{fd(i.created_at)} {i.created_at?new Date(i.created_at).toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit",hour12:true}):""} · {i.done_by}</span>
+                          <span style={{fontSize:10,color:"var(--mut)"}}>{fd(i.created_at)} {i.created_at?new Date(i.created_at).toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit",hour12:true,timeZone:"Asia/Kolkata"}):""} · {i.done_by}</span>
                           {isAdmin&&<>
                             <button onClick={()=>{setForm({...i,customer_id:selId});setModal("ainter");}} style={{padding:"1px 6px",borderRadius:4,fontSize:9,border:"1px solid var(--bdr)",background:"transparent",cursor:"pointer"}}>✏️</button>
                             <button onClick={async()=>{if(!window.confirm("Delete?"))return;await sbFetch("crm_interactions?id=eq."+i.id,{method:"DELETE"});setI(p=>p.filter(x=>x.id!==i.id));toast$("Deleted!");}} style={{padding:"1px 6px",borderRadius:4,fontSize:9,border:"1px solid #ef4444",background:"transparent",color:"#ef4444",cursor:"pointer"}}>🗑</button>
