@@ -4255,7 +4255,9 @@ export default function CRM({ currentUser, onLogout }) {
   // ══════════════════════════════════════════════
   // CALENDAR VIEW COMPONENT
   // ══════════════════════════════════════════════
-  const CalendarView = ({tasks, calMonth, calYear, setCalMonth, setCalYear}) => {
+  const CalendarView = ({tasks}) => {
+    const [calMonth, setCalMonth] = useState(new Date().getMonth());
+    const [calYear, setCalYear] = useState(new Date().getFullYear());
     const months=["January","February","March","April","May","June","July","August","September","October","November","December"];
     const days=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
     const firstDay=new Date(calYear,calMonth,1).getDay();
@@ -4587,7 +4589,7 @@ export default function CRM({ currentUser, onLogout }) {
 
         {/* ── CALENDAR VIEW ── */}
         {view==="calendar"&&(
-          <CalendarView tasks={tasks} calMonth={calMonth} calYear={calYear} setCalMonth={setCalMonth} setCalYear={setCalYear}/>
+          <CalendarView tasks={tasks}/>
         )}
       </div>
     );
