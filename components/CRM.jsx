@@ -1922,8 +1922,8 @@ export default function CRM({ currentUser, onLogout }) {
     const gst=selOrder.gst_type==="including"?0:Math.round(subtotal*0.18);
     const grandTotalPro=subtotal+epr+freight+freightGstAmt+gst;
     return (
-      <div className="ov" onClick={closeM}>
-        <div className="mod mod-lg" onClick={e=>e.stopPropagation()}>
+      <div className="ov">
+        <div className="mod mod-lg" onClick={e=>e.stopPropagation()} style={{maxHeight:"92vh",overflowY:"auto"}}>
           <div className="mod-ttl">
             <span>📄 Proforma Invoice</span>
             <div style={{display:"flex",gap:8}}>
@@ -6053,6 +6053,44 @@ export default function CRM({ currentUser, onLogout }) {
             </div>
           ))}
         </div>
+
+        {/* ── NAI LEADS TODAY ── */}
+        {(()=>{
+          const todayStr = new Date().toISOString().slice(0,10);
+          const newLeads = myParties.filter(c=>{
+            const created = c.created_at?.slice(0,10);
+            return created===todayStr;
+          });
+          if(newLeads.length===0) return null;
+          return (
+            <div style={{marginBottom:14,background:"rgba(245,158,11,.08)",border:"2px solid #f59e0b",borderRadius:12,padding:14}}>
+              <div style={{fontWeight:800,fontSize:14,color:"#f59e0b",marginBottom:10}}>
+                🌟 Aaj Ki Nai Leads ({newLeads.length})
+                <span style={{fontSize:11,fontWeight:400,color:"var(--mut)",marginLeft:8}}>Nitin bhai ne aaj assign ki hain</span>
+              </div>
+              {newLeads.map((c,i)=>(
+                <div key={i} style={{background:"var(--card)",borderRadius:10,padding:"10px 14px",
+                  marginBottom:8,display:"flex",gap:10,alignItems:"center",
+                  border:"1px solid rgba(245,158,11,.3)"}}>
+                  <div style={{width:32,height:32,borderRadius:"50%",background:"#f59e0b",
+                    display:"flex",alignItems:"center",justifyContent:"center",
+                    fontWeight:800,fontSize:12,color:"#fff",flexShrink:0}}>🆕</div>
+                  <div style={{flex:1}}>
+                    <div style={{fontWeight:700,fontSize:13}}>{c.company||c.name}</div>
+                    <div style={{fontSize:11,color:"var(--mut)",marginTop:2}}>
+                      {c.city&&c.city+" · "}{c.phone||"No phone"} · {c.type?.toUpperCase()}
+                      {c.discount_per_ctn>0&&<span style={{marginLeft:8,color:"#f59e0b",fontWeight:700}}>🏷️ ₹{c.discount_per_ctn}/ctn</span>}
+                    </div>
+                  </div>
+                  <div style={{display:"flex",gap:6}}>
+                    <button className="btn btn-o btn-sm" onClick={()=>openC(c.id)}>👁 View</button>
+                    <button className="btn btn-p btn-sm" onClick={()=>{setForm({customer_id:c.id,done_by:myName});setModal("ainter");}}>📝 Log Call</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          );
+        })()}
 
         {/* ── CALLING LIST ── */}
         <div className="card" style={{padding:0}}>
