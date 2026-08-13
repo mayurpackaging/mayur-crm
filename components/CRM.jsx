@@ -6192,155 +6192,180 @@ export default function CRM({ currentUser, onLogout }) {
   // STOCK MANAGEMENT
   // ══════════════════════════════════════════════
   const StockMgmt = () => {
-    const [sForm, setSForm] = useState({product_id:"", product_name:"", sku_code:"", packed_qty:0, unpacked_qty:0});
+    const [stockEdit, setStockEdit] = useState({}); // {product_id: {packed, unpacked}}
     const [saving, setSaving] = useState(false);
-    const [editId, setEditId] = useState(null);
+    const [saved, setSaved] = useState({});
+    const [stockQ, setStockQ] = useState("");
 
-    const saveStock = async() => {
-      if(!sForm.product_id) return toast$("Product select karo", true);
-      setSaving(true);
+    // Init editable values from STOCK
+    React.useEffect(()=>{
+      const init={};
+      STOCK.forEach(s=>{init[s.product_id]={packed:s.packed_qty||0,unpacked:s.unpacked_qty||0,id:s.id};});
+      setStockEdit(init);
+    },[STOCK]);
+
+    const saveRow = async(prod) => {
+      const val = stockEdit[prod.id]||{packed:0,unpacked:0};
+      setSaving(prod.id);
       try {
-        const existing = STOCK.find(s=>s.product_id===sForm.product_id);
-        if(existing || editId) {
-          const id = editId || existing.id;
-          await sbFetch("crm_stock?id=eq."+id, {method:"PATCH", body:{
-            packed_qty: Number(sForm.packed_qty)||0,
-            unpacked_qty: Number(sForm.unpacked_qty)||0,
-            updated_at: new Date().toISOString(),
-            updated_by: myName
+        const existing = STOCK.find(s=>s.product_id===prod.id);
+        if(existing) {
+          await sbFetch("crm_stock?id=eq."+existing.id, {method:"PATCH", body:{
+            packed_qty:Number(val.packed)||0, unpacked_qty:Number(val.unpacked)||0,
+            updated_at:new Date().toISOString(), updated_by:myName
           }});
-          setSTOCK(p=>p.map(s=>s.id===id?{...s,...sForm,updated_by:myName}:s));
-          toast$("Stock updated ✓");
+          setSTOCK(p=>p.map(s=>s.id===existing.id?{...s,packed_qty:Number(val.packed)||0,unpacked_qty:Number(val.unpacked)||0,updated_by:myName,updated_at:new Date().toISOString()}:s));
         } else {
           const r = await sbFetch("crm_stock", {method:"POST", body:{
-            product_id: sForm.product_id,
-            product_name: sForm.product_name,
-            sku_code: sForm.sku_code,
-            packed_qty: Number(sForm.packed_qty)||0,
-            unpacked_qty: Number(sForm.unpacked_qty)||0,
-            updated_by: myName
+            product_id:prod.id, product_name:prod.name, sku_code:prod.sku_code||"",
+            packed_qty:Number(val.packed)||0, unpacked_qty:Number(val.unpacked)||0, updated_by:myName
           }});
-          setSTOCK(p=>[...(r||[]),  ...p]);
-          toast$("Stock add ✓");
+          if(r&&r[0]) setSTOCK(p=>[r[0],...p]);
         }
-        setSForm({product_id:"",product_name:"",sku_code:"",packed_qty:0,unpacked_qty:0});
-        setEditId(null);
-      } catch(e){ toast$("Error: "+e.message, true); }
-      setSaving(false);
+        setSaved(p=>({...p,[prod.id]:true}));
+        setTimeout(()=>setSaved(p=>({...p,[prod.id]:false})),2000);
+        toast$("✓ "+prod.name);
+      } catch(e){ toast$("Error",true); }
+      setSaving(null);
     };
 
-    const totalPacked = STOCK.reduce((s,x)=>s+(Number(x.packed_qty)||0), 0);
-    const totalUnpacked = STOCK.reduce((s,x)=>s+(Number(x.unpacked_qty)||0), 0);
-    const lowStock = STOCK.filter(s=>(s.packed_qty||0)<500);
+    const saveAll = async() => {
+      setSaving("all");
+      let count=0;
+      for(const prod of PRODS) {
+        const val = stockEdit[prod.id];
+        if(!val) continue;
+        try {
+          const existing = STOCK.find(s=>s.product_id===prod.id);
+          if(existing) {
+            await sbFetch("crm_stock?id=eq."+existing.id, {method:"PATCH", body:{
+              packed_qty:Number(val.packed)||0, unpacked_qty:Number(val.unpacked)||0,
+              updated_at:new Date().toISOString(), updated_by:myName
+            }});
+          } else if(Number(val.packed)>0||Number(val.unpacked)>0) {
+            await sbFetch("crm_stock", {method:"POST", body:{
+              product_id:prod.id, product_name:prod.name, sku_code:prod.sku_code||"",
+              packed_qty:Number(val.packed)||0, unpacked_qty:Number(val.unpacked)||0, updated_by:myName
+            }});
+          }
+          count++;
+        } catch(e){}
+      }
+      const stk = await sbFetch("crm_stock?order=product_name.asc");
+      setSTOCK(stk||[]);
+      toast$("✅ "+count+" items saved!");
+      setSaving(null);
+    };
+
+    const totalPacked = Object.values(stockEdit).reduce((s,v)=>s+(Number(v.packed)||0),0);
+    const totalUnpacked = Object.values(stockEdit).reduce((s,v)=>s+(Number(v.unpacked)||0),0);
+    const filtPRODS = PRODS.filter(p=>!stockQ||p.name.toLowerCase().includes(stockQ.toLowerCase())||p.sku_code?.toLowerCase().includes(stockQ.toLowerCase()));
 
     return (
       <div>
         <div className="sh">
           <div>
             <div className="sh-t">📦 Stock Management</div>
-            <div className="sh-s">Packed aur Unpacked stock daily update karo</div>
+            <div className="sh-s">Saare products ki stock ek saath update karo</div>
           </div>
+          {isAdmin&&<button className="btn btn-p" disabled={saving==="all"} onClick={saveAll}>
+            {saving==="all"?"Saving...":"💾 Save All"}
+          </button>}
         </div>
 
-        {/* Summary cards */}
+        {/* Summary */}
         <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10,marginBottom:14}}>
           {[
-            ["📦 Total Packed", totalPacked.toLocaleString()+" pcs", "Ready to dispatch", "#10b981"],
-            ["🔧 Total Unpacked", totalUnpacked.toLocaleString()+" pcs", "In production", "#f59e0b"],
-            ["⚠️ Low Stock Items", lowStock.length, "Below 500 pcs packed", "#ef4444"],
-          ].map(([lbl,val,sub,c])=>(
+            ["📦 Total Packed", totalPacked.toLocaleString()+" pcs", "#10b981"],
+            ["🔧 Total Unpacked", totalUnpacked.toLocaleString()+" pcs", "#f59e0b"],
+            ["⚠️ Low Stock", Object.values(stockEdit).filter(v=>Number(v.packed)<500).length+" items", "#ef4444"],
+          ].map(([lbl,val,c])=>(
             <div key={lbl} style={{background:c+"11",border:"1px solid "+c+"33",borderRadius:10,padding:12,textAlign:"center"}}>
               <div style={{fontSize:10,color:"var(--mut)",marginBottom:4}}>{lbl}</div>
               <div style={{fontSize:20,fontWeight:800,color:c}}>{val}</div>
-              <div style={{fontSize:10,color:"var(--mut)"}}>{sub}</div>
             </div>
           ))}
         </div>
 
-        {/* Add/Edit stock */}
-        {isAdmin&&(
-          <div className="card" style={{marginBottom:14}}>
-            <div style={{fontWeight:700,fontSize:13,marginBottom:12}}>
-              {editId?"✏️ Update Stock":"➕ Stock Entry"}
-            </div>
-            <div style={{display:"grid",gridTemplateColumns:"2fr 1fr 1fr auto",gap:10,alignItems:"flex-end"}}>
-              <div>
-                <label className="lbl">Product *</label>
-                <select className="inp" value={sForm.product_id||""} onChange={e=>{
-                  const prod = PRODS.find(p=>p.id===e.target.value);
-                  setSForm({...sForm, product_id:e.target.value, product_name:prod?.name||"", sku_code:prod?.sku_code||""});
-                }}>
-                  <option value="">-- Product Select Karo --</option>
-                  {PRODS.map(p=><option key={p.id} value={p.id}>{p.name} ({p.sku_code})</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="lbl">Packed Qty (pcs)</label>
-                <input type="number" className="inp" placeholder="0" value={sForm.packed_qty||""} onChange={e=>setSForm({...sForm,packed_qty:e.target.value})}/>
-              </div>
-              <div>
-                <label className="lbl">Unpacked Qty (pcs)</label>
-                <input type="number" className="inp" placeholder="0" value={sForm.unpacked_qty||""} onChange={e=>setSForm({...sForm,unpacked_qty:e.target.value})}/>
-              </div>
-              <div>
-                <button className="btn btn-p" disabled={saving} onClick={saveStock}>{saving?"...":"Save"}</button>
-              </div>
-            </div>
-          </div>
-        )}
+        {/* Search */}
+        <div className="sr" style={{marginBottom:10}}>
+          <Search size={13} className="sr-ic"/>
+          <input className="inp" placeholder="Product search..." value={stockQ} onChange={e=>setStockQ(e.target.value)}/>
+        </div>
 
-        {/* Stock table */}
+        {/* All products table with inline edit */}
         <div className="card" style={{padding:0}}>
-          <div style={{padding:"12px 16px",fontWeight:700,fontSize:13,borderBottom:"1px solid var(--bdr)"}}>
-            📋 Current Stock — {STOCK.length} items
+          <div style={{padding:"10px 16px",background:"var(--card2)",borderBottom:"1px solid var(--bdr)",
+            display:"flex",gap:8,alignItems:"center",fontSize:11,color:"var(--mut)"}}>
+            <span style={{fontWeight:700,color:"var(--txt)"}}>💡 Tip:</span> Numbers type karo → Row ke save button dabao → Ya upar "Save All" dabao
           </div>
-          {STOCK.length===0?(
-            <div style={{padding:24,textAlign:"center",color:"var(--mut)"}}>
-              {isAdmin?"Stock entry karo upar se":"Koi stock data nahi"}
-            </div>
-          ):(
+          <div style={{overflowX:"auto"}}>
             <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
               <thead>
                 <tr style={{background:"var(--card2)"}}>
-                  {["Product","SKU","📦 Packed","🔧 Unpacked","Total","Status","Updated",""].map(h=>(
-                    <th key={h} style={{padding:"8px 10px",fontSize:10,color:"var(--mut)",textAlign:h==="Product"||h===""?"left":"center"}}>{h}</th>
+                  {["#","Product","SKU","📦 Packed (pcs)","🔧 Unpacked (pcs)","Total","Status","Save"].map(h=>(
+                    <th key={h} style={{padding:"8px 10px",fontSize:10,color:"var(--mut)",
+                      textAlign:h==="Product"||h==="#"?"left":"center",whiteSpace:"nowrap"}}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {STOCK.map(s=>{
-                  const total = (s.packed_qty||0)+(s.unpacked_qty||0);
-                  const isLow = (s.packed_qty||0)<500;
+                {filtPRODS.map((prod,idx)=>{
+                  const val = stockEdit[prod.id]||{packed:0,unpacked:0};
+                  const total = (Number(val.packed)||0)+(Number(val.unpacked)||0);
+                  const isLow = (Number(val.packed)||0)<500;
+                  const isSavedNow = saved[prod.id];
                   return (
-                    <tr key={s.id} style={{borderBottom:"1px solid var(--bdr)",background:isLow?"rgba(239,68,68,.03)":"transparent"}}>
-                      <td style={{padding:"10px",fontWeight:600}}>{s.product_name}</td>
-                      <td style={{padding:"10px",textAlign:"center",color:"var(--mut)",fontSize:10}}>{s.sku_code}</td>
-                      <td style={{padding:"10px",textAlign:"center",fontWeight:800,color:s.packed_qty>0?"#10b981":"#ef4444"}}>
-                        {(s.packed_qty||0).toLocaleString()}
+                    <tr key={prod.id} style={{borderBottom:"1px solid var(--bdr)",
+                      background:isSavedNow?"rgba(16,185,129,.06)":isLow&&total>0?"rgba(239,68,68,.03)":"transparent"}}>
+                      <td style={{padding:"6px 10px",color:"var(--mut)",fontSize:10}}>{idx+1}</td>
+                      <td style={{padding:"6px 10px",fontWeight:600,fontSize:11}}>{prod.name}</td>
+                      <td style={{padding:"6px 10px",color:"var(--mut)",fontSize:10}}>{prod.sku_code}</td>
+                      <td style={{padding:"6px 8px",textAlign:"center"}}>
+                        {isAdmin?(
+                          <input type="number" min="0"
+                            value={val.packed||""}
+                            placeholder="0"
+                            onChange={e=>setStockEdit(p=>({...p,[prod.id]:{...val,packed:e.target.value}}))}
+                            style={{width:90,padding:"4px 8px",borderRadius:6,border:"1px solid var(--bdr)",
+                              textAlign:"center",fontSize:12,background:"var(--bg)",color:"inherit",
+                              borderColor:(Number(val.packed)||0)>0?"#10b981":"var(--bdr)"}}/>
+                        ):<span style={{fontWeight:700,color:(Number(val.packed)||0)>0?"#10b981":"#ef4444"}}>{(Number(val.packed)||0).toLocaleString()}</span>}
                       </td>
-                      <td style={{padding:"10px",textAlign:"center",fontWeight:700,color:"#f59e0b"}}>
-                        {(s.unpacked_qty||0).toLocaleString()}
+                      <td style={{padding:"6px 8px",textAlign:"center"}}>
+                        {isAdmin?(
+                          <input type="number" min="0"
+                            value={val.unpacked||""}
+                            placeholder="0"
+                            onChange={e=>setStockEdit(p=>({...p,[prod.id]:{...val,unpacked:e.target.value}}))}
+                            style={{width:90,padding:"4px 8px",borderRadius:6,border:"1px solid var(--bdr)",
+                              textAlign:"center",fontSize:12,background:"var(--bg)",color:"inherit",
+                              borderColor:(Number(val.unpacked)||0)>0?"#f59e0b":"var(--bdr)"}}/>
+                        ):<span style={{fontWeight:700,color:"#f59e0b"}}>{(Number(val.unpacked)||0).toLocaleString()}</span>}
                       </td>
-                      <td style={{padding:"10px",textAlign:"center",fontWeight:600}}>{total.toLocaleString()}</td>
-                      <td style={{padding:"10px",textAlign:"center"}}>
-                        {isLow
-                          ?<span style={{fontSize:10,background:"rgba(239,68,68,.1)",color:"#ef4444",padding:"2px 8px",borderRadius:6,fontWeight:700}}>⚠️ Low</span>
-                          :<span style={{fontSize:10,background:"rgba(16,185,129,.1)",color:"#10b981",padding:"2px 8px",borderRadius:6,fontWeight:700}}>✅ OK</span>
-                        }
+                      <td style={{padding:"6px 10px",textAlign:"center",fontWeight:600}}>{total>0?total.toLocaleString():"—"}</td>
+                      <td style={{padding:"6px 10px",textAlign:"center"}}>
+                        {total>0?(isLow
+                          ?<span style={{fontSize:10,background:"rgba(239,68,68,.1)",color:"#ef4444",padding:"2px 6px",borderRadius:6,fontWeight:700}}>⚠️ Low</span>
+                          :<span style={{fontSize:10,background:"rgba(16,185,129,.1)",color:"#10b981",padding:"2px 6px",borderRadius:6,fontWeight:700}}>✅ OK</span>
+                        ):<span style={{color:"var(--mut)",fontSize:10}}>—</span>}
                       </td>
-                      <td style={{padding:"10px",textAlign:"center",fontSize:10,color:"var(--mut)"}}>
-                        {s.updated_by&&<div>{s.updated_by}</div>}
-                        {s.updated_at&&<div>{new Date(s.updated_at).toLocaleDateString("en-IN")}</div>}
-                      </td>
-                      <td style={{padding:"10px"}}>
-                        {isAdmin&&<button className="btn btn-o btn-sm" onClick={()=>{setEditId(s.id);setSForm({product_id:s.product_id,product_name:s.product_name,sku_code:s.sku_code,packed_qty:s.packed_qty||0,unpacked_qty:s.unpacked_qty||0});}}>✏️</button>}
+                      <td style={{padding:"6px 8px",textAlign:"center"}}>
+                        {isAdmin&&(
+                          isSavedNow
+                            ?<span style={{color:"#10b981",fontWeight:700,fontSize:11}}>✓</span>
+                            :<button className="btn btn-o btn-sm" disabled={saving===prod.id}
+                              onClick={()=>saveRow(prod)}>
+                              {saving===prod.id?"...":"Save"}
+                            </button>
+                        )}
                       </td>
                     </tr>
                   );
                 })}
               </tbody>
             </table>
-          )}
+          </div>
         </div>
       </div>
     );
