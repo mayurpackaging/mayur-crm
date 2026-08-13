@@ -6445,21 +6445,7 @@ export default function CRM({ currentUser, onLogout }) {
     const generateDigest = async()=>{
       setAiLoad(true);
       try {
-        const context = "Today "+today+" sales activity summary:
-
-"+
-          repStats.filter(r=>r.todayI.length>0||r.todayO.length>0).map(r=>
-            r.name+": "+r.todayI.length+" interactions ("+r.calls+" calls, "+r.visits+" visits, "+r.wa+" WA), "+
-            r.todayO.length+" orders. KPI: "+r.kpiScore+"/100. "+
-            "Notes: "+r.notes
-          ).join("
-")+
-          "
-
-Party-wise: "+partyDigest.map(p=>
-            p.name+" ("+p.company+"): "+p.interactions.map(i=>i.type+": "+i.note?.slice(0,60)).join("; ")+
-            (p.hasOrder?" [ORDER PLACED]":"")
-          ).join(" | ");
+        const context = "Today "+today+" summary: "+repStats.filter(r=>r.todayI.length>0||r.todayO.length>0).map(r=>r.name+": "+r.todayI.length+" interactions ("+r.calls+" calls, "+r.visits+" visits, "+r.wa+" WA), "+r.todayO.length+" orders, KPI: "+r.kpiScore+"/100. Notes: "+r.notes).join(". ")+" Party-wise: "+partyDigest.map(p=>p.name+" ("+p.company+"): "+p.interactions.map(i=>i.type+": "+(i.note||"").slice(0,50)).join("; ")+(p.hasOrder?" [ORDER PLACED]":"")).join(" | ");
 
         const res = await fetch("/api/ai-polish",{method:"POST",headers:{"Content-Type":"application/json"},
           body:JSON.stringify({text:context,type:"exec_digest"})});
