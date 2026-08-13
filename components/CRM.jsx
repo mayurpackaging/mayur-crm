@@ -437,7 +437,16 @@ export default function CRM({ currentUser, onLogout }) {
 
   const printProforma = () => {
     if(!selOrder) return;
-    openPI(selOrder);
+    const w = window.open("","_blank");
+    if(!w){toast$("Popup blocked! Browser mein allow karo",true);return;}
+    const subtotal=selOrder?.items?.reduce((s,i)=>s+(Number(i.amount)||0),0)||0;
+    const epr=selOrder?.epr_applied?Math.round(subtotal*0.01):0;
+    const freight=Number(selOrder?.freight)||0;
+    const freightGstAmt=Number(selOrder?.freight_gst)||0;
+    const gst=selOrder?.gst_type==="including"?0:Math.round(subtotal*0.18);
+    const grandTotalPro=subtotal+epr+freight+freightGstAmt+gst;
+    w.document.write(getPIHtml(selOrder,subtotal,epr,freight,freightGstAmt,gst,grandTotalPro));
+    w.document.close();
   };
 
   const getPIHtml = (selOrder, subtotal, epr, freight, freightGstAmt, gst, grandTotal) => {
@@ -844,22 +853,26 @@ export default function CRM({ currentUser, onLogout }) {
                       <div style={{fontSize:15,fontWeight:800,color:"#10b981"}}>{fr(o.total_amount)}</div>
                       <button className="btn btn-o btn-sm" onClick={async()=>{setForm({...o,epr:!!o.epr_applied});try{const items=await sbGetOrderItems(o.id);setOrderItems(items||[]);}catch(e){setOrderItems([]);}setModal("editorder");}}>✏️</button>
                       <button className="btn btn-o btn-sm" onClick={()=>openOrder(o)} title="Preview PI"><Printer size={11}/></button>
-                      <button className="btn btn-o btn-sm" onClick={async()=>{
-                        try {
-                          const w=window.open("","_blank");
-                          if(!w){toast$("Popup blocked! Browser mein allow karo",true);return;}
-                          const items=await sbGetOrderItems(o.id);
-                          const custArr=o.customer_id?await sbFetch("crm_customers?id=eq."+o.customer_id+"&select=phone,address,gst_no"):[];
-                          const ord={...o,items:items||[],customerData:custArr?.[0]||{}};
-                          const s=(items||[]).reduce((a,i)=>a+(Number(i.amount)||0),0);
-                          const e2=o.epr_applied?Math.round(s*0.01):0;
-                          const f2=Number(o.freight)||0;
-                          const fg2=Number(o.freight_gst)||0;
-                          const g2=o.gst_type==="including"?0:Math.round(s*0.18);
-                          w.document.write(getPIHtml(ord,s,e2,f2,fg2,g2,s+e2+f2+fg2+g2));
-                          w.document.close();
-                        } catch(e){toast$("Error: "+e.message,true);}
-                      }} title="Direct Print PI" style={{background:"var(--acc)",borderColor:"var(--acc)",color:"#fff"}}>
+                      <button className="btn btn-o btn-sm" onClick={()=>{
+                        // window.open MUST be first — before any async
+                        const w=window.open("","_blank");
+                        if(!w){toast$("Popup blocked!",true);return;}
+                        w.document.write("<html><body><h3>Loading PI...</h3></body></html>");
+                        sbGetOrderItems(o.id).then(items=>{
+                          const custP = o.customer_id?sbFetch("crm_customers?id=eq."+o.customer_id+"&select=phone,address,gst_no"):Promise.resolve([]);
+                          custP.then(custArr=>{
+                            const ord={...o,items:items||[],customerData:custArr?.[0]||{}};
+                            const s=(items||[]).reduce((a,i)=>a+(Number(i.amount)||0),0);
+                            const e2=o.epr_applied?Math.round(s*0.01):0;
+                            const f2=Number(o.freight)||0;
+                            const fg2=Number(o.freight_gst)||0;
+                            const g2=o.gst_type==="including"?0:Math.round(s*0.18);
+                            w.document.open();
+                            w.document.write(getPIHtml(ord,s,e2,f2,fg2,g2,s+e2+f2+fg2+g2));
+                            w.document.close();
+                          });
+                        });
+                      }} title="Print PI in New Tab" style={{background:"var(--acc)",borderColor:"var(--acc)",color:"#fff"}}>
                         🖨️
                       </button>
                       {isAdmin&&<button onClick={async(e)=>{e.stopPropagation();if(!window.confirm("Delete order?"))return;await sbFetch("crm_order_items?order_id=eq."+o.id,{method:"DELETE"});await sbFetch("crm_orders?id=eq."+o.id,{method:"DELETE"});setORDERS(p=>p.filter(x=>x.id!==o.id));toast$("Order deleted!");}} style={{padding:"3px 7px",borderRadius:5,fontSize:10,border:"1px solid #ef4444",background:"transparent",color:"#ef4444",cursor:"pointer"}}>🗑</button>}
