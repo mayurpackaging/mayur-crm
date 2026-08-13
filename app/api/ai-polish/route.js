@@ -15,33 +15,73 @@ export async function POST(request) {
     const { text, type } = await request.json();
     if (!text) return Response.json({ error: "No text" }, { status: 400 });
 
-    const prompts = {
-      note: "Aap ek professional CRM assistant ho. User ne jo sales note likha hai usse professional Hinglish mein rewrite karo. Saare facts, numbers, dates waise hi rakho. Sirf polished note output karo.",
-      followup: "Ye follow-up note professional Hinglish mein rewrite karo. Dates aur specifics waise hi rakho. Sirf note output karo.",
-      daily_summary: "Aap Mayur Food Packaging ke sales manager ho. Daily sales report ka professional Hinglish summary likho. Include: 1) Aaj kya achieve hua 2) Key highlights numbers ke saath 3) Kya nahi hua/gaps 4) Kal ke action items. 300 words se kam.",
-      exec_digest: `Aap Mayur Food Packaging Products ke CEO ho. Aaj ki sales activity ka executive summary Hinglish mein likho.
+    let systemPrompt = "";
 
-Format exactly aisa rakho:
+    if (type === "note") {
+      systemPrompt = `Tum ek sales CRM assistant ho. User ne jo note likha hai usse professional Hinglish mein rewrite karo.
 
-**AAJKA SNAPSHOT**
-[2-3 lines mein overall performance]
+Rules:
+- Hindi aur English naturally mix karo (Hinglish)
+- Tone professional aur clear rakho
+- Saare facts, numbers, dates, party names bilkul waise hi rakho
+- Sirf note output karo — koi explanation, koi heading mat likho
+- 2-3 lines mein compact rakho
 
-**KISAN NE KYA KIYA**
-[Har rep ke liye: naam — X calls, Y visits, Z orders — key observation]
+Example input: "baat ho gyi unse bol rhe hai 2 din baad order denge 500ml ka 100 ctn"
+Example output: "Customer se baat hui. Unhone bataya ki 2 din mein 500ml ka 100 carton order denge."`;
+    } else if (type === "followup") {
+      systemPrompt = `Follow-up note ko professional Hinglish mein rewrite karo.
 
-**KAUNSI PARTIES PROMISING HAIN**
-[Top 3-5 parties jinse order ka chance hai — reason ke saath]
+Rules:
+- Hindi aur English naturally mix karo
+- Dates aur specifics bilkul waise hi rakho
+- Sirf note output karo, kuch extra mat likho
 
-**RED FLAGS**
-[Koi concern — low conversion, missing parties, etc]
+Example input: "kal call karni hai order ke liye"
+Example output: "Kal call karni hai — order confirm karna hai."`;
+    } else if (type === "daily_summary") {
+      systemPrompt = `Mayur Food Packaging ke sales manager ho. Aaj ki sales activity ka summary Hinglish mein likho.
 
-**KAL KE LIYE**
-[3-4 specific action items]
+Format:
+**Aaj Ka Summary**
+[Overall kya hua — 2 lines]
 
-Concise rakho, numbers use karo, Hinglish mein.`
-    };
+**Rep-wise Performance**
+[Har rep: naam — calls/visits/orders — ek key observation]
 
-    const systemPrompt = prompts[type] || prompts.note;
+**Kya Acha Raha**
+[Positives]
+
+**Kya Miss Hua**
+[Gaps aur concerns]
+
+**Kal Ke Liye**
+[3-4 action items]
+
+Concise rakho, numbers use karo.`;
+    } else if (type === "exec_digest") {
+      systemPrompt = `Mayur Food Packaging ke owner ho. Aaj ki sales activity ka executive digest Hinglish mein likho.
+
+Format:
+**Aaj Ka Snapshot**
+[2-3 lines overall]
+
+**Kisne Kya Kiya**
+[Har rep: naam — X calls, Y orders — key observation]
+
+**Promising Parties**
+[Top 3 parties jinse order ka chance hai]
+
+**Red Flags**
+[Concerns agar koi ho]
+
+**Kal Ke Liye**
+[3 specific action items]
+
+Numbers use karo, Hinglish mein, concise rakho.`;
+    } else {
+      systemPrompt = `Text ko professional Hinglish mein rewrite karo. Sirf output do, koi explanation nahi.`;
+    }
 
     const res = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -52,9 +92,9 @@ Concise rakho, numbers use karo, Hinglish mein.`
       },
       body: JSON.stringify({
         model: "claude-haiku-4-5",
-        max_tokens: 1000,
+        max_tokens: 800,
         system: systemPrompt,
-        messages: [{ role: "user", content: text }],
+        messages: [{ role: "user", content: String(text) }],
       }),
     });
 
