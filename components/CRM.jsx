@@ -419,7 +419,73 @@ export default function CRM({ currentUser, onLogout }) {
     catch(e){ toast$(e.message,true); }
   };
 
+  const openPI = (order) => {
+    const ord = order || selOrder;
+    if(!ord) return;
+    const win=window.open("","_blank");
+    if(!win) { toast$("Popup blocked! Browser settings mein allow karo.",true); return; }
+    const subtotal=ord?.items?.reduce((s,i)=>s+(Number(i.amount)||0),0)||0;
+    const epr=ord?.epr_applied?Math.round(subtotal*0.01):0;
+    const freight=Number(ord?.freight)||0;
+    const freightGstAmt=Number(ord?.freight_gst)||0;
+    const gst=ord?.gst_type==="including"?0:Math.round(subtotal*0.18);
+    const grandTotalPro=subtotal+epr+freight+freightGstAmt+gst;
+    win.document.write(getPIHtml(ord, subtotal, epr, freight, freightGstAmt, gst, grandTotalPro));
+    win.document.close();
+    setTimeout(()=>win.print(), 500);
+  };
+
   const printProforma = () => {
+    if(!selOrder) return;
+    openPI(selOrder);
+  };
+
+  const getPIHtml = (selOrder, subtotal, epr, freight, freightGstAmt, gst, grandTotal) => {
+    const win=window.open("","_blank");
+    if(!win) { toast$("Popup blocked!",true); return ""; }
+    win.close();
+    return `<!DOCTYPE html><html><head><title>PI - ${selOrder?.company}</title>
+    <style>
+      body{font-family:Arial,sans-serif;padding:24px;color:#000;font-size:13px;}
+      h2{text-align:center;margin-bottom:4px;}
+      .sub{text-align:center;font-size:12px;margin-bottom:20px;color:#555;}
+      .info{display:flex;justify-content:space-between;margin-bottom:16px;}
+      table{width:100%;border-collapse:collapse;font-size:12px;}
+      th{background:#f59e0b;padding:8px;text-align:left;border:1px solid #ddd;}
+      td{padding:7px 8px;border:1px solid #ddd;}
+      .totals{text-align:right;margin-top:12px;font-size:13px;line-height:2;}
+      .bank{margin-top:16px;padding:12px;background:#f8f9fa;border:1px solid #dee2e6;border-radius:4px;font-size:12px;}
+      .footer{margin-top:20px;font-size:11px;color:#888;border-top:1px solid #ddd;padding-top:10px;}
+      @media print{body{padding:12px;}}
+    </style></head><body>
+    <h2>Shreeja Packaging Industries Pvt. Ltd.</h2>
+    <div class="sub">Mayur Food Packaging Products | Delhi<br/>PROFORMA INVOICE</div>
+    <div class="info">
+      <div><b>To:</b> ${selOrder?.company||""}<br/>${selOrder?.customer_name||""}${selOrder?.customerData?.phone?`<br/>📞 ${selOrder.customerData.phone}`:""}${selOrder?.customerData?.address?`<br/>📍 ${selOrder.customerData.address}`:""}${selOrder?.customerData?.gst_no?`<br/>GST: <b>${selOrder.customerData.gst_no}</b>`:""}</div>
+      <div style="text-align:right"><b>Date:</b> ${selOrder?.order_date||""}<br/><b>Payment:</b> ${(selOrder?.payment_mode||"").replace("_"," ")}</div>
+    </div>
+    <table><thead><tr><th>#</th><th>SKU</th><th>Product</th><th>Packing</th><th>Cases</th><th>Price/Pcs (₹)</th><th>CTN Price (₹)</th><th>Disc(₹)</th><th>Amount (₹)</th></tr></thead>
+    <tbody>${(selOrder?.items||[]).map((item,idx)=>`<tr><td>${idx+1}</td><td>${item.sku_code||""}</td><td>${item.product_name||""}</td><td>${item.packing||""}</td><td>${item.qty_cases||""}</td><td>${item.price_per_pcs||""}</td><td>${item.ctn_price||""}</td><td>${item.discount||0}</td><td><b>₹${Number(item.amount||0).toLocaleString("en-IN")}</b></td></tr>`).join("")}</tbody></table>
+    <div class="totals">
+      Subtotal: ₹${subtotal.toLocaleString("en-IN")}<br/>
+      ${epr>0?`EPR @1%: ₹${epr.toLocaleString("en-IN")}<br/>`:""}
+      ${freight>0?`Freight & Forwarding: ₹${freight.toLocaleString("en-IN")}<br/>`:""}
+      ${freightGstAmt>0?`Freight GST @18%: ₹${freightGstAmt.toLocaleString("en-IN")}<br/>`:""}
+      ${gst>0?`GST @18% (${selOrder?.gst_type==="including"?"Incl.":"Excl."}): ₹${gst.toLocaleString("en-IN")}<br/>`:""}
+      <b style="font-size:15px;">Grand Total: ₹${grandTotal.toLocaleString("en-IN")}</b>
+    </div>
+    ${selOrder?.notes?`<div style="margin-top:10px;font-size:12px;"><b>Notes:</b> ${selOrder.notes}</div>`:""}
+    <div class="bank">
+      <b>Bank Details:</b><br/>
+      Account Name: Shreeja Packaging Industries Pvt. Ltd.<br/>
+      Bank Name: Indian Bank | Account No: 7037726473<br/>
+      IFSC: IDIB000M175 | Branch: Ind MSME Delhi Erstwhile Microstate Branch, Inder Enclave
+    </div>
+    <div class="footer">Payment Terms: As agreed | Computer generated proforma invoice.</div>
+    </body></html>`;
+  };
+
+  const _printProformaOld = () => {
     if(!selOrder) return;
     const win=window.open("","_blank");
     if(!win) { toast$("Popup blocked! Browser settings mein allow karo.",true); return; }
@@ -780,7 +846,21 @@ export default function CRM({ currentUser, onLogout }) {
                     <div style={{display:"flex",gap:6,alignItems:"center"}}>
                       <div style={{fontSize:15,fontWeight:800,color:"#10b981"}}>{fr(o.total_amount)}</div>
                       <button className="btn btn-o btn-sm" onClick={async()=>{setForm({...o,epr:!!o.epr_applied});try{const items=await sbGetOrderItems(o.id);setOrderItems(items||[]);}catch(e){setOrderItems([]);}setModal("editorder");}}>✏️</button>
-                      <button className="btn btn-o btn-sm" onClick={()=>openOrder(o)}><Printer size={11}/></button>
+                      <button className="btn btn-o btn-sm" onClick={()=>openOrder(o)} title="Preview PI"><Printer size={11}/></button>
+                      <button className="btn btn-o btn-sm" onClick={async()=>{
+                        const items=await sbGetOrderItems(o.id);
+                        const custArr=o.customer_id?await sbFetch("crm_customers?id=eq."+o.customer_id+"&select=phone,address,gst_no"):[];
+                        const ord={...o,items:items||[],customerData:custArr?.[0]||{}};
+                        const s=(items||[]).reduce((s,i)=>s+(Number(i.amount)||0),0);
+                        const e2=o.epr_applied?Math.round(s*0.01):0;
+                        const f2=Number(o.freight)||0;
+                        const fg2=Number(o.freight_gst)||0;
+                        const g2=o.gst_type==="including"?0:Math.round(s*0.18);
+                        const w=window.open("","_blank");
+                        if(w){w.document.write(getPIHtml(ord,s,e2,f2,fg2,g2,s+e2+f2+fg2+g2));w.document.close();}
+                      }} title="Direct Print" style={{background:"var(--acc)",borderColor:"var(--acc)",color:"#fff"}}>
+                        🖨️
+                      </button>
                       {isAdmin&&<button onClick={async(e)=>{e.stopPropagation();if(!window.confirm("Delete order?"))return;await sbFetch("crm_order_items?order_id=eq."+o.id,{method:"DELETE"});await sbFetch("crm_orders?id=eq."+o.id,{method:"DELETE"});setORDERS(p=>p.filter(x=>x.id!==o.id));toast$("Order deleted!");}} style={{padding:"3px 7px",borderRadius:5,fontSize:10,border:"1px solid #ef4444",background:"transparent",color:"#ef4444",cursor:"pointer"}}>🗑</button>}
                     </div>
                   </div>
@@ -1927,7 +2007,8 @@ export default function CRM({ currentUser, onLogout }) {
           <div className="mod-ttl">
             <span>📄 Proforma Invoice</span>
             <div style={{display:"flex",gap:8}}>
-              <button className="btn btn-p btn-sm" onClick={printProforma}><Printer size={12}/> Print PI</button>
+              <button className="btn btn-p btn-sm" onClick={()=>openPI(selOrder)}><Printer size={12}/> Print PI</button>
+              <button className="btn btn-o btn-sm" onClick={()=>{const w=window.open("","_blank");if(w){const s=selOrder?.items?.reduce((s,i)=>s+(Number(i.amount)||0),0)||0;const e2=selOrder?.epr_applied?Math.round(s*0.01):0;const f2=Number(selOrder?.freight)||0;const fg2=Number(selOrder?.freight_gst)||0;const g2=selOrder?.gst_type==="including"?0:Math.round(s*0.18);w.document.write(getPIHtml(selOrder,s,e2,f2,fg2,g2,s+e2+f2+fg2+g2));w.document.close();}}}>🔗 New Tab</button>
               <button className="btn btn-o btn-sm" onClick={()=>generateWAMessage(selOrder)} style={{background:"#25D366",color:"#fff",border:"none"}}>💬 WA Message</button>
               <button className="btn btn-o btn-sm" onClick={closeM}><X size={13}/></button>
             </div>
