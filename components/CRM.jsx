@@ -441,9 +441,6 @@ export default function CRM({ currentUser, onLogout }) {
   };
 
   const getPIHtml = (selOrder, subtotal, epr, freight, freightGstAmt, gst, grandTotal) => {
-    const win=window.open("","_blank");
-    if(!win) { toast$("Popup blocked!",true); return ""; }
-    win.close();
     return `<!DOCTYPE html><html><head><title>PI - ${selOrder?.company}</title>
     <style>
       body{font-family:Arial,sans-serif;padding:24px;color:#000;font-size:13px;}
@@ -848,17 +845,21 @@ export default function CRM({ currentUser, onLogout }) {
                       <button className="btn btn-o btn-sm" onClick={async()=>{setForm({...o,epr:!!o.epr_applied});try{const items=await sbGetOrderItems(o.id);setOrderItems(items||[]);}catch(e){setOrderItems([]);}setModal("editorder");}}>✏️</button>
                       <button className="btn btn-o btn-sm" onClick={()=>openOrder(o)} title="Preview PI"><Printer size={11}/></button>
                       <button className="btn btn-o btn-sm" onClick={async()=>{
-                        const items=await sbGetOrderItems(o.id);
-                        const custArr=o.customer_id?await sbFetch("crm_customers?id=eq."+o.customer_id+"&select=phone,address,gst_no"):[];
-                        const ord={...o,items:items||[],customerData:custArr?.[0]||{}};
-                        const s=(items||[]).reduce((s,i)=>s+(Number(i.amount)||0),0);
-                        const e2=o.epr_applied?Math.round(s*0.01):0;
-                        const f2=Number(o.freight)||0;
-                        const fg2=Number(o.freight_gst)||0;
-                        const g2=o.gst_type==="including"?0:Math.round(s*0.18);
-                        const w=window.open("","_blank");
-                        if(w){w.document.write(getPIHtml(ord,s,e2,f2,fg2,g2,s+e2+f2+fg2+g2));w.document.close();}
-                      }} title="Direct Print" style={{background:"var(--acc)",borderColor:"var(--acc)",color:"#fff"}}>
+                        try {
+                          const w=window.open("","_blank");
+                          if(!w){toast$("Popup blocked! Browser mein allow karo",true);return;}
+                          const items=await sbGetOrderItems(o.id);
+                          const custArr=o.customer_id?await sbFetch("crm_customers?id=eq."+o.customer_id+"&select=phone,address,gst_no"):[];
+                          const ord={...o,items:items||[],customerData:custArr?.[0]||{}};
+                          const s=(items||[]).reduce((a,i)=>a+(Number(i.amount)||0),0);
+                          const e2=o.epr_applied?Math.round(s*0.01):0;
+                          const f2=Number(o.freight)||0;
+                          const fg2=Number(o.freight_gst)||0;
+                          const g2=o.gst_type==="including"?0:Math.round(s*0.18);
+                          w.document.write(getPIHtml(ord,s,e2,f2,fg2,g2,s+e2+f2+fg2+g2));
+                          w.document.close();
+                        } catch(e){toast$("Error: "+e.message,true);}
+                      }} title="Direct Print PI" style={{background:"var(--acc)",borderColor:"var(--acc)",color:"#fff"}}>
                         🖨️
                       </button>
                       {isAdmin&&<button onClick={async(e)=>{e.stopPropagation();if(!window.confirm("Delete order?"))return;await sbFetch("crm_order_items?order_id=eq."+o.id,{method:"DELETE"});await sbFetch("crm_orders?id=eq."+o.id,{method:"DELETE"});setORDERS(p=>p.filter(x=>x.id!==o.id));toast$("Order deleted!");}} style={{padding:"3px 7px",borderRadius:5,fontSize:10,border:"1px solid #ef4444",background:"transparent",color:"#ef4444",cursor:"pointer"}}>🗑</button>}
@@ -6137,9 +6138,10 @@ export default function CRM({ currentUser, onLogout }) {
 
         {/* ── NAI LEADS TODAY ── */}
         {(()=>{
-          const todayStr = new Date().toISOString().slice(0,10);
+          const todayStr = new Date().toLocaleDateString("en-CA",{timeZone:"Asia/Kolkata"}); // YYYY-MM-DD IST
           const newLeads = myParties.filter(c=>{
-            const created = c.created_at?.slice(0,10);
+            if(!c.created_at) return false;
+            const created = new Date(c.created_at).toLocaleDateString("en-CA",{timeZone:"Asia/Kolkata"});
             return created===todayStr;
           });
           if(newLeads.length===0) return null;
