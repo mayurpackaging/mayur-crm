@@ -6372,9 +6372,275 @@ export default function CRM({ currentUser, onLogout }) {
   };
 
 
+
+  // ══════════════════════════════════════════════
+  // EXECUTIVE DASHBOARD
+  // ══════════════════════════════════════════════
+  const ExecDash = () => {
+    const [aiDigest, setAiDigest] = useState("");
+    const [aiLoad, setAiLoad] = useState(false);
+    const [lastRefresh, setLastRefresh] = useState(new Date());
+    const today = new Date().toISOString().slice(0,10);
+    const curMonth = String(new Date().getMonth()+1).padStart(2,"0");
+    const curYear = new Date().getFullYear();
+    const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
+    // Auto refresh every 5 minutes
+    useEffect(()=>{
+      const timer = setInterval(()=>setLastRefresh(new Date()), 5*60*1000);
+      return ()=>clearInterval(timer);
+    },[]);
+
+    // Today's data per rep
+    const repStats = USERS.filter(u=>u.role==="sales"||u.role==="admin").map(u=>{
+      const todayI = I.filter(i=>i.created_at?.startsWith(today)&&i.done_by===u.name);
+      const todayO = ORDERS.filter(o=>o.order_date===today&&o.created_by===u.name);
+      const monthI = I.filter(i=>i.created_at?.startsWith(curYear+"-"+curMonth)&&i.done_by===u.name);
+      const monthO = ORDERS.filter(o=>o.order_date?.startsWith(curYear+"-"+curMonth)&&o.created_by===u.name);
+      const monthRev = monthO.reduce((s,o)=>s+(Number(o.total_amount)||0),0);
+      const tgt = TARGETS.find(t=>t.user_name===u.name&&t.month===curMonth&&t.year===curYear);
+      const tgtAmt = Number(tgt?.target_amount||0);
+      const assigned = myC.filter(c=>c.assigned_to===u.name||c.sales_rep===u.name).length;
+      const calledToday = new Set(todayI.map(i=>i.customer_id)).size;
+      const convRate = calledToday>0?Math.round((todayO.length/calledToday)*100):0;
+      const achPct = tgtAmt>0?Math.round(monthRev/tgtAmt*100):null;
+
+      // KPI Score (0-100)
+      let kpiScore = 0;
+      if(todayI.length>=10) kpiScore+=25; else kpiScore+=Math.round(todayI.length/10*25);
+      if(todayO.length>=2) kpiScore+=25; else kpiScore+=Math.round(todayO.length/2*25);
+      if(achPct!==null){ if(achPct>=100) kpiScore+=50; else kpiScore+=Math.round(achPct/100*50); }
+      else if(monthI.length>=50) kpiScore+=25;
+
+      return {name:u.name, todayI, todayO, monthI, monthO, monthRev, tgtAmt, achPct, assigned, calledToday, convRate, kpiScore,
+        calls:todayI.filter(i=>i.type==="call").length,
+        visits:todayI.filter(i=>i.type==="visit").length,
+        wa:todayI.filter(i=>i.type==="whatsapp").length,
+        notes:todayI.slice(0,3).map(i=>i.customer_name+": "+i.note?.slice(0,50)).join(" | ")
+      };
+    });
+
+    // Overall today
+    const totalCalls = repStats.reduce((s,r)=>s+r.calls,0);
+    const totalVisits = repStats.reduce((s,r)=>s+r.visits,0);
+    const totalOrders = repStats.reduce((s,r)=>s+r.todayO.length,0);
+    const totalContacted = repStats.reduce((s,r)=>s+r.calledToday,0);
+    const overallConv = totalContacted>0?Math.round(totalOrders/totalContacted*100):0;
+
+    // Party-wise today digest
+    const todayAllI = I.filter(i=>i.created_at?.startsWith(today));
+    const partyDigest = Object.values(
+      todayAllI.reduce((acc,i)=>{
+        if(!acc[i.customer_id]) acc[i.customer_id]={name:i.customer_name,company:i.company,interactions:[],hasOrder:false};
+        acc[i.customer_id].interactions.push(i);
+        return acc;
+      },{})
+    ).slice(0,15);
+
+    // Add order flag
+    partyDigest.forEach(p=>{
+      p.hasOrder = ORDERS.some(o=>o.order_date===today&&(o.customer_id===p.interactions[0]?.customer_id||o.company===p.company));
+    });
+
+    const generateDigest = async()=>{
+      setAiLoad(true);
+      try {
+        const context = "Today "+today+" sales activity summary:
+
+"+
+          repStats.filter(r=>r.todayI.length>0||r.todayO.length>0).map(r=>
+            r.name+": "+r.todayI.length+" interactions ("+r.calls+" calls, "+r.visits+" visits, "+r.wa+" WA), "+
+            r.todayO.length+" orders. KPI: "+r.kpiScore+"/100. "+
+            "Notes: "+r.notes
+          ).join("
+")+
+          "
+
+Party-wise: "+partyDigest.map(p=>
+            p.name+" ("+p.company+"): "+p.interactions.map(i=>i.type+": "+i.note?.slice(0,60)).join("; ")+
+            (p.hasOrder?" [ORDER PLACED]":"")
+          ).join(" | ");
+
+        const res = await fetch("/api/ai-polish",{method:"POST",headers:{"Content-Type":"application/json"},
+          body:JSON.stringify({text:context,type:"exec_digest"})});
+        const d = await res.json();
+        setAiDigest(d.polished||"");
+      } catch(e){}
+      setAiLoad(false);
+    };
+
+    const KPIBar = ({score}) => {
+      const c = score>=80?"#10b981":score>=60?"#f59e0b":score>=40?"#f97316":"#ef4444";
+      const lbl = score>=80?"🔥 Excellent":score>=60?"✅ Good":score>=40?"⚡ Average":"📉 Low";
+      return (
+        <div>
+          <div style={{display:"flex",justifyContent:"space-between",fontSize:10,marginBottom:3}}>
+            <span style={{color:c,fontWeight:700}}>{lbl}</span>
+            <span style={{fontWeight:800,color:c}}>{score}/100</span>
+          </div>
+          <div style={{height:6,background:"var(--card2)",borderRadius:3,overflow:"hidden"}}>
+            <div style={{height:"100%",width:score+"%",background:c,borderRadius:3,transition:"width .5s"}}/>
+          </div>
+        </div>
+      );
+    };
+
+    return (
+      <div>
+        <div className="sh">
+          <div>
+            <div className="sh-t">📊 Executive Dashboard</div>
+            <div style={{fontSize:10,color:"var(--mut)"}}>
+              Last updated: {lastRefresh.toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit",timeZone:"Asia/Kolkata"})} IST
+              · Auto-refreshes every 5 min
+            </div>
+          </div>
+          <div style={{display:"flex",gap:8}}>
+            <button className="btn btn-o btn-sm" onClick={()=>setLastRefresh(new Date())}>🔄 Refresh</button>
+            <button className="btn btn-p btn-sm" onClick={generateDigest} disabled={aiLoad}>
+              {aiLoad?"⏳ Generating...":"✨ AI Digest"}
+            </button>
+          </div>
+        </div>
+
+        {/* Today Overview */}
+        <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:10,marginBottom:14}}>
+          {[
+            ["📞 Calls Today", totalCalls, "#3b82f6"],
+            ["🏠 Visits", totalVisits, "#a78bfa"],
+            ["💬 WA/Email", repStats.reduce((s,r)=>s+r.wa,0), "#25D366"],
+            ["🧾 Orders", totalOrders, "#10b981"],
+            ["📈 Conversion", overallConv+"%", overallConv>=10?"#10b981":overallConv>=5?"#f59e0b":"#ef4444"],
+          ].map(([lbl,val,c])=>(
+            <div key={lbl} style={{background:c+"11",border:"1px solid "+c+"33",borderRadius:10,padding:12,textAlign:"center"}}>
+              <div style={{fontSize:9,color:"var(--mut)",marginBottom:2}}>{lbl}</div>
+              <div style={{fontSize:22,fontWeight:800,color:c}}>{val}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* AI Digest */}
+        {aiDigest&&(
+          <div className="card" style={{marginBottom:14,background:"#0e1a24",color:"#e2e8f0"}}>
+            <div style={{fontWeight:700,fontSize:13,marginBottom:10,color:"#f59e0b"}}>✨ AI Executive Digest</div>
+            <div style={{fontSize:12,lineHeight:1.9,whiteSpace:"pre-wrap"}}>{aiDigest}</div>
+          </div>
+        )}
+
+        {/* KPI Scorecard */}
+        <div className="card" style={{marginBottom:14,padding:0}}>
+          <div style={{padding:"12px 16px",fontWeight:700,fontSize:13,borderBottom:"1px solid var(--bdr)"}}>
+            🏆 KPI Scorecard — Aaj ka Performance
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(280px,1fr))",gap:0}}>
+            {repStats.map((r,i)=>(
+              <div key={r.name} style={{padding:16,borderRight:"1px solid var(--bdr)",borderBottom:"1px solid var(--bdr)"}}>
+                <div style={{display:"flex",gap:10,alignItems:"center",marginBottom:12}}>
+                  <Av name={r.name} size={36}/>
+                  <div style={{flex:1}}>
+                    <div style={{fontWeight:700,fontSize:13}}>{r.name}</div>
+                    <div style={{fontSize:10,color:"var(--mut)"}}>{r.assigned} parties assigned</div>
+                  </div>
+                  <div style={{textAlign:"right"}}>
+                    <div style={{fontSize:10,color:"var(--mut)"}}>Month Rev</div>
+                    <div style={{fontWeight:800,color:"#10b981",fontSize:13}}>₹{Math.round(r.monthRev/1000)}K</div>
+                  </div>
+                </div>
+
+                {/* Today stats */}
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:6,marginBottom:10}}>
+                  {[
+                    ["📞",r.calls,"Calls"],["🏠",r.visits,"Visits"],
+                    ["🧾",r.todayO.length,"Orders"],["📈",r.convRate+"%","Conv."]
+                  ].map(([ic,val,lbl])=>(
+                    <div key={lbl} style={{textAlign:"center",background:"var(--card2)",borderRadius:6,padding:"6px 4px"}}>
+                      <div style={{fontSize:14}}>{ic}</div>
+                      <div style={{fontWeight:800,fontSize:13}}>{val}</div>
+                      <div style={{fontSize:9,color:"var(--mut)"}}>{lbl}</div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Target progress */}
+                {r.tgtAmt>0&&(
+                  <div style={{marginBottom:8}}>
+                    <div style={{display:"flex",justifyContent:"space-between",fontSize:10,marginBottom:3}}>
+                      <span style={{color:"var(--mut)"}}>Monthly Target</span>
+                      <span style={{fontWeight:700,color:r.achPct>=100?"#10b981":r.achPct>=70?"#f59e0b":"#ef4444"}}>
+                        {r.achPct}%
+                      </span>
+                    </div>
+                    <div style={{height:6,background:"var(--card2)",borderRadius:3,overflow:"hidden"}}>
+                      <div style={{height:"100%",width:Math.min(r.achPct,100)+"%",
+                        background:r.achPct>=100?"#10b981":r.achPct>=70?"#f59e0b":"#ef4444",borderRadius:3}}/>
+                    </div>
+                    <div style={{fontSize:9,color:"var(--mut)",marginTop:2}}>
+                      ₹{Math.round(r.monthRev/1000)}K / ₹{Math.round(r.tgtAmt/1000)}K
+                    </div>
+                  </div>
+                )}
+
+                {/* KPI Score */}
+                <KPIBar score={r.kpiScore}/>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Party-wise digest */}
+        <div className="card" style={{padding:0}}>
+          <div style={{padding:"12px 16px",fontWeight:700,fontSize:13,borderBottom:"1px solid var(--bdr)",
+            display:"flex",justifyContent:"space-between"}}>
+            <span>👥 Aaj Ki Party Activity</span>
+            <span style={{fontSize:11,color:"var(--mut)",fontWeight:400}}>{todayAllI.length} interactions · {partyDigest.length} parties</span>
+          </div>
+          {partyDigest.length===0?(
+            <div style={{padding:20,textAlign:"center",color:"var(--mut)"}}>Aaj koi activity nahi hui abhi tak</div>
+          ):(
+            <div>
+              {partyDigest.map((p,i)=>{
+                const lastI = p.interactions[p.interactions.length-1];
+                const typeColors = {call:"#3b82f6",visit:"#10b981",whatsapp:"#25D366",email:"#a78bfa",meeting:"#f59e0b"};
+                return (
+                  <div key={i} style={{padding:"10px 16px",borderBottom:"1px solid var(--bdr)",
+                    display:"flex",gap:10,alignItems:"flex-start",
+                    background:p.hasOrder?"rgba(16,185,129,.04)":"transparent"}}>
+                    <div style={{width:8,height:8,borderRadius:"50%",marginTop:5,flexShrink:0,
+                      background:typeColors[lastI?.type]||"#666"}}/>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap",marginBottom:3}}>
+                        <span style={{fontWeight:700,fontSize:12}}>{p.name}</span>
+                        <span style={{fontSize:10,color:"var(--mut)"}}>{p.company}</span>
+                        {p.hasOrder&&<span style={{fontSize:10,background:"rgba(16,185,129,.1)",color:"#10b981",
+                          padding:"1px 6px",borderRadius:4,fontWeight:700}}>🧾 Order!</span>}
+                        <span style={{fontSize:10,color:"var(--mut)",marginLeft:"auto"}}>{p.interactions.length} interactions</span>
+                      </div>
+                      {p.interactions.slice(0,2).map((inter,ii)=>(
+                        <div key={ii} style={{fontSize:11,color:"var(--txt)",marginBottom:2}}>
+                          <span style={{color:typeColors[inter.type]||"#666",fontWeight:600,marginRight:6}}>
+                            {TI[inter.type]}{inter.type}
+                          </span>
+                          <span style={{color:"var(--mut)",fontSize:10,marginRight:6}}>{inter.done_by}</span>
+                          {inter.note?.slice(0,80)}{inter.note?.length>80?"...":""}
+                        </div>
+                      ))}
+                      {p.interactions.length>2&&<div style={{fontSize:10,color:"var(--mut)"}}>+{p.interactions.length-2} more interactions</div>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+
   /* ── NAV ── */
   const navs = [
     {id:"dashboard",lbl:"Dashboard",ic:"🏠",roles:["admin","sales","dataentry"]},
+    {id:"exec",lbl:"Executive",ic:"📊",roles:["admin"]},
     {id:"customers",lbl:"Customers",ic:"👥",roles:["admin","sales","dataentry"]},
     {id:"enquiries",lbl:"Enquiries",ic:"📋",roles:["admin","sales"]},
     {id:"followups",lbl:"Follow-ups",ic:"⚡",badge:urgN>0?urgN:null,roles:["admin","sales","dataentry"]},
@@ -6434,6 +6700,7 @@ export default function CRM({ currentUser, onLogout }) {
         </div>
         <div className="content">
           {view==="dashboard"&&<Dash/>}
+          {view==="exec"&&<ExecDash/>}
           {view==="customers"&&<Customers/>}
           {view==="enquiries"&&<Enquiries/>}
           {view==="followups"&&<Followups/>}
