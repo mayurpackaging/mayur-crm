@@ -6775,29 +6775,31 @@ export default function CRM({ currentUser, onLogout }) {
     const [mosData, setMosData] = useState({});
 
     useEffect(()=>{
-      sbFetch("price_items?is_active=eq.true&order=item_name.asc&select=item_name,crm_product_name,pcs_per_carton,box_wt,lid_wt,box_homo,box_cp,box_random,lid_homo,lid_cp,lid_random,carton_cost,list_price,tonnage")
+      sbFetch("price_items?is_active=eq.true&order=item_name.asc&select=item_name,crm_product_name,pcs_per_carton,box_wt,lid_wt,box_homo,box_cp,box_random,lid_homo,lid_cp,lid_random,carton_cost,list_price,tonnage,floor_price,happy_price")
         .then(d=>setPItems(d||[]));
     },[]);
 
     const calcProduct = (p) => {
+      // Daana weights (kg per carton)
       const bh=Number(p.box_homo||0), bc=Number(p.box_cp||0), br=Number(p.box_random||0);
       const lh=Number(p.lid_homo||0), lc=Number(p.lid_cp||0), lr=Number(p.lid_random||0);
       const th=bh+lh, tc=bc+lc, tran=br+lr;
+      // Daana cost at current prices
       const daanaCost = Math.round(th*homoPrice + tc*cpPrice + tran*randomPrice);
       const cartonCost = Number(p.carton_cost||0);
       const totalCost = daanaCost + cartonCost;
       const listPrice = Number(p.list_price||0);
-      // N1/N2 adjustment from base (100/90/80)
-      const adj = Math.round(th*(homoPrice-100) + tc*(cpPrice-90) + tran*(randomPrice-80));
-      const n1Base = p.floor_price||0; const n3Base = p.happy_price||0;
-      const n1 = Math.round((n1Base||totalCost*1.08) + adj);
-      const n3 = Math.round((n3Base||totalCost*1.22) + adj);
-      const partyPrice = listPrice - partyDisc;
+      // Floor/Happy price — from DB (actual MOS values) + adjustment for daana price change
+      // Base daana prices: homo=100, cp=90, random=80
+      const daanaAdj = Math.round(th*(homoPrice-100) + tc*(cpPrice-90) + tran*(randomPrice-80));
+      const n1 = Number(p.floor_price||0)>0 ? Math.round(Number(p.floor_price)+daanaAdj) : Math.round(totalCost*1.08);
+      const n3 = Number(p.happy_price||0)>0 ? Math.round(Number(p.happy_price)+daanaAdj) : Math.round(totalCost*1.22);
+      const partyPrice = Math.max(0, listPrice - partyDisc);
       const margin = listPrice>0?Math.round((listPrice-totalCost)/listPrice*100):0;
       const partyMargin = partyPrice>0?Math.round((partyPrice-totalCost)/partyPrice*100):0;
       const zone = listPrice>=n3?"🔵 N3":listPrice>=n1?"🟡 N1":"🔴 Below Floor";
       const partyZone = partyPrice>=n3?"🔵 N3":partyPrice>=n1?"🟡 N1":"🔴 Below Floor";
-      return {daanaCost,cartonCost,totalCost,n1,n3,listPrice,partyPrice,margin,partyMargin,zone,partyZone};
+      return {daanaCost,cartonCost,totalCost,n1,n3,listPrice,partyPrice,margin,partyMargin,zone,partyZone,daanaAdj};
     };
 
     const printPDF = () => {
