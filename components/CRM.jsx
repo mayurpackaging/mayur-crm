@@ -6759,131 +6759,206 @@ export default function CRM({ currentUser, onLogout }) {
 
 
   // ══════════════════════════════════════════════
-  // COST SHEET — Dynamic Floor Price Calculator
+  // ══════════════════════════════════════════════
+  // COST SHEET — Simple Floor Price Calculator
   // ══════════════════════════════════════════════
   const CostSheet = () => {
     const [homoPrice, setHomoPrice] = useState(()=>Number(localStorage.getItem("daana_homo")||147));
     const [cpPrice, setCpPrice] = useState(()=>Number(localStorage.getItem("daana_cp")||150));
     const [randomPrice, setRandomPrice] = useState(()=>Number(localStorage.getItem("daana_random")||158));
-
-    const setHomo = (v)=>{ setHomoPrice(v); localStorage.setItem("daana_homo",v); };
-    const setCP = (v)=>{ setCpPrice(v); localStorage.setItem("daana_cp",v); };
-    const setRandom = (v)=>{ setRandomPrice(v); localStorage.setItem("daana_random",v); };
+    const [selItem, setSelItem] = useState(null); // selected item for detail popup
+    const [detailType, setDetailType] = useState(null); // "daana" | "fixed"
+    const [csView, setCsView] = useState("all");
     const [partyDisc, setPartyDisc] = useState(0);
     const [partyName, setPartyName] = useState("");
-    const [csView, setCsView] = useState("all"); // all | party
-
-    // Product data from price_items (loaded as PRODS in CRM)
-    // We need price_items with box_wt, lid_wt etc — load separately
     const [pItems, setPItems] = useState([]);
-    const [mosData, setMosData] = useState({});
+    const [csQ, setCsQ] = useState("");
+
+    const setHomo = v=>{ setHomoPrice(v); localStorage.setItem("daana_homo",v); };
+    const setCP   = v=>{ setCpPrice(v);  localStorage.setItem("daana_cp",v); };
+    const setRand = v=>{ setRandomPrice(v); localStorage.setItem("daana_random",v); };
+
+    // MOS data (mh_per_carton + base daana + base floor/happy)
+    const MOS = {
+      "100 ML (MILKY)/1000PC":{dc:1019,mh:0.419,fp:1478,hp:1695},
+      "100 ML NATURAL WITHOUT LID":{dc:1262,mh:0.5556,fp:1871,hp:2159},
+      "1000 ML  (BLACK)":{dc:1902,mh:0.6319,fp:2596,hp:2923},
+      "1000 ML OVAL":{dc:1691,mh:0.6597,fp:2415,hp:2756},
+      "1000 ML RCT (BLACK)/500":{dc:2241,mh:1.1111,fp:3460,hp:4035},
+      "1000ML (MILKY)":{dc:1902,mh:0.6042,fp:2565,hp:2878},
+      "100ML  NATURAL/1000PC":{dc:1056,mh:0.419,fp:1516,hp:1733},
+      "100ML /BLACK/1000PCS":{dc:1019,mh:0.419,fp:1478,hp:1695},
+      "1200 ML BLACK":{dc:1602,mh:0.6417,fp:2306,hp:2638},
+      "1200 ML MILKY":{dc:1602,mh:0.5958,fp:2256,hp:2564},
+      "1500 ML BLACK":{dc:1821,mh:0.6667,fp:2553,hp:2898},
+      "1500 ML MILKY":{dc:1821,mh:0.6667,fp:2553,hp:2898},
+      "175 ML BLACK 1000 PCS":{dc:1392,mh:0.7014,fp:2162,hp:2525},
+      "175 ML MILKY 1000 PCS":{dc:1392,mh:0.6944,fp:2154,hp:2514},
+      "2000 ML BLACK":{dc:1554,mh:0.6325,fp:2248,hp:2576},
+      "2000 ML MILKY":{dc:1554,mh:0.6325,fp:2248,hp:2576},
+      "2000 ML TRANSPARENT":{dc:1614,mh:0.5575,fp:2226,hp:2515},
+      "250 ML (MILKY) 500 PCS":{dc:820,mh:0.419,fp:1280,hp:1497},
+      "2500 ML BLACK":{dc:1767,mh:0.6735,fp:2506,hp:2855},
+      "2500 ML MILKY":{dc:1767,mh:0.6575,fp:2488,hp:2829},
+      "2500 ML TRANSPARENT":{dc:1836,mh:0.6575,fp:2557,hp:2898},
+      "250ML (BLACK)1000PCS":{dc:1641,mh:0.7917,fp:2509,hp:2919},
+      "250ML (MILKY)1000PCS":{dc:1641,mh:0.7917,fp:2509,hp:2919},
+      "300 SIPPER XL":{dc:1345,mh:0.4271,fp:1814,hp:2035},
+      "300ML (BLACK)":{dc:1085,mh:0.5035,fp:1637,hp:1898},
+      "300ML (MILKY)":{dc:1085,mh:0.5035,fp:1637,hp:1898},
+      "350 ML RED SIPPER":{dc:1345,mh:0.6493,fp:2058,hp:2394},
+      "350 ML SIPPER":{dc:1345,mh:0.6493,fp:2058,hp:2394},
+      "350 SIPPER XL":{dc:1406,mh:0.4271,fp:1875,hp:2096},
+      "400 ML (BLACK)":{dc:1216,mh:0.5347,fp:1803,hp:2080},
+      "400 ML MILKY":{dc:1216,mh:0.5417,fp:1810,hp:2091},
+      "50 ML CONTAINER /2000/NATURAL":{dc:1344,mh:0.6875,fp:2098,hp:2454},
+      "50 ML CONTAINER /2000PCS/BLACK":{dc:1296,mh:0.6458,fp:2004,hp:2339},
+      "500 ML BLUE SIPPER":{dc:1687,mh:1.0799,fp:2872,hp:3431},
+      "500 ML OVAL":{dc:1395,mh:0.4132,fp:1848,hp:2062},
+      "500 ML RCT (BLACK)/500":{dc:1803,mh:1.0764,fp:2984,hp:3541},
+      "500 SIPPER XL":{dc:1687,mh:0.6424,fp:2392,hp:2725},
+      "500ML  (BLACK)":{dc:1347,mh:0.3247,fp:1704,hp:1872},
+      "500ML (MILKY)":{dc:1347,mh:0.2784,fp:1653,hp:1797},
+      "500ML SIPPER":{dc:1597,mh:1.0799,fp:2782,hp:3341},
+      "650 ML HALF ROUND":{dc:989,mh:0.6167,fp:1666,hp:1985},
+      "650 ML RCT  (BLACK)/500":{dc:1949,mh:1.1111,fp:3168,hp:3743},
+      "750 ML OVAL":{dc:1558,mh:0.6806,fp:2305,hp:2657},
+      "750 ML RCT (BLACK)/500":{dc:2095,mh:1.0833,fp:3284,hp:3844},
+      "750ML (BLACK)":{dc:1632,mh:0.5625,fp:2249,hp:2541},
+      "750ML (MILKY)":{dc:1632,mh:0.559,fp:2246,hp:2535},
+      "RE 16":{dc:1147,mh:0.5375,fp:1737,hp:2015},
+      "RE 24":{dc:1274,mh:0.5375,fp:1864,hp:2142},
+      "RE 28":{dc:1130,mh:0.5417,fp:1724,hp:2005},
+      "RE 38 BLACK":{dc:2199,mh:0.5417,fp:2794,hp:3074},
+      "RO 16":{dc:1267,mh:0.4167,fp:1724,hp:1940},
+      "RO 24":{dc:1632,mh:0.4208,fp:2094,hp:2312},
+      "RO 32":{dc:1729,mh:0.4542,fp:2227,hp:2462},
+      "SSRE 1000 BLACK":{dc:2628,mh:0.6771,fp:3371,hp:3721},
+      "SSRE 500 BLACK":{dc:2022,mh:0.6771,fp:2765,hp:3115},
+      "SSRE 650 BLACK":{dc:2102,mh:0.6771,fp:2845,hp:3196},
+      "SSRE 750 BLACK":{dc:2204,mh:0.6771,fp:2947,hp:3298},
+    };
 
     useEffect(()=>{
-      sbFetch("price_items?is_active=eq.true&order=item_name.asc&select=item_name,crm_product_name,pcs_per_carton,box_wt,lid_wt,box_homo,box_cp,box_random,lid_homo,lid_cp,lid_random,carton_cost,list_price,tonnage,floor_price,happy_price,base_daana_cost,box_cav,box_cyc,lid_cav,lid_cyc")
+      sbFetch("price_items?is_active=eq.true&order=item_name.asc&select=item_name,crm_product_name,pcs_per_carton,box_homo,box_cp,box_random,lid_homo,lid_cp,lid_random,carton_cost,list_price,poly_gm,colour")
         .then(d=>setPItems(d||[]));
     },[]);
 
-    const [fixedCostPerHr, setFixedCostPerHr] = useState(()=>Number(localStorage.getItem("fixed_cost_hr")||1097));
-    const N1_ZONE = fixedCostPerHr;
-    const N2_ZONE = Math.round(fixedCostPerHr*1.47);  // N2 = 1.47x N1
-    const N3_ZONE = Math.round(fixedCostPerHr*1.77);  // N3 = 1.77x N1
-
-    const calcProduct = (p) => {
-      const pcs = Number(p.pcs_per_carton||1);
-      // Weights = grams per piece → kg per piece
-      const bh=Number(p.box_homo||0), bc=Number(p.box_cp||0), br=Number(p.box_random||0);
-      const lh=Number(p.lid_homo||0), lc=Number(p.lid_cp||0), lr=Number(p.lid_random||0);
-      const th_kg=(bh+lh)/1000, tc_kg=(bc+lc)/1000, tr_kg=(br+lr)/1000;
-      // Daana cost per CTN
-      const daanaCost = Math.round((th_kg*homoPrice + tc_kg*cpPrice + tr_kg*randomPrice)*pcs);
-      const cartonCost = Number(p.carton_cost||0);
-      const totalCost = daanaCost + cartonCost;
-      const listPrice = Number(p.list_price||0);
-
-      // Machine calculations
-      const boxCav=Number(p.box_cav||0), boxCyc=Number(p.box_cyc||0);
-      const lidCav=Number(p.lid_cav||0), lidCyc=Number(p.lid_cyc||0);
-      const boxShotsHr = boxCyc>0 ? 3600/boxCyc : 0;
-      const boxPcsHr = boxShotsHr * boxCav;
-      const boxCtnHr = boxPcsHr>0 ? boxPcsHr/pcs : 0;
-      const lidShotsHr = lidCyc>0 ? 3600/lidCyc : 0;
-      const lidPcsHr = lidShotsHr * lidCav;
-      const lidCtnHr = lidPcsHr>0 ? lidPcsHr/pcs : 0;
-      const combinedCtnHr = lidCtnHr>0 ? Math.min(boxCtnHr,lidCtnHr) : boxCtnHr;
-      const bottleneck = lidCtnHr>0 ? (boxCtnHr<=lidCtnHr?"Box":"Lid") : "Box";
-
-      // Floor prices from machine throughput
-      const fixedN1 = combinedCtnHr>0 ? N1_ZONE/combinedCtnHr : 0;
-      const fixedN2 = combinedCtnHr>0 ? N2_ZONE/combinedCtnHr : 0;
-      const fixedN3 = combinedCtnHr>0 ? N3_ZONE/combinedCtnHr : 0;
-      const n1 = combinedCtnHr>0 ? Math.round(daanaCost+cartonCost+fixedN1) : Math.round(totalCost*1.08);
-      const n2 = combinedCtnHr>0 ? Math.round(daanaCost+cartonCost+fixedN2) : Math.round(totalCost*1.15);
-      const n3 = combinedCtnHr>0 ? Math.round(daanaCost+cartonCost+fixedN3) : Math.round(totalCost*1.22);
-
-      const partyPrice = Math.max(0, listPrice-partyDisc);
-      const margin = listPrice>0 ? Math.round((listPrice-totalCost)/listPrice*100) : 0;
-      const partyMargin = partyPrice>0 ? Math.round((partyPrice-totalCost)/partyPrice*100) : 0;
-      const zone = listPrice<totalCost?"🔴 Loss":listPrice>=n3?"🔵 N3":listPrice>=n2?"🟢 N2":listPrice>=n1?"🟡 N1":"🔴 Below N1";
-      const partyZone = partyPrice<totalCost?"🔴 Loss":partyPrice>=n3?"🔵 N3":partyPrice>=n2?"🟢 N2":partyPrice>=n1?"🟡 N1":"🔴 Below N1";
-      return {daanaCost,cartonCost,totalCost,n1,n2,n3,listPrice,partyPrice,margin,partyMargin,
-              zone,partyZone,boxCtnHr,lidCtnHr,combinedCtnHr,bottleneck,boxShotsHr,lidShotsHr,fixedN1,fixedN2,fixedN3};
+    const calc = (p) => {
+      const mos = MOS[p.item_name]||{};
+      const pcs=Number(p.pcs_per_carton||1);
+      const bh=Number(p.box_homo||0),bc=Number(p.box_cp||0),br=Number(p.box_random||0);
+      const lh=Number(p.lid_homo||0),lc=Number(p.lid_cp||0),lr=Number(p.lid_random||0);
+      const th=(bh+lh)/1000, tc=(bc+lc)/1000, tr=(br+lr)/1000;
+      // Daana breakdown
+      const homoCost = Math.round(th*pcs*homoPrice);
+      const cpCost   = Math.round(tc*pcs*cpPrice);
+      const randCost = Math.round(tr*pcs*randomPrice);
+      const newDaana = homoCost+cpCost+randCost;
+      const baseDaana= mos.dc||newDaana;
+      const carton   = Number(p.carton_cost||0);
+      const listPrice= Number(p.list_price||0);
+      const mh       = mos.mh||0;
+      // N1/N3 zone thresholds (derived from MOS)
+      const n1Zone = mh>0 ? Math.round((mos.fp-baseDaana-carton)/mh) : 1097;
+      const n3Zone = mh>0 ? Math.round((mos.hp-baseDaana-carton)/mh) : 1938;
+      const newFloor = Math.round(newDaana+carton+n1Zone*mh);
+      const newHappy = Math.round(newDaana+carton+n3Zone*mh);
+      const fixedCost= Math.round(n1Zone*mh);
+      const partyPrice = Math.max(0,listPrice-partyDisc);
+      const margin = listPrice>0?Math.round((listPrice-newDaana-carton-fixedCost)/listPrice*100):0;
+      const zone = listPrice<(newDaana+carton)?"🔴 Loss":listPrice>=newHappy?"🔵 N3 Happy":listPrice>=newFloor?"🟡 N1 Zone":"🔴 Below N1";
+      // Poly & MB
+      const polyGm = Number(p.poly_gm||0);
+      return {homoCost,cpCost,randCost,newDaana,baseDaana,carton,listPrice,newFloor,newHappy,fixedCost,
+              mh,n1Zone,n3Zone,zone,margin,partyPrice,polyGm,pcs,th,tc,tr};
     };
 
-    const printPDF = () => {
-      const win = window.open("","_blank");
-      if(!win){toast$("Popup blocked!",true);return;}
-      const rows = pItems.map(p=>{
-        const c = calcProduct(p);
-        if(csView==="party") {
-          return `<tr style="border-bottom:1px solid #eee">
-            <td style="padding:5px 8px;font-size:11px">${p.item_name}</td>
-            <td style="text-align:center;padding:5px">${p.pcs_per_carton}</td>
-            <td style="text-align:center;padding:5px">₹${c.listPrice.toLocaleString("en-IN")}</td>
-            <td style="text-align:center;padding:5px;color:#cc0000;font-weight:700">₹${c.n1.toLocaleString("en-IN")}</td>
-            <td style="text-align:center;padding:5px">₹${partyDisc}</td>
-            <td style="text-align:center;padding:5px;font-weight:700">₹${c.partyPrice.toLocaleString("en-IN")}</td>
-            <td style="text-align:center;padding:5px;font-weight:700;color:${c.partyPrice<c.n1?"#cc0000":c.partyPrice>=c.n3?"#006600":"#806000"}">${c.partyZone}</td>
-            <td style="text-align:center;padding:5px;font-weight:700">${c.partyMargin}%</td>
-          </tr>`;
-        }
-        return `<tr style="border-bottom:1px solid #eee">
-          <td style="padding:5px 8px;font-size:11px">${p.item_name}</td>
-          <td style="text-align:center;padding:5px">${p.pcs_per_carton}</td>
-          <td style="text-align:center;padding:5px">₹${c.daanaCost.toLocaleString("en-IN")}</td>
-          <td style="text-align:center;padding:5px">₹${c.cartonCost}</td>
-          <td style="text-align:center;padding:5px;font-weight:700">₹${c.totalCost.toLocaleString("en-IN")}</td>
-          <td style="text-align:center;padding:5px">₹${c.listPrice.toLocaleString("en-IN")}</td>
-          <td style="text-align:center;padding:5px;color:#cc0000;font-weight:700">₹${c.n1.toLocaleString("en-IN")}</td>
-          <td style="text-align:center;padding:5px;color:#006600;font-weight:700">₹${c.n3.toLocaleString("en-IN")}</td>
-          <td style="text-align:center;padding:5px;font-weight:700;color:${c.listPrice<c.n1?"#cc0000":c.listPrice>=c.n3?"#006600":"#806000"}">${c.zone}</td>
-          <td style="text-align:center;padding:5px">${c.margin}%</td>
-        </tr>`;
-      }).join("");
+    const filtItems = pItems.filter(p=>!csQ||p.item_name.toLowerCase().includes(csQ.toLowerCase()));
+    const zoneColor = z=>z.includes("N3")?"#006600":z.includes("N1 Zone")?"#806000":"#cc0000";
 
-      const headers = csView==="party"
-        ? `<tr style="background:#2E6DA4;color:#fff"><th style="padding:8px">Item</th><th>Pcs</th><th>List ₹</th><th>Floor N1</th><th>Disc ₹</th><th>${partyName||"Party"} Price</th><th>Zone</th><th>Margin%</th></tr>`
-        : `<tr style="background:#2E6DA4;color:#fff"><th style="padding:8px">Item</th><th>Pcs</th><th>Daana ₹</th><th>Carton ₹</th><th>Total Cost</th><th>List ₹</th><th>Floor N1</th><th>Happy N3</th><th>Zone</th><th>Margin%</th></tr>`;
+    // Detail Popup
+    const DetailPopup = ()=>{
+      if(!selItem||!detailType) return null;
+      const p=selItem; const c=calc(p);
+      return (
+        <div className="ov" onClick={()=>setSelItem(null)}>
+          <div className="mod mod-sm" onClick={e=>e.stopPropagation()} style={{maxWidth:380}}>
+            <div className="mod-ttl">
+              {detailType==="daana"?"🌾 Daana Cost Breakdown":"⚙️ Fixed Cost Breakdown"}
+              <button className="cls" onClick={()=>setSelItem(null)}>✕</button>
+            </div>
+            <div style={{padding:"4px 0",fontSize:13,fontWeight:700,marginBottom:12}}>{p.item_name}</div>
 
-      win.document.write(`<!DOCTYPE html><html><head><title>Cost Sheet - Mayur Food Packaging</title>
-        <style>body{font-family:Arial,sans-serif;padding:20px;font-size:12px;}
-        h2{color:#1E3A5F;margin-bottom:4px;}
-        .info{background:#FFF2CC;padding:10px;border-radius:6px;margin-bottom:14px;font-size:11px;}
-        table{width:100%;border-collapse:collapse;font-size:11px;}
-        th{padding:8px;text-align:center;font-size:10px;}
-        @media print{body{padding:10px;}}</style></head><body>
-        <h2>Mayur Food Packaging Products — ${csView==="party"?`Party Price Sheet: ${partyName||"—"}`:"Dynamic Cost Sheet"}</h2>
-        <div class="info">
-          <b>Daana Prices:</b> Homo ₹${homoPrice}/kg | CP ₹${cpPrice}/kg | Random ₹${randomPrice}/kg
-          ${csView==="party"?`| <b>Discount: ₹${partyDisc}/ctn</b>`:""}
-          &nbsp;&nbsp;|&nbsp;&nbsp; Generated: ${new Date().toLocaleDateString("en-IN",{timeZone:"Asia/Kolkata"})}
+            {detailType==="daana"&&(
+              <div>
+                <div style={{background:"var(--card2)",borderRadius:8,padding:12,marginBottom:10}}>
+                  <div style={{fontSize:11,color:"var(--mut)",marginBottom:8}}>Weights (g/pc) × Pcs × Price/kg</div>
+                  {[
+                    ["Homo",c.th*1000,homoPrice,c.homoCost,"#3b82f6"],
+                    ["CP",c.tc*1000,cpPrice,c.cpCost,"#8b5cf6"],
+                    ["Random",c.tr*1000,randomPrice,c.randCost,"#f59e0b"],
+                  ].map(([lbl,wt,price,cost,clr])=>(
+                    <div key={lbl} style={{display:"flex",justifyContent:"space-between",alignItems:"center",
+                      padding:"8px 0",borderBottom:"1px solid var(--bdr)"}}>
+                      <div style={{flex:1}}>
+                        <div style={{fontWeight:600,color:clr}}>{lbl} Daana</div>
+                        <div style={{fontSize:10,color:"var(--mut)"}}>
+                          {wt.toFixed(3)}g/pc × {c.pcs} pcs = {(wt*c.pcs/1000).toFixed(3)}kg × ₹{price}/kg
+                        </div>
+                      </div>
+                      <div style={{fontWeight:800,fontSize:14}}>₹{cost.toLocaleString("en-IN")}</div>
+                    </div>
+                  ))}
+                </div>
+                <div style={{display:"flex",justifyContent:"space-between",padding:"8px 12px",
+                  background:"rgba(239,68,68,.08)",borderRadius:8,fontWeight:800,fontSize:15}}>
+                  <span>Total Daana/CTN</span>
+                  <span style={{color:"#cc0000"}}>₹{c.newDaana.toLocaleString("en-IN")}</span>
+                </div>
+                <div style={{fontSize:10,color:"var(--mut)",marginTop:8,textAlign:"center"}}>
+                  Base daana (MOS): ₹{c.baseDaana.toLocaleString("en-IN")} | Change: {c.newDaana>c.baseDaana?"▲":"▼"} ₹{Math.abs(c.newDaana-c.baseDaana)}
+                </div>
+              </div>
+            )}
+
+            {detailType==="fixed"&&(
+              <div>
+                <div style={{background:"var(--card2)",borderRadius:8,padding:12,marginBottom:10}}>
+                  <div style={{fontSize:11,color:"var(--mut)",marginBottom:8}}>Fixed Cost = N1 Zone × MH per CTN</div>
+                  {[
+                    ["MH/CTN (Machine Hours per Carton)",c.mh.toFixed(4)+" hrs",""],
+                    ["N1 Zone Threshold","₹"+c.n1Zone+"/hr","Floor"],
+                    ["N3 Zone Threshold","₹"+c.n3Zone+"/hr","Happy"],
+                    ["Fixed Cost @ N1","₹"+c.fixedCost+"/ctn",""],
+                    ["Carton Cost","₹"+c.carton+"/ctn",""],
+                  ].map(([lbl,val,badge])=>(
+                    <div key={lbl} style={{display:"flex",justifyContent:"space-between",alignItems:"center",
+                      padding:"7px 0",borderBottom:"1px solid var(--bdr)"}}>
+                      <div style={{fontSize:11}}>{lbl}</div>
+                      <div style={{display:"flex",gap:6,alignItems:"center"}}>
+                        {badge&&<span style={{fontSize:9,padding:"1px 6px",borderRadius:4,
+                          background:"rgba(245,158,11,.15)",color:"#f59e0b",fontWeight:700}}>{badge}</span>}
+                        <span style={{fontWeight:700}}>{val}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div style={{padding:"8px 12px",background:"rgba(30,58,95,.06)",borderRadius:8,fontSize:12}}>
+                  <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
+                    <span>Daana + Carton + Fixed (N1)</span>
+                    <span style={{fontWeight:800,color:"#cc0000"}}>₹{c.newFloor.toLocaleString("en-IN")}</span>
+                  </div>
+                  <div style={{display:"flex",justifyContent:"space-between"}}>
+                    <span>Daana + Carton + Fixed (N3)</span>
+                    <span style={{fontWeight:800,color:"#006600"}}>₹{c.newHappy.toLocaleString("en-IN")}</span>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
-        <table><thead>${headers}</thead><tbody>${rows}</tbody></table>
-        <div style="margin-top:16px;font-size:10px;color:#888;border-top:1px solid #ddd;padding-top:8px;">
-          Shreeja Packaging Industries Pvt. Ltd. | N1=Floor (T/hr ₹1,097) | N3=Happy (T/hr ₹1,938) | Confidential
-        </div>
-        <script>window.onload=()=>window.print();</script>
-        </body></html>`);
-      win.document.close();
+      );
     };
 
     return (
@@ -6891,141 +6966,134 @@ export default function CRM({ currentUser, onLogout }) {
         <div className="sh">
           <div>
             <div className="sh-t">💰 Cost Sheet</div>
-            <div className="sh-s">Dynamic Floor Price Calculator · N1/N2/N3 Zones</div>
+            <div className="sh-s">Click on any value to see breakdown</div>
           </div>
           <div style={{display:"flex",gap:8}}>
             <button className="btn btn-o btn-sm" onClick={()=>{
-              // CSV Download
-              const headers = csView==="party"
-                ? ["Item Name","Pcs/CTN","List Price","Floor N1","Discount","Party Price","Zone","Margin%"]
-                : ["Item Name","CRM Name","Pcs/CTN","Daana Cost","Carton Cost","Total Cost","List Price","Floor N1","Happy N3","Zone","Margin%"];
-              const rows = pItems.map(p=>{
-                const c=calcProduct(p);
-                if(csView==="party") return [p.item_name,p.pcs_per_carton,c.listPrice,c.n1,partyDisc,c.partyPrice,c.partyZone.replace(/[🔴🟡🔵]/g,""),c.partyMargin+"%"];
-                return [p.item_name,p.crm_product_name||"",p.pcs_per_carton,c.daanaCost,c.cartonCost,c.totalCost,c.listPrice,c.n1,c.n3,c.zone.replace(/[🔴🟡🔵]/g,""),c.margin+"%"];
+              const rows=filtItems.map(p=>{const c=calc(p);
+                return [p.item_name,p.pcs_per_carton,c.newDaana,c.carton,c.fixedCost,c.newDaana+c.carton+c.fixedCost,c.listPrice,c.newFloor,c.newHappy,c.zone.replace(/[🔴🟡🔵]/g,""),c.margin+"%"].join(",");
               });
-              const csv = [
-                `Mayur Food Packaging - ${csView==="party"?"Party Price Sheet: "+(partyName||"—"):"Cost Sheet"}`,
-                `Daana: Homo ₹${homoPrice}/kg | CP ₹${cpPrice}/kg | Random ₹${randomPrice}/kg | Date: ${new Date().toLocaleDateString("en-IN")}`,
-                "",
-                headers.join(","),
-                ...rows.map(r=>r.map(v=>`"${v}"`).join(","))
-              ].join("\n");
-              const blob = new Blob([csv], {type:"text/csv;charset=utf-8;"});
-              const url = URL.createObjectURL(blob);
-              const a = document.createElement("a");
-              a.href=url; a.download=`Mayur_Cost_Sheet_${new Date().toISOString().slice(0,10)}.csv`;
-              a.click(); URL.revokeObjectURL(url);
-              toast$("Excel (CSV) download ho raha hai!");
-            }}>📊 Excel Download</button>
-            <button className="btn btn-p btn-sm" onClick={printPDF}>🖨️ PDF</button>
+              const csv=["Item,Pcs,Daana,Carton,Fixed,Total Cost,List Price,Floor N1,Happy N3,Zone,Margin",
+                `Daana: Homo=${homoPrice} CP=${cpPrice} Random=${randomPrice}`,"",
+                ...rows].join("\n");
+              const a=document.createElement("a");
+              a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv"}));
+              a.download="Cost_Sheet.csv"; a.click();
+            }}>📊 Excel</button>
+            <button className="btn btn-p btn-sm" onClick={()=>{
+              const win=window.open("","_blank");
+              if(!win) return;
+              win.document.write(`<!DOCTYPE html><html><head><title>Cost Sheet</title>
+              <style>body{font-family:Arial;padding:20px;font-size:12px}table{width:100%;border-collapse:collapse}
+              th{background:#1E3A5F;color:#fff;padding:8px;font-size:11px}
+              td{padding:6px 8px;border:1px solid #ddd;font-size:11px}
+              .n3{background:#d5f5e3;color:#006600;font-weight:700}
+              .n1{background:#fff2cc;color:#806000;font-weight:700}
+              .loss{background:#ffd7d7;color:#cc0000;font-weight:700}
+              @media print{body{padding:10px}}</style></head><body>
+              <h2 style="color:#1E3A5F">Mayur Food Packaging — Cost Sheet</h2>
+              <p style="font-size:11px;color:#888">Daana: Homo ₹${homoPrice} | CP ₹${cpPrice} | Random ₹${randomPrice} | ${new Date().toLocaleDateString("en-IN")}</p>
+              <table><thead><tr><th>Item</th><th>Pcs</th><th>Daana ₹</th><th>Carton ₹</th><th>Fixed ₹</th><th>Total Cost</th><th>List ₹</th><th>Floor N1</th><th>Happy N3</th><th>Zone</th><th>Margin%</th></tr></thead>
+              <tbody>${filtItems.map(p=>{const c=calc(p);const zc=c.zone.includes("N3")?"n3":c.zone.includes("N1 Zone")?"n1":"loss";
+                return \`<tr><td>${p.item_name}</td><td>${p.pcs_per_carton}</td><td>₹${c.newDaana.toLocaleString("en-IN")}</td><td>₹${c.carton}</td><td>₹${c.fixedCost}</td><td>₹${(c.newDaana+c.carton+c.fixedCost).toLocaleString("en-IN")}</td><td>₹${c.listPrice.toLocaleString("en-IN")}</td><td class="${zc}">₹${c.newFloor.toLocaleString("en-IN")}</td><td class="${zc}">₹${c.newHappy.toLocaleString("en-IN")}</td><td class="${zc}">${c.zone.replace(/[🔴🟡🔵]/g,"")}</td><td>${c.margin}%</td></tr>\`;
+              }).join("")}</tbody></table>
+              <script>window.onload=()=>window.print();</script></body></html>`);
+              win.document.close();
+            }}>🖨️ PDF</button>
           </div>
         </div>
 
-        {/* Daana Price Inputs */}
-        <div className="card" style={{marginBottom:14,background:"rgba(245,158,11,.05)",border:"1px solid #f59e0b"}}>
-          <div style={{fontWeight:700,fontSize:13,marginBottom:12,color:"#f59e0b"}}>⚡ Daana Prices (₹/kg) — Change karo → sab auto-update (saved automatically)</div>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:12}}>
-            {[["Homo",homoPrice,setHomo],["CP",cpPrice,setCP],["Random",randomPrice,setRandom]].map(([lbl,val,set])=>(
-              <div key={lbl}>
-                <label className="lbl">{lbl} Daana (₹/kg)</label>
-                <input type="number" className="inp" value={val}
-                  onChange={e=>set(Number(e.target.value))}
-                  style={{fontSize:18,fontWeight:800,color:"#0000ff",textAlign:"center"}}/>
+        {/* Daana Prices */}
+        <div className="card" style={{marginBottom:12,background:"rgba(245,158,11,.05)",border:"1px solid #f59e0b"}}>
+          <div style={{fontWeight:700,fontSize:12,color:"#f59e0b",marginBottom:10}}>⚡ Daana Prices — Change karo, auto-save hoga</div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10}}>
+            {[["🌾 Homo",homoPrice,setHomo],["🌾 CP",cpPrice,setCP],["🌾 Random",randomPrice,setRand]].map(([lbl,val,set])=>(
+              <div key={lbl} style={{textAlign:"center"}}>
+                <div style={{fontSize:10,color:"var(--mut)",marginBottom:4}}>{lbl} (₹/kg)</div>
+                <input type="number" value={val} onChange={e=>set(Number(e.target.value))}
+                  style={{width:"100%",padding:"6px 8px",borderRadius:8,border:"2px solid #f59e0b",
+                    fontSize:20,fontWeight:800,color:"#0000ff",textAlign:"center",background:"var(--bg)"}}/>
               </div>
             ))}
-            <div>
-              <label className="lbl">Fixed Cost (₹/hr) — N1 Base</label>
-              <input type="number" className="inp" value={fixedCostPerHr}
-                onChange={e=>{const v=Number(e.target.value);setFixedCostPerHr(v);localStorage.setItem("fixed_cost_hr",v);}}
-                style={{fontSize:18,fontWeight:800,color:"#cc0000",textAlign:"center"}}/>
-              <div style={{fontSize:9,color:"var(--mut)",marginTop:2}}>N2={Math.round(fixedCostPerHr*1.47)} · N3={Math.round(fixedCostPerHr*1.77)}</div>
-            </div>
           </div>
         </div>
 
         {/* View toggle */}
-        <div style={{display:"flex",gap:8,marginBottom:12}}>
-          <button className={"btn btn-sm "+(csView==="all"?"btn-p":"btn-o")} onClick={()=>setCsView("all")}>📊 All Products</button>
+        <div style={{display:"flex",gap:8,marginBottom:10,alignItems:"center"}}>
+          <button className={"btn btn-sm "+(csView==="all"?"btn-p":"btn-o")} onClick={()=>setCsView("all")}>📊 Sab Products</button>
           <button className={"btn btn-sm "+(csView==="party"?"btn-p":"btn-o")} onClick={()=>setCsView("party")}>👤 Party Price</button>
+          <div className="sr" style={{flex:1,marginBottom:0}}>
+            <Search size={12} className="sr-ic"/>
+            <input className="inp" placeholder="Search..." value={csQ} onChange={e=>setCsQ(e.target.value)}/>
+          </div>
         </div>
 
-        {/* Party inputs */}
         {csView==="party"&&(
-          <div className="card" style={{marginBottom:14,background:"rgba(59,130,246,.05)",border:"1px solid #3b82f6"}}>
-            <div style={{display:"grid",gridTemplateColumns:"2fr 1fr",gap:12}}>
-              <div>
-                <label className="lbl">Party Name</label>
-                <input className="inp" placeholder="e.g. Dr. Oetker" value={partyName} onChange={e=>setPartyName(e.target.value)}/>
-              </div>
-              <div>
-                <label className="lbl">Discount (₹/ctn)</label>
-                <input type="number" className="inp" placeholder="0" value={partyDisc}
-                  onChange={e=>setPartyDisc(Number(e.target.value))}
-                  style={{fontSize:16,fontWeight:800,color:"#cc0000",textAlign:"center"}}/>
-              </div>
+          <div className="card" style={{marginBottom:10}}>
+            <div style={{display:"grid",gridTemplateColumns:"2fr 1fr",gap:10}}>
+              <div><label className="lbl">Party Name</label><input className="inp" placeholder="Dr. Oetker" value={partyName} onChange={e=>setPartyName(e.target.value)}/></div>
+              <div><label className="lbl">Discount (₹/ctn)</label><input type="number" className="inp" value={partyDisc} onChange={e=>setPartyDisc(Number(e.target.value))} style={{color:"#cc0000",fontWeight:800}}/></div>
             </div>
           </div>
         )}
 
-        {/* Product Table */}
+        {/* Simple Clean Table */}
         <div className="card" style={{padding:0}}>
-          <div style={{overflowX:"auto",maxHeight:"65vh",overflowY:"auto"}}>
-            <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
+          <div style={{overflowX:"auto",maxHeight:"60vh",overflowY:"auto"}}>
+            <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
               <thead style={{position:"sticky",top:0,zIndex:10}}>
-                <tr style={{background:"#2E6DA4"}}>
-                  {csView==="all"
-                    ?["Item Name","Pcs/CTN","Box Cav×Cyc","Box Pcs/hr","Box CTN/hr","Lid Cav×Cyc","Lid Pcs/hr","Lid CTN/hr","Combined CTN/hr","Bottleneck","Daana ₹","Carton ₹","Total Cost","List ₹","N1 Floor","N2 Std","N3 Happy","Zone","Margin%"].map(h=>(
-                      <th key={h} style={{padding:"6px 4px",color:"#fff",fontSize:9,fontWeight:700,textAlign:"center",whiteSpace:"pre",background:"#2E6DA4",minWidth:60}}>{h}</th>
-                    ))
-                    :["Item Name","Pcs","List ₹","Floor N1","N2","N3","Disc ₹",partyName||"Party Price","Zone","Margin%"].map(h=>(
-                      <th key={h} style={{padding:"8px 6px",color:"#fff",fontSize:10,fontWeight:700,textAlign:"center",whiteSpace:"nowrap",background:"#2E6DA4"}}>{h}</th>
-                    ))
-                  }
+                <tr style={{background:"#1E3A5F"}}>
+                  {(csView==="all"
+                    ?["Item","Pcs","Daana ₹","Carton ₹","Fixed ₹","Total Cost","List ₹","Floor N1","Happy N3","Zone","Margin"]
+                    :["Item","Pcs","List ₹","Floor N1","Happy N3","Disc ₹",partyName||"Party ₹","Zone","Margin"]
+                  ).map(h=>(
+                    <th key={h} style={{padding:"8px 6px",color:"#fff",fontSize:10,fontWeight:700,textAlign:"center",
+                      background:"#1E3A5F",whiteSpace:"nowrap"}}>{h}</th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
-                {pItems.map((p,idx)=>{
-                  const c=calcProduct(p);
+                {filtItems.map((p,idx)=>{
+                  const c=calc(p);
                   const bg=idx%2===0?"var(--card2)":"var(--card)";
+                  const zc=c.zone.includes("N3")?"#006600":c.zone.includes("N1 Zone")?"#806000":"#cc0000";
+                  const totalCost=c.newDaana+c.carton+c.fixedCost;
                   if(csView==="party") return (
-                    <tr key={idx} style={{borderBottom:"1px solid var(--bdr)",background:bg,fontSize:11}}>
-                      <td style={{padding:"6px 8px",fontWeight:600}}>{p.item_name}</td>
-                      <td style={{textAlign:"center",padding:"6px 4px"}}>{p.pcs_per_carton}</td>
-                      <td style={{textAlign:"center",padding:"6px 4px",color:"#0000ff",fontWeight:700}}>₹{c.listPrice.toLocaleString("en-IN")}</td>
-                      <td style={{textAlign:"center",padding:"6px 4px",color:"#cc0000",fontWeight:700}}>₹{c.n1.toLocaleString("en-IN")}</td>
-                      <td style={{textAlign:"center",padding:"6px 4px",color:"#0066cc",fontWeight:700}}>₹{c.n2.toLocaleString("en-IN")}</td>
-                      <td style={{textAlign:"center",padding:"6px 4px",color:"#006600",fontWeight:700}}>₹{c.n3.toLocaleString("en-IN")}</td>
-                      <td style={{textAlign:"center",padding:"6px 4px",color:"#cc0000"}}>₹{partyDisc}</td>
-                      <td style={{textAlign:"center",padding:"6px 4px",fontWeight:800,fontSize:13,color:c.partyZone.includes("Loss")||c.partyZone.includes("Below")?"#cc0000":"#006600"}}>₹{c.partyPrice.toLocaleString("en-IN")}</td>
-                      <td style={{textAlign:"center",padding:"6px 4px",fontWeight:700,
-                        color:c.partyZone.includes("N3")?"#006600":c.partyZone.includes("N2")?"#0066cc":c.partyZone.includes("N1")?"#806000":"#cc0000"}}>{c.partyZone}</td>
-                      <td style={{textAlign:"center",padding:"6px 4px",fontWeight:700,
-                        color:c.partyMargin<0?"#cc0000":c.partyMargin>=20?"#006600":"#806000"}}>{c.partyMargin}%</td>
+                    <tr key={idx} style={{borderBottom:"1px solid var(--bdr)",background:bg}}>
+                      <td style={{padding:"8px",fontWeight:600}}>{p.item_name}</td>
+                      <td style={{textAlign:"center",padding:"8px 4px"}}>{p.pcs_per_carton}</td>
+                      <td style={{textAlign:"center",padding:"8px 4px",color:"#0000ff",fontWeight:700}}>₹{c.listPrice.toLocaleString("en-IN")}</td>
+                      <td style={{textAlign:"center",padding:"8px 4px",background:"rgba(239,68,68,.08)",color:"#cc0000",fontWeight:700,cursor:"pointer"}}
+                        onClick={()=>{setSelItem(p);setDetailType("fixed");}}>₹{c.newFloor.toLocaleString("en-IN")}</td>
+                      <td style={{textAlign:"center",padding:"8px 4px",background:"rgba(16,185,129,.08)",color:"#006600",fontWeight:700,cursor:"pointer"}}
+                        onClick={()=>{setSelItem(p);setDetailType("fixed");}}>₹{c.newHappy.toLocaleString("en-IN")}</td>
+                      <td style={{textAlign:"center",padding:"8px 4px",color:"#cc0000"}}>₹{partyDisc}</td>
+                      <td style={{textAlign:"center",padding:"8px 4px",fontWeight:800,fontSize:14,color:c.partyPrice<c.newFloor?"#cc0000":"#006600"}}>₹{c.partyPrice.toLocaleString("en-IN")}</td>
+                      <td style={{textAlign:"center",padding:"8px 4px",fontWeight:700,color:zc}}>{c.zone}</td>
+                      <td style={{textAlign:"center",padding:"8px 4px",fontWeight:700,color:c.margin<0?"#cc0000":"#006600"}}>{c.margin}%</td>
                     </tr>
                   );
-                  const zoneColor = c.zone.includes("N3")?"#006600":c.zone.includes("N2")?"#0066cc":c.zone.includes("N1")?"#806000":"#cc0000";
                   return (
-                    <tr key={idx} style={{borderBottom:"1px solid var(--bdr)",background:bg,fontSize:10}}>
-                      <td style={{padding:"5px 8px",fontWeight:600,minWidth:120}}>{p.item_name}</td>
-                      <td style={{textAlign:"center",padding:"5px 4px"}}>{p.pcs_per_carton}</td>
-                      <td style={{textAlign:"center",padding:"5px 4px",color:"#555",fontSize:9}}>{p.box_cav}×{p.box_cyc}s</td>
-                      <td style={{textAlign:"center",padding:"5px 4px"}}>{Math.round(c.boxShotsHr*Number(p.box_cav||0)).toLocaleString()}</td>
-                      <td style={{textAlign:"center",padding:"5px 4px",fontWeight:700,color:"#2E6DA4"}}>{c.boxCtnHr.toFixed(2)}</td>
-                      <td style={{textAlign:"center",padding:"5px 4px",color:"#555",fontSize:9}}>{p.lid_cav}×{p.lid_cyc}s</td>
-                      <td style={{textAlign:"center",padding:"5px 4px"}}>{p.lid_cyc>0?Math.round((3600/Number(p.lid_cyc))*Number(p.lid_cav||0)).toLocaleString():"—"}</td>
-                      <td style={{textAlign:"center",padding:"5px 4px",fontWeight:700,color:"#2E6DA4"}}>{c.lidCtnHr>0?c.lidCtnHr.toFixed(2):"—"}</td>
-                      <td style={{textAlign:"center",padding:"5px 4px",fontWeight:800,color:"#1E3A5F",background:"rgba(30,58,95,.06)"}}>{c.combinedCtnHr.toFixed(2)}</td>
-                      <td style={{textAlign:"center",padding:"5px 4px",fontSize:9,color:c.bottleneck==="Box"?"#cc0000":"#006600",fontWeight:700}}>{c.bottleneck}</td>
-                      <td style={{textAlign:"center",padding:"5px 4px",color:"#8B4513"}}>₹{c.daanaCost.toLocaleString("en-IN")}</td>
-                      <td style={{textAlign:"center",padding:"5px 4px",color:"#555"}}>₹{c.cartonCost}</td>
-                      <td style={{textAlign:"center",padding:"5px 4px",fontWeight:700}}>₹{c.totalCost.toLocaleString("en-IN")}</td>
-                      <td style={{textAlign:"center",padding:"5px 4px",color:"#0000ff",fontWeight:700}}>₹{c.listPrice.toLocaleString("en-IN")}</td>
-                      <td style={{textAlign:"center",padding:"5px 4px",color:"#cc0000",fontWeight:800}}>₹{c.n1.toLocaleString("en-IN")}</td>
-                      <td style={{textAlign:"center",padding:"5px 4px",color:"#0066cc",fontWeight:800}}>₹{c.n2.toLocaleString("en-IN")}</td>
-                      <td style={{textAlign:"center",padding:"5px 4px",color:"#006600",fontWeight:800}}>₹{c.n3.toLocaleString("en-IN")}</td>
-                      <td style={{textAlign:"center",padding:"5px 4px",fontWeight:700,color:zoneColor}}>{c.zone}</td>
-                      <td style={{textAlign:"center",padding:"5px 4px",fontWeight:700,color:c.margin<0?"#cc0000":c.margin>=20?"#006600":"#806000"}}>{c.margin}%</td>
+                    <tr key={idx} style={{borderBottom:"1px solid var(--bdr)",background:bg}}>
+                      <td style={{padding:"8px",fontWeight:600}}>{p.item_name}</td>
+                      <td style={{textAlign:"center",padding:"8px 4px"}}>{p.pcs_per_carton}</td>
+                      {/* Clickable daana */}
+                      <td style={{textAlign:"center",padding:"8px 4px",color:"#8B4513",fontWeight:700,cursor:"pointer",
+                        textDecoration:"underline dotted"}} title="Click for breakdown"
+                        onClick={()=>{setSelItem(p);setDetailType("daana");}}>₹{c.newDaana.toLocaleString("en-IN")}</td>
+                      <td style={{textAlign:"center",padding:"8px 4px",color:"#555"}}>₹{c.carton}</td>
+                      {/* Clickable fixed */}
+                      <td style={{textAlign:"center",padding:"8px 4px",color:"#7d6608",fontWeight:700,cursor:"pointer",
+                        textDecoration:"underline dotted"}} title="Click for breakdown"
+                        onClick={()=>{setSelItem(p);setDetailType("fixed");}}>₹{c.fixedCost}</td>
+                      <td style={{textAlign:"center",padding:"8px 4px",fontWeight:800}}>₹{totalCost.toLocaleString("en-IN")}</td>
+                      <td style={{textAlign:"center",padding:"8px 4px",color:"#0000ff",fontWeight:700}}>₹{c.listPrice.toLocaleString("en-IN")}</td>
+                      <td style={{textAlign:"center",padding:"8px 4px",background:"rgba(239,68,68,.08)",color:"#cc0000",fontWeight:700,cursor:"pointer"}}
+                        onClick={()=>{setSelItem(p);setDetailType("fixed");}}>₹{c.newFloor.toLocaleString("en-IN")}</td>
+                      <td style={{textAlign:"center",padding:"8px 4px",background:"rgba(16,185,129,.08)",color:"#006600",fontWeight:700,cursor:"pointer"}}
+                        onClick={()=>{setSelItem(p);setDetailType("fixed");}}>₹{c.newHappy.toLocaleString("en-IN")}</td>
+                      <td style={{textAlign:"center",padding:"8px 4px",fontWeight:700,color:zc}}>{c.zone}</td>
+                      <td style={{textAlign:"center",padding:"8px 4px",fontWeight:700,color:c.margin<0?"#cc0000":"#006600"}}>{c.margin}%</td>
                     </tr>
                   );
                 })}
@@ -7033,10 +7101,11 @@ export default function CRM({ currentUser, onLogout }) {
             </table>
           </div>
         </div>
+
+        {selItem&&<DetailPopup/>}
       </div>
     );
   };
-
 
   /* ── NAV ── */
   const navs = [
