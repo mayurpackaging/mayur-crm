@@ -6757,6 +6757,215 @@ export default function CRM({ currentUser, onLogout }) {
   };
 
 
+
+  // ══════════════════════════════════════════════
+  // COST SHEET — Dynamic Floor Price Calculator
+  // ══════════════════════════════════════════════
+  const CostSheet = () => {
+    const [homoPrice, setHomoPrice] = useState(100);
+    const [cpPrice, setCpPrice] = useState(90);
+    const [randomPrice, setRandomPrice] = useState(80);
+    const [partyDisc, setPartyDisc] = useState(0);
+    const [partyName, setPartyName] = useState("");
+    const [csView, setCsView] = useState("all"); // all | party
+
+    // Product data from price_items (loaded as PRODS in CRM)
+    // We need price_items with box_wt, lid_wt etc — load separately
+    const [pItems, setPItems] = useState([]);
+    const [mosData, setMosData] = useState({});
+
+    useEffect(()=>{
+      sbFetch("price_items?is_active=eq.true&order=item_name.asc&select=item_name,crm_product_name,pcs_per_carton,box_wt,lid_wt,box_homo,box_cp,box_random,lid_homo,lid_cp,lid_random,carton_cost,list_price,tonnage")
+        .then(d=>setPItems(d||[]));
+    },[]);
+
+    const calcProduct = (p) => {
+      const bh=Number(p.box_homo||0), bc=Number(p.box_cp||0), br=Number(p.box_random||0);
+      const lh=Number(p.lid_homo||0), lc=Number(p.lid_cp||0), lr=Number(p.lid_random||0);
+      const th=bh+lh, tc=bc+lc, tran=br+lr;
+      const daanaCost = Math.round(th*homoPrice + tc*cpPrice + tran*randomPrice);
+      const cartonCost = Number(p.carton_cost||0);
+      const totalCost = daanaCost + cartonCost;
+      const listPrice = Number(p.list_price||0);
+      // N1/N2 adjustment from base (100/90/80)
+      const adj = Math.round(th*(homoPrice-100) + tc*(cpPrice-90) + tran*(randomPrice-80));
+      const n1Base = p.floor_price||0; const n3Base = p.happy_price||0;
+      const n1 = Math.round((n1Base||totalCost*1.08) + adj);
+      const n3 = Math.round((n3Base||totalCost*1.22) + adj);
+      const partyPrice = listPrice - partyDisc;
+      const margin = listPrice>0?Math.round((listPrice-totalCost)/listPrice*100):0;
+      const partyMargin = partyPrice>0?Math.round((partyPrice-totalCost)/partyPrice*100):0;
+      const zone = listPrice>=n3?"🔵 N3":listPrice>=n1?"🟡 N1":"🔴 Below Floor";
+      const partyZone = partyPrice>=n3?"🔵 N3":partyPrice>=n1?"🟡 N1":"🔴 Below Floor";
+      return {daanaCost,cartonCost,totalCost,n1,n3,listPrice,partyPrice,margin,partyMargin,zone,partyZone};
+    };
+
+    const printPDF = () => {
+      const win = window.open("","_blank");
+      if(!win){toast$("Popup blocked!",true);return;}
+      const rows = pItems.map(p=>{
+        const c = calcProduct(p);
+        if(csView==="party") {
+          return `<tr style="border-bottom:1px solid #eee">
+            <td style="padding:5px 8px;font-size:11px">${p.item_name}</td>
+            <td style="text-align:center;padding:5px">${p.pcs_per_carton}</td>
+            <td style="text-align:center;padding:5px">₹${c.listPrice.toLocaleString("en-IN")}</td>
+            <td style="text-align:center;padding:5px;color:#cc0000;font-weight:700">₹${c.n1.toLocaleString("en-IN")}</td>
+            <td style="text-align:center;padding:5px">₹${partyDisc}</td>
+            <td style="text-align:center;padding:5px;font-weight:700">₹${c.partyPrice.toLocaleString("en-IN")}</td>
+            <td style="text-align:center;padding:5px;font-weight:700;color:${c.partyPrice<c.n1?"#cc0000":c.partyPrice>=c.n3?"#006600":"#806000"}">${c.partyZone}</td>
+            <td style="text-align:center;padding:5px;font-weight:700">${c.partyMargin}%</td>
+          </tr>`;
+        }
+        return `<tr style="border-bottom:1px solid #eee">
+          <td style="padding:5px 8px;font-size:11px">${p.item_name}</td>
+          <td style="text-align:center;padding:5px">${p.pcs_per_carton}</td>
+          <td style="text-align:center;padding:5px">₹${c.daanaCost.toLocaleString("en-IN")}</td>
+          <td style="text-align:center;padding:5px">₹${c.cartonCost}</td>
+          <td style="text-align:center;padding:5px;font-weight:700">₹${c.totalCost.toLocaleString("en-IN")}</td>
+          <td style="text-align:center;padding:5px">₹${c.listPrice.toLocaleString("en-IN")}</td>
+          <td style="text-align:center;padding:5px;color:#cc0000;font-weight:700">₹${c.n1.toLocaleString("en-IN")}</td>
+          <td style="text-align:center;padding:5px;color:#006600;font-weight:700">₹${c.n3.toLocaleString("en-IN")}</td>
+          <td style="text-align:center;padding:5px;font-weight:700;color:${c.listPrice<c.n1?"#cc0000":c.listPrice>=c.n3?"#006600":"#806000"}">${c.zone}</td>
+          <td style="text-align:center;padding:5px">${c.margin}%</td>
+        </tr>`;
+      }).join("");
+
+      const headers = csView==="party"
+        ? `<tr style="background:#2E6DA4;color:#fff"><th style="padding:8px">Item</th><th>Pcs</th><th>List ₹</th><th>Floor N1</th><th>Disc ₹</th><th>${partyName||"Party"} Price</th><th>Zone</th><th>Margin%</th></tr>`
+        : `<tr style="background:#2E6DA4;color:#fff"><th style="padding:8px">Item</th><th>Pcs</th><th>Daana ₹</th><th>Carton ₹</th><th>Total Cost</th><th>List ₹</th><th>Floor N1</th><th>Happy N3</th><th>Zone</th><th>Margin%</th></tr>`;
+
+      win.document.write(`<!DOCTYPE html><html><head><title>Cost Sheet - Mayur Food Packaging</title>
+        <style>body{font-family:Arial,sans-serif;padding:20px;font-size:12px;}
+        h2{color:#1E3A5F;margin-bottom:4px;}
+        .info{background:#FFF2CC;padding:10px;border-radius:6px;margin-bottom:14px;font-size:11px;}
+        table{width:100%;border-collapse:collapse;font-size:11px;}
+        th{padding:8px;text-align:center;font-size:10px;}
+        @media print{body{padding:10px;}}</style></head><body>
+        <h2>Mayur Food Packaging Products — ${csView==="party"?`Party Price Sheet: ${partyName||"—"}`:"Dynamic Cost Sheet"}</h2>
+        <div class="info">
+          <b>Daana Prices:</b> Homo ₹${homoPrice}/kg | CP ₹${cpPrice}/kg | Random ₹${randomPrice}/kg
+          ${csView==="party"?`| <b>Discount: ₹${partyDisc}/ctn</b>`:""}
+          &nbsp;&nbsp;|&nbsp;&nbsp; Generated: ${new Date().toLocaleDateString("en-IN",{timeZone:"Asia/Kolkata"})}
+        </div>
+        <table><thead>${headers}</thead><tbody>${rows}</tbody></table>
+        <div style="margin-top:16px;font-size:10px;color:#888;border-top:1px solid #ddd;padding-top:8px;">
+          Shreeja Packaging Industries Pvt. Ltd. | N1=Floor (T/hr ₹1,097) | N3=Happy (T/hr ₹1,938) | Confidential
+        </div>
+        <script>window.onload=()=>window.print();</script>
+        </body></html>`);
+      win.document.close();
+    };
+
+    return (
+      <div>
+        <div className="sh">
+          <div>
+            <div className="sh-t">💰 Cost Sheet</div>
+            <div className="sh-s">Dynamic Floor Price Calculator · N1/N2/N3 Zones</div>
+          </div>
+          <button className="btn btn-p" onClick={printPDF}>🖨️ PDF Download</button>
+        </div>
+
+        {/* Daana Price Inputs */}
+        <div className="card" style={{marginBottom:14,background:"rgba(245,158,11,.05)",border:"1px solid #f59e0b"}}>
+          <div style={{fontWeight:700,fontSize:13,marginBottom:12,color:"#f59e0b"}}>⚡ Daana Prices (₹/kg) — Change karo → sab auto-update</div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12}}>
+            {[["Homo",homoPrice,setHomoPrice],["CP",cpPrice,setCpPrice],["Random",randomPrice,setRandomPrice]].map(([lbl,val,set])=>(
+              <div key={lbl}>
+                <label className="lbl">{lbl} Daana (₹/kg)</label>
+                <input type="number" className="inp" value={val}
+                  onChange={e=>set(Number(e.target.value))}
+                  style={{fontSize:18,fontWeight:800,color:"#0000ff",textAlign:"center"}}/>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* View toggle */}
+        <div style={{display:"flex",gap:8,marginBottom:12}}>
+          <button className={"btn btn-sm "+(csView==="all"?"btn-p":"btn-o")} onClick={()=>setCsView("all")}>📊 All Products</button>
+          <button className={"btn btn-sm "+(csView==="party"?"btn-p":"btn-o")} onClick={()=>setCsView("party")}>👤 Party Price</button>
+        </div>
+
+        {/* Party inputs */}
+        {csView==="party"&&(
+          <div className="card" style={{marginBottom:14,background:"rgba(59,130,246,.05)",border:"1px solid #3b82f6"}}>
+            <div style={{display:"grid",gridTemplateColumns:"2fr 1fr",gap:12}}>
+              <div>
+                <label className="lbl">Party Name</label>
+                <input className="inp" placeholder="e.g. Dr. Oetker" value={partyName} onChange={e=>setPartyName(e.target.value)}/>
+              </div>
+              <div>
+                <label className="lbl">Discount (₹/ctn)</label>
+                <input type="number" className="inp" placeholder="0" value={partyDisc}
+                  onChange={e=>setPartyDisc(Number(e.target.value))}
+                  style={{fontSize:16,fontWeight:800,color:"#cc0000",textAlign:"center"}}/>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Product Table */}
+        <div className="card" style={{padding:0}}>
+          <div style={{overflowX:"auto"}}>
+            <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
+              <thead>
+                <tr style={{background:"#2E6DA4"}}>
+                  {csView==="all"
+                    ?["Item Name","Pcs","Daana ₹","Carton ₹","Total Cost","List ₹","🔴 Floor N1","🔵 Happy N3","Zone","Margin%"].map(h=>(
+                      <th key={h} style={{padding:"8px 6px",color:"#fff",fontSize:10,fontWeight:700,textAlign:"center",whiteSpace:"nowrap"}}>{h}</th>
+                    ))
+                    :["Item Name","Pcs","List ₹","Floor N1","Disc ₹",partyName||"Party Price","Zone","Margin%"].map(h=>(
+                      <th key={h} style={{padding:"8px 6px",color:"#fff",fontSize:10,fontWeight:700,textAlign:"center",whiteSpace:"nowrap"}}>{h}</th>
+                    ))
+                  }
+                </tr>
+              </thead>
+              <tbody>
+                {pItems.map((p,idx)=>{
+                  const c=calcProduct(p);
+                  const bg=idx%2===0?"var(--card2)":"var(--card)";
+                  if(csView==="party") return (
+                    <tr key={idx} style={{borderBottom:"1px solid var(--bdr)",background:bg}}>
+                      <td style={{padding:"7px 8px",fontSize:11}}>{p.item_name}</td>
+                      <td style={{textAlign:"center",padding:"7px 4px"}}>{p.pcs_per_carton}</td>
+                      <td style={{textAlign:"center",padding:"7px 4px"}}>₹{c.listPrice.toLocaleString("en-IN")}</td>
+                      <td style={{textAlign:"center",padding:"7px 4px",color:"#cc0000",fontWeight:700}}>₹{c.n1.toLocaleString("en-IN")}</td>
+                      <td style={{textAlign:"center",padding:"7px 4px",color:"#cc0000"}}>₹{partyDisc}</td>
+                      <td style={{textAlign:"center",padding:"7px 4px",fontWeight:800,fontSize:13}}>₹{c.partyPrice.toLocaleString("en-IN")}</td>
+                      <td style={{textAlign:"center",padding:"7px 4px",fontWeight:700,
+                        color:c.partyPrice<c.n1?"#cc0000":c.partyPrice>=c.n3?"#006600":"#806000"}}>{c.partyZone}</td>
+                      <td style={{textAlign:"center",padding:"7px 4px",fontWeight:700,
+                        color:c.partyMargin<10?"#cc0000":c.partyMargin>=18?"#006600":"#806000"}}>{c.partyMargin}%</td>
+                    </tr>
+                  );
+                  return (
+                    <tr key={idx} style={{borderBottom:"1px solid var(--bdr)",background:bg}}>
+                      <td style={{padding:"7px 8px",fontSize:11}}>{p.item_name}</td>
+                      <td style={{textAlign:"center",padding:"7px 4px"}}>{p.pcs_per_carton}</td>
+                      <td style={{textAlign:"center",padding:"7px 4px",color:"#8B4513"}}>₹{c.daanaCost.toLocaleString("en-IN")}</td>
+                      <td style={{textAlign:"center",padding:"7px 4px",color:"#555"}}>₹{c.cartonCost}</td>
+                      <td style={{textAlign:"center",padding:"7px 4px",fontWeight:700}}>₹{c.totalCost.toLocaleString("en-IN")}</td>
+                      <td style={{textAlign:"center",padding:"7px 4px",color:"#0000ff",fontWeight:700}}>₹{c.listPrice.toLocaleString("en-IN")}</td>
+                      <td style={{textAlign:"center",padding:"7px 4px",color:"#cc0000",fontWeight:800}}>₹{c.n1.toLocaleString("en-IN")}</td>
+                      <td style={{textAlign:"center",padding:"7px 4px",color:"#006600",fontWeight:800}}>₹{c.n3.toLocaleString("en-IN")}</td>
+                      <td style={{textAlign:"center",padding:"7px 4px",fontWeight:700,
+                        color:c.listPrice<c.n1?"#cc0000":c.listPrice>=c.n3?"#006600":"#806000"}}>{c.zone}</td>
+                      <td style={{textAlign:"center",padding:"7px 4px",fontWeight:700,
+                        color:c.margin<10?"#cc0000":c.margin>=18?"#006600":"#806000"}}>{c.margin}%</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+
   /* ── NAV ── */
   const navs = [
     {id:"dashboard",lbl:"Dashboard",ic:"🏠",roles:["admin","sales","dataentry"]},
@@ -6779,6 +6988,7 @@ export default function CRM({ currentUser, onLogout }) {
     {id:"daily",lbl:"Daily Report",ic:"📊",roles:["admin"]},
     {id:"calling",lbl:"Calling",ic:"📞",roles:["admin","sales"]},
     {id:"stock",lbl:"Stock",ic:"📦",roles:["admin","sales"]},
+    {id:"costsheet",lbl:"Cost Sheet",ic:"💰",roles:["admin"]},
     {id:"analytics",lbl:"Analytics",ic:"📊",roles:["admin"]},
   ].filter(n=>n.roles?.includes(userRole)||userRole==="viewer");
 
@@ -6840,6 +7050,7 @@ export default function CRM({ currentUser, onLogout }) {
           {view==="daily"&&<DailyReport/>}
           {view==="calling"&&<CallingDashboard/>}
           {view==="stock"&&<StockMgmt/>}
+          {view==="costsheet"&&<CostSheet/>}
         </div>
       </div>
       {renderModal()}
