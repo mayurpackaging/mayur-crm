@@ -6775,32 +6775,36 @@ export default function CRM({ currentUser, onLogout }) {
     const [mosData, setMosData] = useState({});
 
     useEffect(()=>{
-      sbFetch("price_items?is_active=eq.true&order=item_name.asc&select=item_name,crm_product_name,pcs_per_carton,box_wt,lid_wt,box_homo,box_cp,box_random,lid_homo,lid_cp,lid_random,carton_cost,list_price,tonnage,floor_price,happy_price")
+      sbFetch("price_items?is_active=eq.true&order=item_name.asc&select=item_name,crm_product_name,pcs_per_carton,box_wt,lid_wt,box_homo,box_cp,box_random,lid_homo,lid_cp,lid_random,carton_cost,list_price,tonnage,floor_price,happy_price,base_daana_cost")
         .then(d=>setPItems(d||[]));
     },[]);
 
     const calcProduct = (p) => {
-      // Weights are in GRAMS PER PIECE — divide by 1000 for kg, multiply by pcs for per-carton
+      // Weights = grams per piece
       const pcs = Number(p.pcs_per_carton||1);
       const bh=Number(p.box_homo||0), bc=Number(p.box_cp||0), br=Number(p.box_random||0);
       const lh=Number(p.lid_homo||0), lc=Number(p.lid_cp||0), lr=Number(p.lid_random||0);
-      // Per piece weights in kg
       const th_kg=(bh+lh)/1000, tc_kg=(bc+lc)/1000, tr_kg=(br+lr)/1000;
-      // Daana cost per CTN = per_piece_kg * pcs * price/kg
+      // New daana cost per CTN
       const daanaCost = Math.round((th_kg*homoPrice + tc_kg*cpPrice + tr_kg*randomPrice) * pcs);
       const cartonCost = Number(p.carton_cost||0);
       const totalCost = daanaCost + cartonCost;
       const listPrice = Number(p.list_price||0);
-      // N1/N2 adjustment — base prices homo=100, cp=90, random=80
-      const daanaAdj = Math.round((th_kg*(homoPrice-100) + tc_kg*(cpPrice-90) + tr_kg*(randomPrice-80)) * pcs);
-      const n1 = Number(p.floor_price||0)>0 ? Math.round(Number(p.floor_price)+daanaAdj) : Math.round(totalCost*1.08);
-      const n3 = Number(p.happy_price||0)>0 ? Math.round(Number(p.happy_price)+daanaAdj) : Math.round(totalCost*1.22);
+      // Correct formula: New Floor = New Daana + Fixed Cost
+      // Fixed Cost = base_floor - base_daana (from MOS)
+      const baseDaana = Number(p.base_daana_cost||0);
+      const baseFloor = Number(p.floor_price||0);
+      const baseHappy = Number(p.happy_price||0);
+      const fixedCostN1 = baseFloor - baseDaana;  // overhead + machine cost at N1
+      const fixedCostN3 = baseHappy - baseDaana;  // overhead + machine cost at N3
+      const n1 = baseDaana>0 ? Math.round(daanaCost + fixedCostN1) : Math.round(totalCost*1.08);
+      const n3 = baseDaana>0 ? Math.round(daanaCost + fixedCostN3) : Math.round(totalCost*1.22);
       const partyPrice = Math.max(0, listPrice - partyDisc);
       const margin = listPrice>0?Math.round((listPrice-totalCost)/listPrice*100):0;
       const partyMargin = partyPrice>0?Math.round((partyPrice-totalCost)/partyPrice*100):0;
-      const zone = margin<0?"🔴 Loss":listPrice>=n3?"🔵 N3":listPrice>=n1?"🟡 N1":"🔴 Below Floor";
-      const partyZone = partyMargin<0?"🔴 Loss":partyPrice>=n3?"🔵 N3":partyPrice>=n1?"🟡 N1":"🔴 Below Floor";
-      return {daanaCost,cartonCost,totalCost,n1,n3,listPrice,partyPrice,margin,partyMargin,zone,partyZone,daanaAdj};
+      const zone = listPrice<totalCost?"🔴 Loss":listPrice>=n3?"🔵 N3":listPrice>=n1?"🟡 N1":"🔴 Below Floor";
+      const partyZone = partyPrice<totalCost?"🔴 Loss":partyPrice>=n3?"🔵 N3":partyPrice>=n1?"🟡 N1":"🔴 Below Floor";
+      return {daanaCost,cartonCost,totalCost,n1,n3,listPrice,partyPrice,margin,partyMargin,zone,partyZone,fixedCostN1};
     };
 
     const printPDF = () => {
