@@ -6780,25 +6780,26 @@ export default function CRM({ currentUser, onLogout }) {
     },[]);
 
     const calcProduct = (p) => {
-      // Daana weights (kg per carton)
+      // Weights are in GRAMS PER PIECE — divide by 1000 for kg, multiply by pcs for per-carton
+      const pcs = Number(p.pcs_per_carton||1);
       const bh=Number(p.box_homo||0), bc=Number(p.box_cp||0), br=Number(p.box_random||0);
       const lh=Number(p.lid_homo||0), lc=Number(p.lid_cp||0), lr=Number(p.lid_random||0);
-      const th=bh+lh, tc=bc+lc, tran=br+lr;
-      // Daana cost at current prices
-      const daanaCost = Math.round(th*homoPrice + tc*cpPrice + tran*randomPrice);
+      // Per piece weights in kg
+      const th_kg=(bh+lh)/1000, tc_kg=(bc+lc)/1000, tr_kg=(br+lr)/1000;
+      // Daana cost per CTN = per_piece_kg * pcs * price/kg
+      const daanaCost = Math.round((th_kg*homoPrice + tc_kg*cpPrice + tr_kg*randomPrice) * pcs);
       const cartonCost = Number(p.carton_cost||0);
       const totalCost = daanaCost + cartonCost;
       const listPrice = Number(p.list_price||0);
-      // Floor/Happy price — from DB (actual MOS values) + adjustment for daana price change
-      // Base daana prices: homo=100, cp=90, random=80
-      const daanaAdj = Math.round(th*(homoPrice-100) + tc*(cpPrice-90) + tran*(randomPrice-80));
+      // N1/N2 adjustment — base prices homo=100, cp=90, random=80
+      const daanaAdj = Math.round((th_kg*(homoPrice-100) + tc_kg*(cpPrice-90) + tr_kg*(randomPrice-80)) * pcs);
       const n1 = Number(p.floor_price||0)>0 ? Math.round(Number(p.floor_price)+daanaAdj) : Math.round(totalCost*1.08);
       const n3 = Number(p.happy_price||0)>0 ? Math.round(Number(p.happy_price)+daanaAdj) : Math.round(totalCost*1.22);
       const partyPrice = Math.max(0, listPrice - partyDisc);
       const margin = listPrice>0?Math.round((listPrice-totalCost)/listPrice*100):0;
       const partyMargin = partyPrice>0?Math.round((partyPrice-totalCost)/partyPrice*100):0;
-      const zone = listPrice>=n3?"🔵 N3":listPrice>=n1?"🟡 N1":"🔴 Below Floor";
-      const partyZone = partyPrice>=n3?"🔵 N3":partyPrice>=n1?"🟡 N1":"🔴 Below Floor";
+      const zone = margin<0?"🔴 Loss":listPrice>=n3?"🔵 N3":listPrice>=n1?"🟡 N1":"🔴 Below Floor";
+      const partyZone = partyMargin<0?"🔴 Loss":partyPrice>=n3?"🔵 N3":partyPrice>=n1?"🟡 N1":"🔴 Below Floor";
       return {daanaCost,cartonCost,totalCost,n1,n3,listPrice,partyPrice,margin,partyMargin,zone,partyZone,daanaAdj};
     };
 
@@ -6936,16 +6937,16 @@ export default function CRM({ currentUser, onLogout }) {
 
         {/* Product Table */}
         <div className="card" style={{padding:0}}>
-          <div style={{overflowX:"auto"}}>
+          <div style={{overflowX:"auto",maxHeight:"65vh",overflowY:"auto"}}>
             <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
-              <thead>
+              <thead style={{position:"sticky",top:0,zIndex:10}}>
                 <tr style={{background:"#2E6DA4"}}>
                   {csView==="all"
                     ?["Item Name","Pcs","Daana ₹","Carton ₹","Total Cost","List ₹","🔴 Floor N1","🔵 Happy N3","Zone","Margin%"].map(h=>(
-                      <th key={h} style={{padding:"8px 6px",color:"#fff",fontSize:10,fontWeight:700,textAlign:"center",whiteSpace:"nowrap"}}>{h}</th>
+                      <th key={h} style={{padding:"8px 6px",color:"#fff",fontSize:10,fontWeight:700,textAlign:"center",whiteSpace:"nowrap",background:"#2E6DA4"}}>{h}</th>
                     ))
                     :["Item Name","Pcs","List ₹","Floor N1","Disc ₹",partyName||"Party Price","Zone","Margin%"].map(h=>(
-                      <th key={h} style={{padding:"8px 6px",color:"#fff",fontSize:10,fontWeight:700,textAlign:"center",whiteSpace:"nowrap"}}>{h}</th>
+                      <th key={h} style={{padding:"8px 6px",color:"#fff",fontSize:10,fontWeight:700,textAlign:"center",whiteSpace:"nowrap",background:"#2E6DA4"}}>{h}</th>
                     ))
                   }
                 </tr>
