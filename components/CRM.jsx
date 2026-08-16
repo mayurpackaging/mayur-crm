@@ -6840,17 +6840,23 @@ export default function CRM({ currentUser, onLogout }) {
     };
 
     useEffect(()=>{
-      sbFetch("price_items?is_active=eq.true&order=item_name.asc&select=item_name,crm_product_name,pcs_per_carton,box_homo,box_cp,box_random,lid_homo,lid_cp,lid_random,carton_cost,list_price,poly_gm,colour")
+      sbFetch("price_items?is_active=eq.true&order=item_name.asc&select=item_name,crm_product_name,pcs_per_carton,box_wt,lid_wt,box_homo,box_cp,box_random,lid_homo,lid_cp,lid_random,carton_cost,list_price,poly_gm,colour")
         .then(d=>setPItems(d||[]));
     },[]);
 
     const calc = (p) => {
       const mos = MOS[p.item_name]||{};
       const pcs=Number(p.pcs_per_carton||1);
+      // Box weights (g/pc)
       const bh=Number(p.box_homo||0),bc=Number(p.box_cp||0),br=Number(p.box_random||0);
+      // Lid weights (g/pc)
       const lh=Number(p.lid_homo||0),lc=Number(p.lid_cp||0),lr=Number(p.lid_random||0);
+      // Box wt and lid wt total per pc
+      const boxWt=Number(p.box_wt||0), lidWt=Number(p.lid_wt||0);
+      const totalWtPerPc=boxWt+lidWt;
+      // Combined weights (g/pc) for daana
       const th=(bh+lh)/1000, tc=(bc+lc)/1000, tr=(br+lr)/1000;
-      // Daana breakdown
+      // Daana breakdown per CTN
       const homoCost = Math.round(th*pcs*homoPrice);
       const cpCost   = Math.round(tc*pcs*cpPrice);
       const randCost = Math.round(tr*pcs*randomPrice);
@@ -6859,19 +6865,29 @@ export default function CRM({ currentUser, onLogout }) {
       const carton   = Number(p.carton_cost||0);
       const listPrice= Number(p.list_price||0);
       const mh       = mos.mh||0;
+      // MB Cost = 2% of daana (masterbatch loading)
+      const mbCost = Math.round(newDaana*0.02);
+      // Poly Cost = poly_gm/1000 * poly_rate (₹120/kg default)
+      const polyGm = Number(p.poly_gm||0);
+      const polyRate = 210; // ₹/kg
+      const polyCost = Math.round(polyGm/1000*polyRate);
+      // Total variable cost
+      const totalVariable = newDaana + mbCost + polyCost + carton;
       // N1/N3 zone thresholds (derived from MOS)
       const n1Zone = mh>0 ? Math.round((mos.fp-baseDaana-carton)/mh) : 1097;
       const n3Zone = mh>0 ? Math.round((mos.hp-baseDaana-carton)/mh) : 1938;
-      const newFloor = Math.round(newDaana+carton+n1Zone*mh);
-      const newHappy = Math.round(newDaana+carton+n3Zone*mh);
+      const newFloor = Math.round(newDaana+mbCost+polyCost+carton+n1Zone*mh);
+      const newHappy = Math.round(newDaana+mbCost+polyCost+carton+n3Zone*mh);
       const fixedCost= Math.round(n1Zone*mh);
       const partyPrice = Math.max(0,listPrice-partyDisc);
-      const margin = listPrice>0?Math.round((listPrice-newDaana-carton-fixedCost)/listPrice*100):0;
-      const zone = listPrice<(newDaana+carton)?"🔴 Loss":listPrice>=newHappy?"🔵 N3 Happy":listPrice>=newFloor?"🟡 N1 Zone":"🔴 Below N1";
-      // Poly & MB
-      const polyGm = Number(p.poly_gm||0);
-      return {homoCost,cpCost,randCost,newDaana,baseDaana,carton,listPrice,newFloor,newHappy,fixedCost,
-              mh,n1Zone,n3Zone,zone,margin,partyPrice,polyGm,pcs,th,tc,tr};
+      const margin = listPrice>0?Math.round((listPrice-totalVariable-fixedCost)/listPrice*100):0;
+      const zone = listPrice<totalVariable?"🔴 Loss":listPrice>=newHappy?"🔵 N3 Happy":listPrice>=newFloor?"🟡 N1 Zone":"🔴 Below N1";
+      return {homoCost,cpCost,randCost,newDaana,baseDaana,mbCost,polyCost,carton,listPrice,
+              newFloor,newHappy,fixedCost,totalVariable,
+              mh,n1Zone,n3Zone,zone,margin,partyPrice,
+              polyGm,polyRate,pcs,th,tc,tr,
+              boxWt,lidWt,totalWtPerPc,
+              bh,bc,br,lh,lc,lr};
     };
 
     const filtItems = pItems.filter(p=>!csQ||p.item_name.toLowerCase().includes(csQ.toLowerCase()));
@@ -6892,32 +6908,75 @@ export default function CRM({ currentUser, onLogout }) {
 
             {detailType==="daana"&&(
               <div>
-                <div style={{background:"var(--card2)",borderRadius:8,padding:12,marginBottom:10}}>
-                  <div style={{fontSize:11,color:"var(--mut)",marginBottom:8}}>Weights (g/pc) × Pcs × Price/kg</div>
-                  {[
-                    ["Homo",c.th*1000,homoPrice,c.homoCost,"#3b82f6"],
-                    ["CP",c.tc*1000,cpPrice,c.cpCost,"#8b5cf6"],
-                    ["Random",c.tr*1000,randomPrice,c.randCost,"#f59e0b"],
-                  ].map(([lbl,wt,price,cost,clr])=>(
-                    <div key={lbl} style={{display:"flex",justifyContent:"space-between",alignItems:"center",
-                      padding:"8px 0",borderBottom:"1px solid var(--bdr)"}}>
-                      <div style={{flex:1}}>
-                        <div style={{fontWeight:600,color:clr}}>{lbl} Daana</div>
-                        <div style={{fontSize:10,color:"var(--mut)"}}>
-                          {wt.toFixed(3)}g/pc × {c.pcs} pcs = {(wt*c.pcs/1000).toFixed(3)}kg × ₹{price}/kg
-                        </div>
+                {/* Weight summary */}
+                <div style={{background:"rgba(30,58,95,.06)",borderRadius:8,padding:10,marginBottom:10,fontSize:11}}>
+                  <div style={{fontWeight:700,marginBottom:6,color:"var(--acc)"}}>📦 Weight per Piece</div>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,textAlign:"center"}}>
+                    {[["Box",c.boxWt,"#2E6DA4"],["Lid",c.lidWt,"#7A5C1E"],["Total",c.totalWtPerPc,"#1E3A5F"]].map(([lbl,wt,clr])=>(
+                      <div key={lbl} style={{background:"var(--card)",borderRadius:6,padding:6}}>
+                        <div style={{fontSize:9,color:"var(--mut)"}}>{lbl}</div>
+                        <div style={{fontWeight:800,color:clr,fontSize:14}}>{wt.toFixed(1)}g</div>
+                        <div style={{fontSize:9,color:"var(--mut)"}}>{(wt*c.pcs/1000).toFixed(3)}kg/CTN</div>
                       </div>
-                      <div style={{fontWeight:800,fontSize:14}}>₹{cost.toLocaleString("en-IN")}</div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Daana breakdown */}
+                <div style={{background:"var(--card2)",borderRadius:8,padding:12,marginBottom:10}}>
+                  <div style={{fontSize:11,color:"var(--mut)",marginBottom:8,fontWeight:600}}>🌾 Daana Cost Breakdown</div>
+                  {[
+                    ["Homo","Box:"+c.bh.toFixed(2)+"g + Lid:"+c.lh.toFixed(2)+"g = "+((c.bh+c.lh)).toFixed(2)+"g/pc",c.th*1000,homoPrice,c.homoCost,"#3b82f6"],
+                    ["CP","Box:"+c.bc.toFixed(2)+"g + Lid:"+c.lc.toFixed(2)+"g = "+((c.bc+c.lc)).toFixed(2)+"g/pc",c.tc*1000,cpPrice,c.cpCost,"#8b5cf6"],
+                    ["Random","Box:"+c.br.toFixed(2)+"g + Lid:"+c.lr.toFixed(2)+"g = "+((c.br+c.lr)).toFixed(2)+"g/pc",c.tr*1000,randomPrice,c.randCost,"#f59e0b"],
+                  ].map(([lbl,detail,wt,price,cost,clr])=>(
+                    <div key={lbl} style={{padding:"8px 0",borderBottom:"1px solid var(--bdr)"}}>
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                        <div style={{fontWeight:600,color:clr}}>{lbl} Daana</div>
+                        <div style={{fontWeight:800,fontSize:13}}>₹{cost.toLocaleString("en-IN")}</div>
+                      </div>
+                      <div style={{fontSize:10,color:"var(--mut)",marginTop:2}}>{detail}</div>
+                      <div style={{fontSize:10,color:"var(--mut)"}}>
+                        {(wt*c.pcs/1000).toFixed(3)}kg/CTN × ₹{price}/kg
+                      </div>
                     </div>
                   ))}
                 </div>
-                <div style={{display:"flex",justifyContent:"space-between",padding:"8px 12px",
-                  background:"rgba(239,68,68,.08)",borderRadius:8,fontWeight:800,fontSize:15}}>
-                  <span>Total Daana/CTN</span>
-                  <span style={{color:"#cc0000"}}>₹{c.newDaana.toLocaleString("en-IN")}</span>
+
+                {/* MB + Poly */}
+                <div style={{background:"var(--card2)",borderRadius:8,padding:12,marginBottom:10}}>
+                  <div style={{fontSize:11,color:"var(--mut)",marginBottom:8,fontWeight:600}}>📦 MB + Poly</div>
+                  <div style={{display:"flex",justifyContent:"space-between",padding:"6px 0",borderBottom:"1px solid var(--bdr)"}}>
+                    <div>
+                      <div style={{fontSize:11,fontWeight:600}}>Masterbatch (MB)</div>
+                      <div style={{fontSize:10,color:"var(--mut)"}}>2% of Daana = 2% × ₹{c.newDaana}</div>
+                    </div>
+                    <div style={{fontWeight:700}}>₹{c.mbCost}</div>
+                  </div>
+                  <div style={{display:"flex",justifyContent:"space-between",padding:"6px 0"}}>
+                    <div>
+                      <div style={{fontSize:11,fontWeight:600}}>Polythene</div>
+                      <div style={{fontSize:10,color:"var(--mut)"}}>{c.polyGm}g/CTN × ₹{c.polyRate}/kg = {(c.polyGm/1000).toFixed(3)}kg</div>
+                    </div>
+                    <div style={{fontWeight:700}}>₹{c.polyCost}</div>
+                  </div>
                 </div>
-                <div style={{fontSize:10,color:"var(--mut)",marginTop:8,textAlign:"center"}}>
-                  Base daana (MOS): ₹{c.baseDaana.toLocaleString("en-IN")} | Change: {c.newDaana>c.baseDaana?"▲":"▼"} ₹{Math.abs(c.newDaana-c.baseDaana)}
+
+                {/* Total */}
+                <div style={{borderRadius:8,padding:"10px 12px",background:"rgba(239,68,68,.08)"}}>
+                  {[["Daana",c.newDaana,"#8B4513"],["MB",c.mbCost,"#7d6608"],["Poly",c.polyCost,"#7d6608"],["Carton",c.carton,"#555"]].map(([lbl,val,clr])=>(
+                    <div key={lbl} style={{display:"flex",justifyContent:"space-between",fontSize:12,marginBottom:4}}>
+                      <span style={{color:clr}}>{lbl}</span><span>₹{val}</span>
+                    </div>
+                  ))}
+                  <div style={{display:"flex",justifyContent:"space-between",fontWeight:800,fontSize:15,
+                    borderTop:"1px solid var(--bdr)",paddingTop:6,marginTop:4}}>
+                    <span>Total Variable/CTN</span>
+                    <span style={{color:"#cc0000"}}>₹{c.totalVariable.toLocaleString("en-IN")}</span>
+                  </div>
+                  <div style={{fontSize:10,color:"var(--mut)",marginTop:6,textAlign:"center"}}>
+                    Base daana (MOS): ₹{c.baseDaana} | Change: {c.newDaana>c.baseDaana?"▲ +":"▼ "}₹{Math.abs(c.newDaana-c.baseDaana)}
+                  </div>
                 </div>
               </div>
             )}
@@ -7072,7 +7131,7 @@ export default function CRM({ currentUser, onLogout }) {
               <thead style={{position:"sticky",top:0,zIndex:10}}>
                 <tr style={{background:"#1E3A5F"}}>
                   {(csView==="all"
-                    ?["Item","Pcs","Daana ₹","Carton ₹","Fixed ₹","Total Cost","List ₹","Floor N1","Happy N3","Zone","Margin"]
+                    ?["Item","Pcs","Daana ₹","MB ₹","Poly ₹","Carton ₹","Fixed ₹","Total Cost","List ₹","Floor N1","Happy N3","Zone","Margin"]
                     :["Item","Pcs","List ₹","Floor N1","Happy N3","Disc ₹",partyName||"Party ₹","Zone","Margin"]
                   ).map(h=>(
                     <th key={h} style={{padding:"8px 6px",color:"#fff",fontSize:10,fontWeight:700,textAlign:"center",
@@ -7109,12 +7168,18 @@ export default function CRM({ currentUser, onLogout }) {
                       <td style={{textAlign:"center",padding:"8px 4px",color:"#8B4513",fontWeight:700,cursor:"pointer",
                         textDecoration:"underline dotted"}} title="Click for breakdown"
                         onClick={()=>{setSelItem(p);setDetailType("daana");}}>₹{c.newDaana.toLocaleString("en-IN")}</td>
+                      <td style={{textAlign:"center",padding:"8px 4px",color:"#7d6608",cursor:"pointer",
+                        textDecoration:"underline dotted"}} title="MB = 2% of daana"
+                        onClick={()=>{setSelItem(p);setDetailType("daana");}}>₹{c.mbCost}</td>
+                      <td style={{textAlign:"center",padding:"8px 4px",color:"#7d6608",cursor:"pointer",
+                        textDecoration:"underline dotted"}} title="Poly cost"
+                        onClick={()=>{setSelItem(p);setDetailType("daana");}}>₹{c.polyCost}</td>
                       <td style={{textAlign:"center",padding:"8px 4px",color:"#555"}}>₹{c.carton}</td>
                       {/* Clickable fixed */}
                       <td style={{textAlign:"center",padding:"8px 4px",color:"#7d6608",fontWeight:700,cursor:"pointer",
                         textDecoration:"underline dotted"}} title="Click for breakdown"
                         onClick={()=>{setSelItem(p);setDetailType("fixed");}}>₹{c.fixedCost}</td>
-                      <td style={{textAlign:"center",padding:"8px 4px",fontWeight:800}}>₹{totalCost.toLocaleString("en-IN")}</td>
+                      <td style={{textAlign:"center",padding:"8px 4px",fontWeight:800}}>₹{c.totalVariable+c.fixedCost}</td>
                       <td style={{textAlign:"center",padding:"8px 4px",color:"#0000ff",fontWeight:700}}>₹{c.listPrice.toLocaleString("en-IN")}</td>
                       <td style={{textAlign:"center",padding:"8px 4px",background:"rgba(239,68,68,.08)",color:"#cc0000",fontWeight:700,cursor:"pointer"}}
                         onClick={()=>{setSelItem(p);setDetailType("fixed");}}>₹{c.newFloor.toLocaleString("en-IN")}</td>
