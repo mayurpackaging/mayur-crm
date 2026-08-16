@@ -6864,7 +6864,34 @@ export default function CRM({ currentUser, onLogout }) {
             <div className="sh-t">💰 Cost Sheet</div>
             <div className="sh-s">Dynamic Floor Price Calculator · N1/N2/N3 Zones</div>
           </div>
-          <button className="btn btn-p" onClick={printPDF}>🖨️ PDF Download</button>
+          <div style={{display:"flex",gap:8}}>
+            <button className="btn btn-o btn-sm" onClick={()=>{
+              // CSV Download
+              const headers = csView==="party"
+                ? ["Item Name","Pcs/CTN","List Price","Floor N1","Discount","Party Price","Zone","Margin%"]
+                : ["Item Name","CRM Name","Pcs/CTN","Daana Cost","Carton Cost","Total Cost","List Price","Floor N1","Happy N3","Zone","Margin%"];
+              const rows = pItems.map(p=>{
+                const c=calcProduct(p);
+                if(csView==="party") return [p.item_name,p.pcs_per_carton,c.listPrice,c.n1,partyDisc,c.partyPrice,c.partyZone.replace(/[🔴🟡🔵]/g,""),c.partyMargin+"%"];
+                return [p.item_name,p.crm_product_name||"",p.pcs_per_carton,c.daanaCost,c.cartonCost,c.totalCost,c.listPrice,c.n1,c.n3,c.zone.replace(/[🔴🟡🔵]/g,""),c.margin+"%"];
+              });
+              const csv = [
+                `Mayur Food Packaging - ${csView==="party"?"Party Price Sheet: "+(partyName||"—"):"Cost Sheet"}`,
+                `Daana: Homo ₹${homoPrice}/kg | CP ₹${cpPrice}/kg | Random ₹${randomPrice}/kg | Date: ${new Date().toLocaleDateString("en-IN")}`,
+                "",
+                headers.join(","),
+                ...rows.map(r=>r.map(v=>`"${v}"`).join(","))
+              ].join("
+");
+              const blob = new Blob([csv], {type:"text/csv;charset=utf-8;"});
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement("a");
+              a.href=url; a.download=`Mayur_Cost_Sheet_${new Date().toISOString().slice(0,10)}.csv`;
+              a.click(); URL.revokeObjectURL(url);
+              toast$("Excel (CSV) download ho raha hai!");
+            }}>📊 Excel Download</button>
+            <button className="btn btn-p btn-sm" onClick={printPDF}>🖨️ PDF</button>
+          </div>
         </div>
 
         {/* Daana Price Inputs */}
