@@ -6961,24 +6961,7 @@ export default function CRM({ currentUser, onLogout }) {
               <thead style={{position:"sticky",top:0,zIndex:10}}>
                 <tr style={{background:"#2E6DA4"}}>
                   {csView==="all"
-                    ?["Item Name","Pcs
-/CTN","Box
-Cav×Cyc","Box
-Pcs/hr","Box
-CTN/hr","Lid
-Cav×Cyc","Lid
-Pcs/hr","Lid
-CTN/hr","Combined
-CTN/hr","Bottle
-neck","Daana
-₹/CTN","Carton
-₹","Total
-Cost","List
-₹","🔴 N1
-Floor","🟢 N2
-Std","🔵 N3
-Happy","Zone","Margin
-%"].map(h=>(
+                    ?["Item Name","Pcs/CTN","Box Cav×Cyc","Box Pcs/hr","Box CTN/hr","Lid Cav×Cyc","Lid Pcs/hr","Lid CTN/hr","Combined CTN/hr","Bottleneck","Daana ₹","Carton ₹","Total Cost","List ₹","N1 Floor","N2 Std","N3 Happy","Zone","Margin%"].map(h=>(
                       <th key={h} style={{padding:"6px 4px",color:"#fff",fontSize:9,fontWeight:700,textAlign:"center",whiteSpace:"pre",background:"#2E6DA4",minWidth:60}}>{h}</th>
                     ))
                     :["Item Name","Pcs","List ₹","Floor N1","N2","N3","Disc ₹",partyName||"Party Price","Zone","Margin%"].map(h=>(
