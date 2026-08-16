@@ -7020,21 +7020,12 @@ export default function CRM({ currentUser, onLogout }) {
             <button className="btn btn-p btn-sm" onClick={()=>{
               const win=window.open("","_blank");
               if(!win) return;
-              win.document.write(`<!DOCTYPE html><html><head><title>Cost Sheet</title>
-              <style>body{font-family:Arial;padding:20px;font-size:12px}table{width:100%;border-collapse:collapse}
-              th{background:#1E3A5F;color:#fff;padding:8px;font-size:11px}
-              td{padding:6px 8px;border:1px solid #ddd;font-size:11px}
-              .n3{background:#d5f5e3;color:#006600;font-weight:700}
-              .n1{background:#fff2cc;color:#806000;font-weight:700}
-              .loss{background:#ffd7d7;color:#cc0000;font-weight:700}
-              @media print{body{padding:10px}}</style></head><body>
-              <h2 style="color:#1E3A5F">Mayur Food Packaging — Cost Sheet</h2>
-              <p style="font-size:11px;color:#888">Daana: Homo ₹${homoPrice} | CP ₹${cpPrice} | Random ₹${randomPrice} | ${new Date().toLocaleDateString("en-IN")}</p>
-              <table><thead><tr><th>Item</th><th>Pcs</th><th>Daana ₹</th><th>Carton ₹</th><th>Fixed ₹</th><th>Total Cost</th><th>List ₹</th><th>Floor N1</th><th>Happy N3</th><th>Zone</th><th>Margin%</th></tr></thead>
-              <tbody>${filtItems.map(p=>{const c=calc(p);const zc=c.zone.includes("N3")?"n3":c.zone.includes("N1 Zone")?"n1":"loss";
-                return \`<tr><td>${p.item_name}</td><td>${p.pcs_per_carton}</td><td>₹${c.newDaana.toLocaleString("en-IN")}</td><td>₹${c.carton}</td><td>₹${c.fixedCost}</td><td>₹${(c.newDaana+c.carton+c.fixedCost).toLocaleString("en-IN")}</td><td>₹${c.listPrice.toLocaleString("en-IN")}</td><td class="${zc}">₹${c.newFloor.toLocaleString("en-IN")}</td><td class="${zc}">₹${c.newHappy.toLocaleString("en-IN")}</td><td class="${zc}">${c.zone.replace(/[🔴🟡🔵]/g,"")}</td><td>${c.margin}%</td></tr>\`;
-              }).join("")}</tbody></table>
-              <script>window.onload=()=>window.print();</script></body></html>`);
+              const rows = filtItems.map(p=>{
+                const c=calc(p);
+                const zc=c.zone.includes("N3")?"n3":c.zone.includes("N1 Zone")?"n1":"loss";
+                return "<tr><td>"+p.item_name+"</td><td>"+p.pcs_per_carton+"</td><td>₹"+c.newDaana.toLocaleString("en-IN")+"</td><td>₹"+c.carton+"</td><td>₹"+c.fixedCost+"</td><td>₹"+(c.newDaana+c.carton+c.fixedCost).toLocaleString("en-IN")+"</td><td>₹"+c.listPrice.toLocaleString("en-IN")+"</td><td class=\""+zc+"\">₹"+c.newFloor.toLocaleString("en-IN")+"</td><td class=\""+zc+"\">₹"+c.newHappy.toLocaleString("en-IN")+"</td><td class=\""+zc+"\">"+c.zone.replace(/[🔴🟡🔵]/g,"")+"</td><td>"+c.margin+"%</td></tr>";
+              }).join("");
+              win.document.write("<!DOCTYPE html><html><head><title>Cost Sheet</title><style>body{font-family:Arial;padding:20px;font-size:12px}table{width:100%;border-collapse:collapse}th{background:#1E3A5F;color:#fff;padding:8px;font-size:11px}td{padding:6px 8px;border:1px solid #ddd;font-size:11px}.n3{background:#d5f5e3;color:#006600;font-weight:700}.n1{background:#fff2cc;color:#806000;font-weight:700}.loss{background:#ffd7d7;color:#cc0000;font-weight:700}@media print{body{padding:10px}}</style></head><body><h2 style=\"color:#1E3A5F\">Mayur Food Packaging — Cost Sheet</h2><p style=\"font-size:11px;color:#888\">Daana: Homo ₹"+homoPrice+" | CP ₹"+cpPrice+" | Random ₹"+randomPrice+" | "+new Date().toLocaleDateString("en-IN")+"</p><table><thead><tr><th>Item</th><th>Pcs</th><th>Daana ₹</th><th>Carton ₹</th><th>Fixed ₹</th><th>Total Cost</th><th>List ₹</th><th>Floor N1</th><th>Happy N3</th><th>Zone</th><th>Margin%</th></tr></thead><tbody>"+rows+"</tbody></table><script>window.onload=()=>window.print();<\/script></body></html>");
               win.document.close();
             }}>🖨️ PDF</button>
           </div>
