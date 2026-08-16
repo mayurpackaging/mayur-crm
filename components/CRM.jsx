@@ -6969,16 +6969,53 @@ export default function CRM({ currentUser, onLogout }) {
             <div className="sh-s">Click on any value to see breakdown</div>
           </div>
           <div style={{display:"flex",gap:8}}>
-            <button className="btn btn-o btn-sm" onClick={()=>{
-              const rows=filtItems.map(p=>{const c=calc(p);
-                return [p.item_name,p.pcs_per_carton,c.newDaana,c.carton,c.fixedCost,c.newDaana+c.carton+c.fixedCost,c.listPrice,c.newFloor,c.newHappy,c.zone.replace(/[🔴🟡🔵]/g,""),c.margin+"%"].join(",");
-              });
-              const csv=["Item,Pcs,Daana,Carton,Fixed,Total Cost,List Price,Floor N1,Happy N3,Zone,Margin",
-                `Daana: Homo=${homoPrice} CP=${cpPrice} Random=${randomPrice}`,"",
-                ...rows].join("\n");
-              const a=document.createElement("a");
-              a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv"}));
-              a.download="Cost_Sheet.csv"; a.click();
+            <button className="btn btn-o btn-sm" onClick={async()=>{
+              toast$("Excel ban raha hai...");
+              try {
+                const payload = {
+                  homo: homoPrice, cp: cpPrice, random: randomPrice,
+                  items: filtItems.map(p=>{
+                    const c=calc(p);
+                    return {
+                      item_name: p.item_name,
+                      crm_name: p.crm_product_name||"",
+                      colour: p.colour||"",
+                      pcs: p.pcs_per_carton,
+                      homo_g: (Number(p.box_homo||0)+Number(p.lid_homo||0)),
+                      cp_g: (Number(p.box_cp||0)+Number(p.lid_cp||0)),
+                      rand_g: (Number(p.box_random||0)+Number(p.lid_random||0)),
+                      homo_cost: c.homoCost,
+                      cp_cost: c.cpCost,
+                      rand_cost: c.randCost,
+                      daana: c.newDaana,
+                      base_daana: c.baseDaana,
+                      carton: c.carton,
+                      fixed: c.fixedCost,
+                      mh: c.mh,
+                      n1_zone: c.n1Zone,
+                      n3_zone: c.n3Zone,
+                      total_cost: c.newDaana+c.carton+c.fixedCost,
+                      list_price: c.listPrice,
+                      floor_n1: c.newFloor,
+                      happy_n3: c.newHappy,
+                      zone: c.zone.replace(/[🔴🟡🔵]/g,"").trim(),
+                      margin: c.margin,
+                    };
+                  })
+                };
+                const res = await fetch("/api/cost-sheet-excel", {
+                  method:"POST",
+                  headers:{"Content-Type":"application/json"},
+                  body: JSON.stringify(payload)
+                });
+                if(!res.ok){ toast$("Excel error",true); return; }
+                const blob = await res.blob();
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href=url; a.download=`Mayur_Cost_Sheet_${new Date().toISOString().slice(0,10)}.xlsx`;
+                a.click(); URL.revokeObjectURL(url);
+                toast$("✅ Excel downloaded!");
+              } catch(e){ toast$("Error: "+e.message,true); }
             }}>📊 Excel</button>
             <button className="btn btn-p btn-sm" onClick={()=>{
               const win=window.open("","_blank");
