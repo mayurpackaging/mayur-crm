@@ -6762,9 +6762,13 @@ export default function CRM({ currentUser, onLogout }) {
   // COST SHEET — Dynamic Floor Price Calculator
   // ══════════════════════════════════════════════
   const CostSheet = () => {
-    const [homoPrice, setHomoPrice] = useState(100);
-    const [cpPrice, setCpPrice] = useState(90);
-    const [randomPrice, setRandomPrice] = useState(80);
+    const [homoPrice, setHomoPrice] = useState(()=>Number(localStorage.getItem("daana_homo")||147));
+    const [cpPrice, setCpPrice] = useState(()=>Number(localStorage.getItem("daana_cp")||150));
+    const [randomPrice, setRandomPrice] = useState(()=>Number(localStorage.getItem("daana_random")||158));
+
+    const setHomo = (v)=>{ setHomoPrice(v); localStorage.setItem("daana_homo",v); };
+    const setCP = (v)=>{ setCpPrice(v); localStorage.setItem("daana_cp",v); };
+    const setRandom = (v)=>{ setRandomPrice(v); localStorage.setItem("daana_random",v); };
     const [partyDisc, setPartyDisc] = useState(0);
     const [partyName, setPartyName] = useState("");
     const [csView, setCsView] = useState("all"); // all | party
@@ -6779,7 +6783,10 @@ export default function CRM({ currentUser, onLogout }) {
         .then(d=>setPItems(d||[]));
     },[]);
 
-    const N1_ZONE=1097, N2_ZONE=1615, N3_ZONE=1938;
+    const [fixedCostPerHr, setFixedCostPerHr] = useState(()=>Number(localStorage.getItem("fixed_cost_hr")||1097));
+    const N1_ZONE = fixedCostPerHr;
+    const N2_ZONE = Math.round(fixedCostPerHr*1.47);  // N2 = 1.47x N1
+    const N3_ZONE = Math.round(fixedCostPerHr*1.77);  // N3 = 1.77x N1
 
     const calcProduct = (p) => {
       const pcs = Number(p.pcs_per_carton||1);
@@ -6917,9 +6924,9 @@ export default function CRM({ currentUser, onLogout }) {
 
         {/* Daana Price Inputs */}
         <div className="card" style={{marginBottom:14,background:"rgba(245,158,11,.05)",border:"1px solid #f59e0b"}}>
-          <div style={{fontWeight:700,fontSize:13,marginBottom:12,color:"#f59e0b"}}>⚡ Daana Prices (₹/kg) — Change karo → sab auto-update</div>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12}}>
-            {[["Homo",homoPrice,setHomoPrice],["CP",cpPrice,setCpPrice],["Random",randomPrice,setRandomPrice]].map(([lbl,val,set])=>(
+          <div style={{fontWeight:700,fontSize:13,marginBottom:12,color:"#f59e0b"}}>⚡ Daana Prices (₹/kg) — Change karo → sab auto-update (saved automatically)</div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:12}}>
+            {[["Homo",homoPrice,setHomo],["CP",cpPrice,setCP],["Random",randomPrice,setRandom]].map(([lbl,val,set])=>(
               <div key={lbl}>
                 <label className="lbl">{lbl} Daana (₹/kg)</label>
                 <input type="number" className="inp" value={val}
@@ -6927,6 +6934,13 @@ export default function CRM({ currentUser, onLogout }) {
                   style={{fontSize:18,fontWeight:800,color:"#0000ff",textAlign:"center"}}/>
               </div>
             ))}
+            <div>
+              <label className="lbl">Fixed Cost (₹/hr) — N1 Base</label>
+              <input type="number" className="inp" value={fixedCostPerHr}
+                onChange={e=>{const v=Number(e.target.value);setFixedCostPerHr(v);localStorage.setItem("fixed_cost_hr",v);}}
+                style={{fontSize:18,fontWeight:800,color:"#cc0000",textAlign:"center"}}/>
+              <div style={{fontSize:9,color:"var(--mut)",marginTop:2}}>N2={Math.round(fixedCostPerHr*1.47)} · N3={Math.round(fixedCostPerHr*1.77)}</div>
+            </div>
           </div>
         </div>
 
