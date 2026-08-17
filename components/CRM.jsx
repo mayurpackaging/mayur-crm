@@ -2419,19 +2419,23 @@ export default function CRM({ currentUser, onLogout }) {
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
             <label className="lbl" style={{margin:0}}>Note *</label>
             <button onClick={async()=>{
-              if(!form.note?.trim()) return toast$("Pehle note likho",true);
+              const noteVal = document.getElementById("ainter-note")?.value||form.note||"";
+              if(!noteVal.trim()) return toast$("Pehle note likho",true);
+              sf("note",noteVal);
               toast$("AI polish kar raha hai...");
               try {
-                const res = await fetch("/api/ai-polish",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({text:String(form.note||""),type:"note"})});
+                const res = await fetch("/api/ai-polish",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({text:String(noteVal),type:"note"})});
                 const d = await res.json();
-                if(d.polished){sf("note",d.polished);toast$("✨ Note polished!");}
+                if(d.polished){sf("note",d.polished);if(document.getElementById("ainter-note"))document.getElementById("ainter-note").value=d.polished;toast$("✨ Note polished!");}
               } catch(e){ toast$("AI error: "+e.message,true); }
             }} style={{padding:"2px 10px",borderRadius:6,fontSize:11,border:"1px solid var(--acc)",
               background:"rgba(139,92,246,.1)",color:"var(--acc)",cursor:"pointer",fontWeight:600}}>
               ✨ AI Polish
             </button>
           </div>
-          <textarea className="inp" value={form.note||""} onChange={e=>sf("note",e.target.value)} rows={3}/>
+          <textarea id="ainter-note" className="inp" defaultValue={form.note||""} 
+            onBlur={e=>sf("note",e.target.value)} rows={3}
+            style={{width:"100%"}}/>
         </div>
         <div className="fr fr3">
           <div><label className="lbl">Follow-up Date</label><input type="date" className="inp" value={form.next_follow_up||""} onChange={e=>sf("next_follow_up",e.target.value)}/></div>
