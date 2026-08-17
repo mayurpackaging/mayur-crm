@@ -7185,7 +7185,8 @@ export default function CRM({ currentUser, onLogout }) {
         )}
 
         {/* Simple Clean Table */}
-        <div className="card" style={{padding:0}}>
+        {pItems.length===0&&<div className="card" style={{padding:20,textAlign:"center",color:"var(--mut)"}}>⏳ Loading products...</div>}
+        {pItems.length>0&&<div className="card" style={{padding:0}}>
           <div style={{overflowX:"auto",maxHeight:"60vh",overflowY:"auto"}}>
             <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
               <thead style={{position:"sticky",top:0,zIndex:10}}>
@@ -7260,6 +7261,7 @@ export default function CRM({ currentUser, onLogout }) {
           </div>
         </div>
 
+        }
         {selItem&&<DetailPopup/>}
       </div>
     );
