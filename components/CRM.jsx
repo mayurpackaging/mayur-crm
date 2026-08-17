@@ -6774,6 +6774,8 @@ export default function CRM({ currentUser, onLogout }) {
     const [pItems, setPItems] = useState([]);
     const [csQ, setCsQ] = useState("");
 
+    const [fixedCostMonth, setFixedCostMonth] = useState(()=>Number(localStorage.getItem("fixed_cost_month")||9800000));
+    const [totalHrs, setTotalHrs] = useState(()=>Number(localStorage.getItem("total_hrs")||8256));
     const setHomo = v=>{ setHomoPrice(v); localStorage.setItem("daana_homo",v); };
     const setCP   = v=>{ setCpPrice(v);  localStorage.setItem("daana_cp",v); };
     const setRand = v=>{ setRandomPrice(v); localStorage.setItem("daana_random",v); };
@@ -6874,7 +6876,8 @@ export default function CRM({ currentUser, onLogout }) {
       // Total variable cost
       const totalVariable = newDaana + mbCost + polyCost + carton;
       // N1/N3 zone thresholds (derived from MOS)
-      const n1Zone = mh>0 ? Math.round((mos.fp-baseDaana-carton)/mh) : 1097;
+      const fixedPerHr = totalHrs>0 ? Math.round(fixedCostMonth/totalHrs) : 1097;
+      const n1Zone = mh>0 ? fixedPerHr : 1097;
       const n3Zone = mh>0 ? Math.round((mos.hp-baseDaana-carton)/mh) : 1938;
       const newFloor = Math.round(newDaana+mbCost+polyCost+carton+n1Zone*mh);
       const newHappy = Math.round(newDaana+mbCost+polyCost+carton+n3Zone*mh);
@@ -7092,16 +7095,39 @@ export default function CRM({ currentUser, onLogout }) {
 
         {/* Daana Prices */}
         <div className="card" style={{marginBottom:12,background:"rgba(245,158,11,.05)",border:"1px solid #f59e0b"}}>
-          <div style={{fontWeight:700,fontSize:12,color:"#f59e0b",marginBottom:10}}>⚡ Daana Prices — Change karo, auto-save hoga</div>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10}}>
-            {[["🌾 Homo",homoPrice,setHomo],["🌾 CP",cpPrice,setCP],["🌾 Random",randomPrice,setRand]].map(([lbl,val,set])=>(
+          <div style={{fontWeight:700,fontSize:12,color:"#f59e0b",marginBottom:10}}>⚡ Daana & Fixed Cost — Change karo, auto-save hoga</div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:10}}>
+            {[["🌾 Homo",homoPrice,setHomo,"#0000ff"],["🌾 CP",cpPrice,setCP,"#0000ff"],["🌾 Random",randomPrice,setRand,"#0000ff"]].map(([lbl,val,set,clr])=>(
               <div key={lbl} style={{textAlign:"center"}}>
                 <div style={{fontSize:10,color:"var(--mut)",marginBottom:4}}>{lbl} (₹/kg)</div>
                 <input type="number" value={val} onChange={e=>set(Number(e.target.value))}
                   style={{width:"100%",padding:"6px 8px",borderRadius:8,border:"2px solid #f59e0b",
-                    fontSize:20,fontWeight:800,color:"#0000ff",textAlign:"center",background:"var(--bg)"}}/>
+                    fontSize:20,fontWeight:800,color:clr,textAlign:"center",background:"var(--bg)"}}/>
               </div>
             ))}
+            <div style={{textAlign:"center"}}>
+              <div style={{fontSize:10,color:"var(--mut)",marginBottom:4}}>⚙️ Fixed Cost (₹/month)</div>
+              <input type="number" value={fixedCostMonth}
+                onChange={e=>{const v=Number(e.target.value);setFixedCostMonth(v);localStorage.setItem("fixed_cost_month",v);}}
+                style={{width:"100%",padding:"6px 8px",borderRadius:8,border:"2px solid #cc0000",
+                  fontSize:16,fontWeight:800,color:"#cc0000",textAlign:"center",background:"var(--bg)"}}/>
+              <div style={{fontSize:9,color:"var(--mut)",marginTop:2}}>Total hrs: {totalHrs.toLocaleString()} → ₹{Math.round(fixedCostMonth/totalHrs)}/hr</div>
+            </div>
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginTop:10}}>
+            <div style={{textAlign:"center"}}>
+              <div style={{fontSize:10,color:"var(--mut)",marginBottom:4}}>⏱️ Total Machine Hours/Month</div>
+              <input type="number" value={totalHrs}
+                onChange={e=>{const v=Number(e.target.value);setTotalHrs(v);localStorage.setItem("total_hrs",v);}}
+                style={{width:"100%",padding:"4px 8px",borderRadius:8,border:"1px solid var(--bdr)",
+                  fontSize:14,fontWeight:700,textAlign:"center",background:"var(--bg)",color:"var(--txt)"}}/>
+            </div>
+            <div style={{background:"rgba(30,58,95,.06)",borderRadius:8,padding:"8px 12px",display:"flex",alignItems:"center",justifyContent:"center"}}>
+              <div style={{textAlign:"center"}}>
+                <div style={{fontSize:10,color:"var(--mut)"}}>Fixed Cost/hr (auto)</div>
+                <div style={{fontWeight:800,fontSize:18,color:"#cc0000"}}>₹{Math.round(fixedCostMonth/totalHrs).toLocaleString()}/hr</div>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -7118,8 +7144,20 @@ export default function CRM({ currentUser, onLogout }) {
         {csView==="party"&&(
           <div className="card" style={{marginBottom:10}}>
             <div style={{display:"grid",gridTemplateColumns:"2fr 1fr",gap:10}}>
-              <div><label className="lbl">Party Name</label><input className="inp" placeholder="Dr. Oetker" value={partyName} onChange={e=>setPartyName(e.target.value)}/></div>
-              <div><label className="lbl">Discount (₹/ctn)</label><input type="number" className="inp" value={partyDisc} onChange={e=>setPartyDisc(Number(e.target.value))} style={{color:"#cc0000",fontWeight:800}}/></div>
+              <div>
+                <label className="lbl">Party Name</label>
+                <input className="inp" placeholder="Dr. Oetker"
+                  defaultValue={partyName}
+                  onChange={e=>setPartyName(e.target.value)}
+                  key="party-name-cs"/>
+              </div>
+              <div>
+                <label className="lbl">Discount (₹/ctn)</label>
+                <input type="number" className="inp" placeholder="0"
+                  defaultValue={partyDisc}
+                  onChange={e=>setPartyDisc(Number(e.target.value))}
+                  style={{color:"#cc0000",fontWeight:800}}/>
+              </div>
             </div>
           </div>
         )}
