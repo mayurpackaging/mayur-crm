@@ -7165,20 +7165,41 @@ export default function CRM({ currentUser, onLogout }) {
 
         {csView==="party"&&(
           <div className="card" style={{marginBottom:10}}>
-            <div style={{display:"grid",gridTemplateColumns:"2fr 1fr",gap:10}}>
+            <div style={{display:"grid",gridTemplateColumns:"2fr 1fr",gap:10,marginBottom:8}}>
               <div>
-                <label className="lbl">Party Name</label>
-                <input className="inp" placeholder="Dr. Oetker"
-                  defaultValue={partyName}
-                  onChange={e=>setPartyName(e.target.value)}
-                  key="party-name-cs"/>
+                <label className="lbl">Party Select karo (ya naam type karo)</label>
+                <select className="inp" onChange={e=>{
+                  const cust = myC.find(c=>c.id===e.target.value);
+                  if(cust){
+                    setPartyName(cust.company||cust.name);
+                    setPartyDisc(Number(cust.discount_per_ctn)||0);
+                  }
+                }}>
+                  <option value="">-- Customer Select Karo --</option>
+                  {[...myC].sort((a,b)=>(a.company||a.name).localeCompare(b.company||b.name)).map(c=>(
+                    <option key={c.id} value={c.id}>{c.company||c.name}{c.discount_per_ctn>0?" (₹"+c.discount_per_ctn+"/ctn)":""}</option>
+                  ))}
+                </select>
               </div>
               <div>
                 <label className="lbl">Discount (₹/ctn)</label>
                 <input type="number" className="inp" placeholder="0"
-                  defaultValue={partyDisc}
-                  onChange={e=>setPartyDisc(Number(e.target.value))}
-                  style={{color:"#cc0000",fontWeight:800}}/>
+                  value={partyDisc||""}
+                  onChange={e=>setPartyDisc(Number(e.target.value)||0)}
+                  style={{color:"#cc0000",fontWeight:800,textAlign:"center"}}/>
+              </div>
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"2fr 1fr",gap:10}}>
+              <div>
+                <label className="lbl">Ya manually naam daalo</label>
+                <input className="inp" placeholder="Custom party name..."
+                  value={partyName}
+                  onChange={e=>setPartyName(e.target.value)}/>
+              </div>
+              <div style={{display:"flex",alignItems:"flex-end"}}>
+                {partyName&&<div style={{fontSize:11,color:"var(--mut)",padding:"8px 0"}}>
+                  <b style={{color:"var(--txt)"}}>{partyName}</b> · ₹{partyDisc}/ctn discount
+                </div>}
               </div>
             </div>
           </div>
@@ -7193,7 +7214,7 @@ export default function CRM({ currentUser, onLogout }) {
                 <tr style={{background:"#1E3A5F"}}>
                   {(csView==="all"
                     ?["Item","Pcs","Daana ₹","MB ₹","Poly ₹","Carton ₹","Fixed ₹","Total Cost","List ₹","🔴 Floor N1","🟢 N2 Std","🔵 N3 Happy","Zone","Margin"]
-                    :["Item","Pcs","List ₹","Floor N1","Happy N3","Disc ₹",partyName||"Party ₹","Zone","Margin"]
+                    :["Item","Pcs","List ₹","🔴 Floor N1","🟢 N2 Std","🔵 N3 Happy","Disc ₹",partyName||"Party ₹","Zone","Margin"]
                   ).map(h=>(
                     <th key={h} style={{padding:"8px 6px",color:"#fff",fontSize:10,fontWeight:700,textAlign:"center",
                       background:"#1E3A5F",whiteSpace:"nowrap"}}>{h}</th>
@@ -7213,10 +7234,13 @@ export default function CRM({ currentUser, onLogout }) {
                       <td style={{textAlign:"center",padding:"8px 4px",color:"#0000ff",fontWeight:700}}>₹{c.listPrice.toLocaleString("en-IN")}</td>
                       <td style={{textAlign:"center",padding:"8px 4px",background:"rgba(239,68,68,.08)",color:"#cc0000",fontWeight:700,cursor:"pointer"}}
                         onClick={()=>{setSelItem(p);setDetailType("fixed");}}>₹{c.newFloor.toLocaleString("en-IN")}</td>
+                      <td style={{textAlign:"center",padding:"8px 4px",background:"rgba(245,158,11,.08)",color:"#806000",fontWeight:700,cursor:"pointer"}}
+                        onClick={()=>{setSelItem(p);setDetailType("fixed");}}>₹{c.newN2.toLocaleString("en-IN")}</td>
                       <td style={{textAlign:"center",padding:"8px 4px",background:"rgba(16,185,129,.08)",color:"#006600",fontWeight:700,cursor:"pointer"}}
                         onClick={()=>{setSelItem(p);setDetailType("fixed");}}>₹{c.newHappy.toLocaleString("en-IN")}</td>
                       <td style={{textAlign:"center",padding:"8px 4px",color:"#cc0000"}}>₹{partyDisc}</td>
-                      <td style={{textAlign:"center",padding:"8px 4px",fontWeight:800,fontSize:14,color:c.partyPrice<c.newFloor?"#cc0000":"#006600"}}>₹{c.partyPrice.toLocaleString("en-IN")}</td>
+                      <td style={{textAlign:"center",padding:"8px 4px",fontWeight:800,fontSize:14,
+                        color:c.partyPrice<c.newFloor?"#cc0000":c.partyPrice>=c.newHappy?"#006600":"#806000"}}>₹{c.partyPrice.toLocaleString("en-IN")}</td>
                       <td style={{textAlign:"center",padding:"8px 4px",fontWeight:700,color:zc}}>{c.zone}</td>
                       <td style={{textAlign:"center",padding:"8px 4px",fontWeight:700,color:c.margin<0?"#cc0000":"#006600"}}>{c.margin}%</td>
                     </tr>
