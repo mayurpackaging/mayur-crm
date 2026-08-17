@@ -6877,17 +6877,23 @@ export default function CRM({ currentUser, onLogout }) {
       const totalVariable = newDaana + mbCost + polyCost + carton;
       // N1/N3 zone thresholds (derived from MOS)
       const fixedPerHr = totalHrs>0 ? Math.round(fixedCostMonth/totalHrs) : 1097;
+      // N1 = Floor (break-even — sirf fixed cost cover ho)
+      // N2 = Standard (50L profit target)
+      // N3 = Happy (60L profit target)
+      // N2/N3 derived from MOS happy_price ratio
       const n1Zone = mh>0 ? fixedPerHr : 1097;
-      const n3Zone = mh>0 ? Math.round((mos.hp-baseDaana-carton)/mh) : 1938;
+      const n3ZoneMOS = mh>0 ? Math.round((mos.hp-baseDaana-carton)/mh) : 1938;
+      const n2Zone = mh>0 ? Math.round((n1Zone + n3ZoneMOS)/2) : 1615;
       const newFloor = Math.round(newDaana+mbCost+polyCost+carton+n1Zone*mh);
-      const newHappy = Math.round(newDaana+mbCost+polyCost+carton+n3Zone*mh);
+      const newN2    = Math.round(newDaana+mbCost+polyCost+carton+n2Zone*mh);
+      const newHappy = Math.round(newDaana+mbCost+polyCost+carton+n3ZoneMOS*mh);
       const fixedCost= Math.round(n1Zone*mh);
       const partyPrice = Math.max(0,listPrice-partyDisc);
       const margin = listPrice>0?Math.round((listPrice-totalVariable-fixedCost)/listPrice*100):0;
-      const zone = listPrice<totalVariable?"🔴 Loss":listPrice>=newHappy?"🔵 N3 Happy":listPrice>=newFloor?"🟡 N1 Zone":"🔴 Below N1";
+      const zone = listPrice<totalVariable?"🔴 Loss":listPrice>=newHappy?"🔵 N3 Happy":listPrice>=newN2?"🟢 N2 Standard":listPrice>=newFloor?"🟡 N1 Floor":"🔴 Below N1";
       return {homoCost,cpCost,randCost,newDaana,baseDaana,mbCost,polyCost,carton,listPrice,
-              newFloor,newHappy,fixedCost,totalVariable,
-              mh,n1Zone,n3Zone,zone,margin,partyPrice,
+              newFloor,newN2,newHappy,fixedCost,totalVariable,
+              mh,n1Zone,n2Zone,n3ZoneMOS,zone,margin,partyPrice,
               polyGm,polyRate,pcs,th,tc,tr,
               boxWt,lidWt,totalWtPerPc,
               bh,bc,br,lh,lc,lr};
@@ -6990,9 +6996,10 @@ export default function CRM({ currentUser, onLogout }) {
                   <div style={{fontSize:11,color:"var(--mut)",marginBottom:8}}>Fixed Cost = N1 Zone × MH per CTN</div>
                   {[
                     ["MH/CTN (Machine Hours per Carton)",c.mh.toFixed(4)+" hrs",""],
-                    ["N1 Zone Threshold","₹"+c.n1Zone+"/hr","Floor"],
-                    ["N3 Zone Threshold","₹"+c.n3Zone+"/hr","Happy"],
-                    ["Fixed Cost @ N1","₹"+c.fixedCost+"/ctn",""],
+                    ["N1 Floor ₹/hr (fixed cost/hr)","₹"+c.n1Zone+"/hr","🔴 Break-even"],
+                    ["N2 Standard ₹/hr","₹"+c.n2Zone+"/hr","🟢 ~50L profit"],
+                    ["N3 Happy ₹/hr","₹"+c.n3ZoneMOS+"/hr","🔵 ~60L profit"],
+                    ["Fixed Cost @ N1","₹"+c.fixedCost+"/ctn","per CTN"],
                     ["Carton Cost","₹"+c.carton+"/ctn",""],
                   ].map(([lbl,val,badge])=>(
                     <div key={lbl} style={{display:"flex",justifyContent:"space-between",alignItems:"center",
@@ -7131,6 +7138,21 @@ export default function CRM({ currentUser, onLogout }) {
           </div>
         </div>
 
+        {/* Zone Legend */}
+        <div style={{display:"flex",gap:10,marginBottom:10,flexWrap:"wrap",fontSize:10}}>
+          {[
+            ["🔴 Below N1","Below floor — loss hoga","#cc0000","rgba(239,68,68,.08)"],
+            ["🟡 N1 Floor","Break-even — fixed cost cover ho rahi hai","#806000","rgba(245,158,11,.08)"],
+            ["🟢 N2 Standard","Standard profit — ~50L target","#006600","rgba(16,185,129,.08)"],
+            ["🔵 N3 Happy","Happy price — ~60L target","#0066cc","rgba(59,130,246,.08)"],
+          ].map(([zone,desc,clr,bg])=>(
+            <div key={zone} style={{padding:"4px 10px",borderRadius:20,background:bg,color:clr,fontWeight:700,display:"flex",gap:6,alignItems:"center"}}>
+              <span>{zone}</span>
+              <span style={{fontWeight:400,color:"var(--mut)"}}>{desc}</span>
+            </div>
+          ))}
+        </div>
+
         {/* View toggle */}
         <div style={{display:"flex",gap:8,marginBottom:10,alignItems:"center"}}>
           <button className={"btn btn-sm "+(csView==="all"?"btn-p":"btn-o")} onClick={()=>setCsView("all")}>📊 Sab Products</button>
@@ -7169,7 +7191,7 @@ export default function CRM({ currentUser, onLogout }) {
               <thead style={{position:"sticky",top:0,zIndex:10}}>
                 <tr style={{background:"#1E3A5F"}}>
                   {(csView==="all"
-                    ?["Item","Pcs","Daana ₹","MB ₹","Poly ₹","Carton ₹","Fixed ₹","Total Cost","List ₹","Floor N1","Happy N3","Zone","Margin"]
+                    ?["Item","Pcs","Daana ₹","MB ₹","Poly ₹","Carton ₹","Fixed ₹","Total Cost","List ₹","🔴 Floor N1","🟢 N2 Std","🔵 N3 Happy","Zone","Margin"]
                     :["Item","Pcs","List ₹","Floor N1","Happy N3","Disc ₹",partyName||"Party ₹","Zone","Margin"]
                   ).map(h=>(
                     <th key={h} style={{padding:"8px 6px",color:"#fff",fontSize:10,fontWeight:700,textAlign:"center",
@@ -7217,11 +7239,16 @@ export default function CRM({ currentUser, onLogout }) {
                       <td style={{textAlign:"center",padding:"8px 4px",color:"#7d6608",fontWeight:700,cursor:"pointer",
                         textDecoration:"underline dotted"}} title="Click for breakdown"
                         onClick={()=>{setSelItem(p);setDetailType("fixed");}}>₹{c.fixedCost}</td>
-                      <td style={{textAlign:"center",padding:"8px 4px",fontWeight:800}}>₹{c.totalVariable+c.fixedCost}</td>
+                      <td style={{textAlign:"center",padding:"8px 4px",fontWeight:800}}>₹{(c.totalVariable+c.fixedCost).toLocaleString("en-IN")}</td>
                       <td style={{textAlign:"center",padding:"8px 4px",color:"#0000ff",fontWeight:700}}>₹{c.listPrice.toLocaleString("en-IN")}</td>
                       <td style={{textAlign:"center",padding:"8px 4px",background:"rgba(239,68,68,.08)",color:"#cc0000",fontWeight:700,cursor:"pointer"}}
+                        title="N1 = Floor Price (sirf fixed cost cover hoti hai)"
                         onClick={()=>{setSelItem(p);setDetailType("fixed");}}>₹{c.newFloor.toLocaleString("en-IN")}</td>
+                      <td style={{textAlign:"center",padding:"8px 4px",background:"rgba(245,158,11,.08)",color:"#806000",fontWeight:700,cursor:"pointer"}}
+                        title="N2 = Standard (50L profit target)"
+                        onClick={()=>{setSelItem(p);setDetailType("fixed");}}>₹{c.newN2.toLocaleString("en-IN")}</td>
                       <td style={{textAlign:"center",padding:"8px 4px",background:"rgba(16,185,129,.08)",color:"#006600",fontWeight:700,cursor:"pointer"}}
+                        title="N3 = Happy (60L profit target)"
                         onClick={()=>{setSelItem(p);setDetailType("fixed");}}>₹{c.newHappy.toLocaleString("en-IN")}</td>
                       <td style={{textAlign:"center",padding:"8px 4px",fontWeight:700,color:zc}}>{c.zone}</td>
                       <td style={{textAlign:"center",padding:"8px 4px",fontWeight:700,color:c.margin<0?"#cc0000":"#006600"}}>{c.margin}%</td>
