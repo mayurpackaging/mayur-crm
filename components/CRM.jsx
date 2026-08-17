@@ -6891,9 +6891,11 @@ export default function CRM({ currentUser, onLogout }) {
       const partyPrice = Math.max(0,listPrice-partyDisc);
       const margin = listPrice>0?Math.round((listPrice-totalVariable-fixedCost)/listPrice*100):0;
       const zone = listPrice<totalVariable?"🔴 Loss":listPrice>=newHappy?"🔵 N3 Happy":listPrice>=newN2?"🟢 N2 Standard":listPrice>=newFloor?"🟡 N1 Floor":"🔴 Below N1";
+      const pPrice = Math.max(0, listPrice - partyDisc);
+      const partyZone = pPrice<totalVariable?"🔴 Loss":pPrice>=newHappy?"🔵 N3 Happy":pPrice>=newN2?"🟢 N2 Standard":pPrice>=newFloor?"🟡 N1 Floor":"🔴 Below N1";
       return {homoCost,cpCost,randCost,newDaana,baseDaana,mbCost,polyCost,carton,listPrice,
               newFloor,newN2,newHappy,fixedCost,totalVariable,
-              mh,n1Zone,n2Zone,n3ZoneMOS,zone,margin,partyPrice,
+              mh,n1Zone,n2Zone,n3ZoneMOS,zone,partyZone,margin,partyPrice,
               polyGm,polyRate,pcs,th,tc,tr,
               boxWt,lidWt,totalWtPerPc,
               bh,bc,br,lh,lc,lr};
@@ -7247,9 +7249,16 @@ export default function CRM({ currentUser, onLogout }) {
                       <td style={{textAlign:"center",padding:"8px 4px",background:"rgba(16,185,129,.08)",color:"#006600",fontWeight:700,cursor:"pointer"}}
                         onClick={()=>{setSelItem(p);setDetailType("fixed");}}>₹{c.newHappy.toLocaleString("en-IN")}</td>
                       <td style={{textAlign:"center",padding:"8px 4px",color:"#cc0000"}}>₹{partyDisc}</td>
-                      <td style={{textAlign:"center",padding:"8px 4px",fontWeight:800,fontSize:14,
-                        color:c.partyPrice<c.newFloor?"#cc0000":c.partyPrice>=c.newHappy?"#006600":"#806000"}}>₹{c.partyPrice.toLocaleString("en-IN")}</td>
-                      <td style={{textAlign:"center",padding:"8px 4px",fontWeight:700,color:zc}}>{c.zone}</td>
+                      {(()=>{
+                        const pzBg = c.partyZone.includes("N3")?"rgba(16,185,129,.25)":c.partyZone.includes("N2")?"rgba(245,158,11,.25)":c.partyZone.includes("N1 Floor")?"rgba(253,230,138,.4)":"rgba(239,68,68,.25)";
+                        const pzClr = c.partyZone.includes("N3")?"#005500":c.partyZone.includes("N2")?"#7c5800":c.partyZone.includes("N1 Floor")?"#7c5800":"#aa0000";
+                        const pzBorder = c.partyZone.includes("N3")?"2px solid #006600":c.partyZone.includes("N2")?"2px solid #f59e0b":c.partyZone.includes("N1 Floor")?"2px solid #f59e0b":"2px solid #cc0000";
+                        return <>
+                          <td style={{textAlign:"center",padding:"6px 8px",fontWeight:900,fontSize:15,
+                            background:pzBg,color:pzClr,border:pzBorder}}>₹{c.partyPrice.toLocaleString("en-IN")}</td>
+                          <td style={{textAlign:"center",padding:"6px 8px",fontWeight:700,background:pzBg,color:pzClr,border:pzBorder}}>{c.partyZone}</td>
+                        </>;
+                      })()}
                       <td style={{textAlign:"center",padding:"8px 4px",fontWeight:700,color:c.margin<0?"#cc0000":"#006600"}}>{c.margin}%</td>
                     </tr>
                   );
