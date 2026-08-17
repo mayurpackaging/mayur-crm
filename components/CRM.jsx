@@ -6773,6 +6773,22 @@ export default function CRM({ currentUser, onLogout }) {
     const [partyName, setPartyName] = useState("");
     const [pItems, setPItems] = useState([]);
     const [csQ, setCsQ] = useState("");
+    const [editPrice, setEditPrice] = useState({}); // {item_name: new_price}
+    const [savingPrice, setSavingPrice] = useState(null);
+
+    const saveListPrice = async(item_name, newPrice) => {
+      if(!newPrice||newPrice<=0) return;
+      setSavingPrice(item_name);
+      try {
+        await sbFetch("price_items?item_name=eq."+encodeURIComponent(item_name), {
+          method:"PATCH", body:{list_price: Number(newPrice)}
+        });
+        setPItems(p=>p.map(x=>x.item_name===item_name?{...x,list_price:Number(newPrice)}:x));
+        toast$("✅ List price updated!");
+      } catch(e){ toast$("Error: "+e.message,true); }
+      setSavingPrice(null);
+      setEditPrice(p=>({...p,[item_name]:null}));
+    };
 
     const [fixedCostMonth, setFixedCostMonth] = useState(()=>Number(localStorage.getItem("fixed_cost_month")||9800000));
     const [totalHrs, setTotalHrs] = useState(()=>Number(localStorage.getItem("total_hrs")||8256));
@@ -7250,9 +7266,9 @@ export default function CRM({ currentUser, onLogout }) {
                         onClick={()=>{setSelItem(p);setDetailType("fixed");}}>₹{c.newHappy.toLocaleString("en-IN")}</td>
                       <td style={{textAlign:"center",padding:"8px 4px",color:"#cc0000"}}>₹{partyDisc}</td>
                       {(()=>{
-                        const pzBg = c.partyZone.includes("N3")?"rgba(16,185,129,.25)":c.partyZone.includes("N2")?"rgba(245,158,11,.25)":c.partyZone.includes("N1 Floor")?"rgba(253,230,138,.4)":"rgba(239,68,68,.25)";
-                        const pzClr = c.partyZone.includes("N3")?"#005500":c.partyZone.includes("N2")?"#7c5800":c.partyZone.includes("N1 Floor")?"#7c5800":"#aa0000";
-                        const pzBorder = c.partyZone.includes("N3")?"2px solid #006600":c.partyZone.includes("N2")?"2px solid #f59e0b":c.partyZone.includes("N1 Floor")?"2px solid #f59e0b":"2px solid #cc0000";
+                        const pzBg = c.partyZone.includes("N3")?"rgba(16,185,129,.25)":c.partyZone.includes("N2")?"rgba(253,230,138,.5)":c.partyZone.includes("N1 Floor")?"rgba(239,68,68,.15)":"rgba(239,68,68,.3)";
+                        const pzClr = c.partyZone.includes("N3")?"#005500":c.partyZone.includes("N2")?"#7c5800":c.partyZone.includes("N1 Floor")?"#aa0000":"#aa0000";
+                        const pzBorder = c.partyZone.includes("N3")?"2px solid #006600":c.partyZone.includes("N2")?"2px solid #d97706":c.partyZone.includes("N1 Floor")?"2px solid #cc0000":"2px solid #cc0000";
                         return <>
                           <td style={{textAlign:"center",padding:"6px 8px",fontWeight:900,fontSize:15,
                             background:pzBg,color:pzClr,border:pzBorder}}>₹{c.partyPrice.toLocaleString("en-IN")}</td>
@@ -7282,7 +7298,29 @@ export default function CRM({ currentUser, onLogout }) {
                         textDecoration:"underline dotted"}} title="Click for breakdown"
                         onClick={()=>{setSelItem(p);setDetailType("fixed");}}>₹{c.fixedCost}</td>
                       <td style={{textAlign:"center",padding:"8px 4px",fontWeight:800}}>₹{(c.totalVariable+c.fixedCost).toLocaleString("en-IN")}</td>
-                      <td style={{textAlign:"center",padding:"8px 4px",color:"#0000ff",fontWeight:700}}>₹{c.listPrice.toLocaleString("en-IN")}</td>
+                      <td style={{textAlign:"center",padding:"4px",color:"#0000ff",fontWeight:700,minWidth:90}}>
+                        {editPrice[p.item_name]!==undefined && editPrice[p.item_name]!==null ? (
+                          <div style={{display:"flex",gap:4,alignItems:"center"}}>
+                            <input type="number" autoFocus
+                              value={editPrice[p.item_name]}
+                              onChange={e=>setEditPrice(prev=>({...prev,[p.item_name]:e.target.value}))}
+                              onKeyDown={e=>{if(e.key==="Enter")saveListPrice(p.item_name,editPrice[p.item_name]);if(e.key==="Escape")setEditPrice(prev=>({...prev,[p.item_name]:null}));}}
+                              style={{width:70,padding:"2px 4px",borderRadius:4,border:"2px solid #3b82f6",fontSize:11,textAlign:"center"}}/>
+                            <button onClick={()=>saveListPrice(p.item_name,editPrice[p.item_name])}
+                              style={{padding:"2px 6px",borderRadius:4,background:"#3b82f6",color:"#fff",border:"none",cursor:"pointer",fontSize:10}}>
+                              {savingPrice===p.item_name?"...":"✓"}
+                            </button>
+                            <button onClick={()=>setEditPrice(prev=>({...prev,[p.item_name]:null}))}
+                              style={{padding:"2px 4px",borderRadius:4,background:"#ddd",border:"none",cursor:"pointer",fontSize:10}}>✕</button>
+                          </div>
+                        ):(
+                          <span onClick={()=>setEditPrice(prev=>({...prev,[p.item_name]:c.listPrice}))}
+                            style={{cursor:"pointer",textDecoration:"underline dotted",padding:"4px 8px",borderRadius:4}}
+                            title="Click to edit list price">
+                            ₹{c.listPrice.toLocaleString("en-IN")} ✏️
+                          </span>
+                        )}
+                      </td>
                       <td style={{textAlign:"center",padding:"8px 4px",background:"rgba(239,68,68,.08)",color:"#cc0000",fontWeight:700,cursor:"pointer"}}
                         title="N1 = Floor Price (sirf fixed cost cover hoti hai)"
                         onClick={()=>{setSelItem(p);setDetailType("fixed");}}>₹{c.newFloor.toLocaleString("en-IN")}</td>
