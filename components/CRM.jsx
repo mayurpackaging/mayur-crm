@@ -7175,10 +7175,18 @@ export default function CRM({ currentUser, onLogout }) {
                     setPartyDisc(Number(cust.discount_per_ctn)||0);
                   }
                 }}>
-                  <option value="">-- Customer Select Karo --</option>
-                  {[...myC].sort((a,b)=>(a.company||a.name).localeCompare(b.company||b.name)).map(c=>(
-                    <option key={c.id} value={c.id}>{c.company||c.name}{c.discount_per_ctn>0?" (₹"+c.discount_per_ctn+"/ctn)":""}</option>
-                  ))}
+                  <option value="">-- Category → Party Select Karo --</option>
+                  {["crm","retail","direct","enduser","nbd"].map(cat=>{
+                    const catParties=[...myC].filter(c=>c.type===cat).sort((a,b)=>(a.company||a.name).localeCompare(b.company||b.name));
+                    if(catParties.length===0) return null;
+                    const catLabel=cat==="crm"?"🏢 CRM":cat==="retail"?"🏪 Retail":cat==="direct"?"🚚 Direct":cat==="enduser"?"👤 End User":"🎯 NBD";
+                    return [
+                      <option key={"cat-"+cat} disabled style={{fontWeight:700,background:"var(--card2)"}}>── {catLabel} ({catParties.length}) ──</option>,
+                      ...catParties.map(c=>(
+                        <option key={c.id} value={c.id}>&nbsp;&nbsp;{c.company||c.name}{c.discount_per_ctn>0?" · ₹"+c.discount_per_ctn+"/ctn":""}</option>
+                      ))
+                    ];
+                  })}
                 </select>
               </div>
               <div>
