@@ -7326,6 +7326,7 @@ export default function CRM({ currentUser, onLogout }) {
             </table>
           </div>
         </div>
+        }
 
         {selItem&&<DetailPopup/>}
       </div>
