@@ -1832,7 +1832,8 @@ export default function CRM({ currentUser, onLogout }) {
     const [sq,setSq]=useState("");
     const [open,setOpen]=useState(false);
     const sel=C.find(c=>c.id===value);
-    const filtered=C.filter(c=>!sq||[c.name,c.company,c.city,c.phone].some(v=>v?.toLowerCase().includes(sq.toLowerCase()))).slice(0,50);
+    const sqL=sq.toLowerCase();
+    const filtered=C.filter(c=>!sq||[c.name,c.company,c.city,c.phone,c.email].some(v=>v&&String(v).toLowerCase().includes(sqL))).slice(0,50);
     return (
       <div style={{position:"relative"}}>
         <div className="inp" style={{display:"flex",alignItems:"center",gap:6,cursor:"pointer",padding:"7px 12px"}} onClick={()=>setOpen(o=>!o)}>
