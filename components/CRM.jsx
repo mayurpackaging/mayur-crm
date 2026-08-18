@@ -470,8 +470,8 @@ export default function CRM({ currentUser, onLogout }) {
       <div><b>To:</b> ${selOrder?.company||""}<br/>${selOrder?.customer_name||""}${selOrder?.customerData?.phone?`<br/>📞 ${selOrder.customerData.phone}`:""}${selOrder?.customerData?.address?`<br/>📍 ${selOrder.customerData.address}`:""}${selOrder?.customerData?.gst_no?`<br/>GST: <b>${selOrder.customerData.gst_no}</b>`:""}</div>
       <div style="text-align:right"><b>Date:</b> ${selOrder?.order_date||""}<br/><b>Payment:</b> ${(selOrder?.payment_mode||"").replace("_"," ")}</div>
     </div>
-    <table><thead><tr><th>#</th><th>SKU</th><th>Product</th><th>Packing</th><th>Cases</th><th>Price/Pcs (₹)</th><th>CTN Price (₹)</th><th>Disc(₹)</th><th>Amount (₹)</th></tr></thead>
-    <tbody>${(selOrder?.items||[]).map((item,idx)=>`<tr><td>${idx+1}</td><td>${item.sku_code||""}</td><td>${item.product_name||""}</td><td>${item.packing||""}</td><td>${item.qty_cases||""}</td><td>${item.price_per_pcs||""}</td><td>${item.ctn_price||""}</td><td>${item.discount||0}</td><td><b>₹${Number(item.amount||0).toLocaleString("en-IN")}</b></td></tr>`).join("")}</tbody></table>
+    <table><thead><tr><th>#</th><th>SKU</th><th>Product</th><th>Packing</th><th>Cases/CTN</th><th>Total CTN</th><th>Price/Pcs (₹)</th><th>CTN Price (₹)</th><th>Disc(₹)</th><th>Amount (₹)</th></tr></thead>
+    <tbody>${(selOrder?.items||[]).map((item,idx)=>`<tr><td>${idx+1}</td><td>${item.sku_code||""}</td><td>${item.product_name||""}</td><td>${item.packing||""}</td><td>${item.qty_cases||""}</td><td><b>${(Number(item.qty_cases||0)*1).toLocaleString("en-IN")} CTN</b></td><td>${item.price_per_pcs||""}</td><td>${item.ctn_price||""}</td><td>${item.discount||0}</td><td><b>₹${Number(item.amount||0).toLocaleString("en-IN")}</b></td></tr>`).join("")}</tbody></table>
     <div class="totals">
       Subtotal: ₹${subtotal.toLocaleString("en-IN")}<br/>
       ${epr>0?`EPR @1%: ₹${epr.toLocaleString("en-IN")}<br/>`:""}
@@ -509,8 +509,8 @@ export default function CRM({ currentUser, onLogout }) {
       <div><b>To:</b> ${selOrder?.company||""}<br/>${selOrder?.customer_name||""}${selOrder?.customerData?.phone?`<br/>📞 ${selOrder.customerData.phone}`:""}${selOrder?.customerData?.address?`<br/>📍 ${selOrder.customerData.address}`:""}${selOrder?.customerData?.gst_no?`<br/>GST: <b>${selOrder.customerData.gst_no}</b>`:""}</div>
       <div style="text-align:right"><b>Date:</b> ${fd(selOrder?.order_date)}<br/><b>Payment:</b> ${selOrder?.payment_mode?.replace("_"," ")||""}</div>
     </div>
-    <table><thead><tr><th>#</th><th>SKU</th><th>Product</th><th>Packing</th><th>Cases</th><th>Price/Pcs (₹)</th><th>CTN Price (₹)</th><th>Amount (₹)</th></tr></thead>
-    <tbody>${(selOrder?.items||[]).map((item,idx)=>`<tr><td>${idx+1}</td><td>${item.sku_code||""}</td><td>${item.product_name||""}</td><td>${item.packing||""}</td><td>${item.qty_cases||""}</td><td>${item.price_per_pcs||""}</td><td>${item.ctn_price||""}</td><td><b>₹${Number(item.amount||0).toLocaleString("en-IN")}</b></td></tr>`).join("")}</tbody></table>
+    <table><thead><tr><th>#</th><th>SKU</th><th>Product</th><th>Packing</th><th>Cases</th><th>Total CTN</th><th>Price/Pcs (₹)</th><th>CTN Price (₹)</th><th>Disc(₹)</th><th>Amount (₹)</th></tr></thead>
+    <tbody>${(selOrder?.items||[]).map((item,idx)=>`<tr><td>${idx+1}</td><td>${item.sku_code||""}</td><td>${item.product_name||""}</td><td>${item.packing||""}</td><td>${item.qty_cases||""}</td><td>${Number(item.qty_cases||0)} CTN</td><td>${item.price_per_pcs||""}</td><td>${item.ctn_price||""}</td><td>${item.discount||0}</td><td><b>₹${Number(item.amount||0).toLocaleString("en-IN")}</b></td></tr>`).join("")}</tbody></table>
     <div class="total">Subtotal: ₹${subtotal.toLocaleString("en-IN")}<br/>${epr>0?`EPR @1%: ₹${epr.toLocaleString("en-IN")}<br/>`:""}${freight>0?`Freight & Forwarding: ₹${freight.toLocaleString("en-IN")}<br/>`:""}${freightGstAmt>0?`Freight GST @18%: ₹${freightGstAmt.toLocaleString("en-IN")}<br/>`:""}${gst>0?`GST @18%: ₹${gst.toLocaleString("en-IN")}<br/>`:""}
     <b>Grand Total: ₹${grandTotal.toLocaleString("en-IN")}</b></div>
     ${selOrder?.notes?`<div style="margin-top:12px;font-size:12px;"><b>Notes:</b> ${selOrder.notes}</div>`:""}
@@ -1832,7 +1832,7 @@ export default function CRM({ currentUser, onLogout }) {
     const [sq,setSq]=useState("");
     const [open,setOpen]=useState(false);
     const sel=C.find(c=>c.id===value);
-    const filtered=C.filter(c=>!sq||[c.name,c.company,c.city].some(v=>v?.toLowerCase().includes(sq.toLowerCase()))).slice(0,50);
+    const filtered=C.filter(c=>!sq||[c.name,c.company,c.city,c.phone].some(v=>v?.toLowerCase().includes(sq.toLowerCase()))).slice(0,50);
     return (
       <div style={{position:"relative"}}>
         <div className="inp" style={{display:"flex",alignItems:"center",gap:6,cursor:"pointer",padding:"7px 12px"}} onClick={()=>setOpen(o=>!o)}>
@@ -6794,8 +6794,7 @@ export default function CRM({ currentUser, onLogout }) {
       setEditPrice(p=>({...p,[item_name]:null}));
     };
 
-    const [fixedCostMonth, setFixedCostMonth] = useState(()=>Number(localStorage.getItem("fixed_cost_month")||9800000));
-    const [totalHrs, setTotalHrs] = useState(()=>Number(localStorage.getItem("total_hrs")||8256));
+    const [fixedPerHrInput, setFixedPerHrInput] = useState(()=>Number(localStorage.getItem("fixed_per_hr")||1083));
     const setHomo = v=>{ setHomoPrice(v); localStorage.setItem("daana_homo",v); };
     const setCP   = v=>{ setCpPrice(v);  localStorage.setItem("daana_cp",v); };
     const setRand = v=>{ setRandomPrice(v); localStorage.setItem("daana_random",v); };
@@ -6896,7 +6895,7 @@ export default function CRM({ currentUser, onLogout }) {
       // Total variable cost
       const totalVariable = newDaana + mbCost + polyCost + carton;
       // N1/N3 zone thresholds (derived from MOS)
-      const fixedPerHr = totalHrs>0 ? Math.round(fixedCostMonth/totalHrs) : 1097;
+      const fixedPerHr = fixedPerHrInput||1083;
       // N1 = Floor (break-even — sirf fixed cost cover ho)
       // N2 = Standard (50L profit target)
       // N3 = Happy (60L profit target)
@@ -7135,29 +7134,13 @@ export default function CRM({ currentUser, onLogout }) {
               </div>
             ))}
             <div style={{textAlign:"center"}}>
-              <div style={{fontSize:10,color:"var(--mut)",marginBottom:4}}>⚙️ Fixed Cost (₹/month)</div>
-              <input type="number" value={fixedCostMonth}
-                onChange={e=>{const v=Number(e.target.value);setFixedCostMonth(v);localStorage.setItem("fixed_cost_month",v);}}
+              <div style={{fontSize:10,color:"var(--mut)",marginBottom:4}}>⚙️ Fixed Cost N1 (₹/hr)</div>
+              <input type="number" value={fixedPerHrInput}
+                onChange={e=>{const v=Number(e.target.value);setFixedPerHrInput(v);localStorage.setItem("fixed_per_hr",v);}}
                 style={{width:"100%",padding:"6px 8px",borderRadius:8,border:"2px solid #cc0000",
-                  fontSize:16,fontWeight:800,color:"#cc0000",textAlign:"center",background:"var(--bg)"}}/>
-              <div style={{fontSize:9,color:"var(--mut)",marginTop:2}}>Total hrs: {totalHrs.toLocaleString()} → ₹{Math.round(fixedCostMonth/totalHrs)}/hr</div>
+                  fontSize:20,fontWeight:800,color:"#cc0000",textAlign:"center",background:"var(--bg)"}}/>
+              <div style={{fontSize:9,color:"var(--mut)",marginTop:2}}>MOS Model 1 = ₹1,083 | Model 2 = ₹850</div>
             </div>
-          </div>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginTop:10}}>
-            <div style={{textAlign:"center"}}>
-              <div style={{fontSize:10,color:"var(--mut)",marginBottom:4}}>⏱️ Total Machine Hours/Month</div>
-              <input type="number" value={totalHrs}
-                onChange={e=>{const v=Number(e.target.value);setTotalHrs(v);localStorage.setItem("total_hrs",v);}}
-                style={{width:"100%",padding:"4px 8px",borderRadius:8,border:"1px solid var(--bdr)",
-                  fontSize:14,fontWeight:700,textAlign:"center",background:"var(--bg)",color:"var(--txt)"}}/>
-            </div>
-            <div style={{background:"rgba(30,58,95,.06)",borderRadius:8,padding:"8px 12px",display:"flex",alignItems:"center",justifyContent:"center"}}>
-              <div style={{textAlign:"center"}}>
-                <div style={{fontSize:10,color:"var(--mut)"}}>Fixed Cost/hr (auto)</div>
-                <div style={{fontWeight:800,fontSize:18,color:"#cc0000"}}>₹{Math.round(fixedCostMonth/totalHrs).toLocaleString()}/hr</div>
-              </div>
-            </div>
-          </div>
         </div>
 
         {/* Zone Legend */}
