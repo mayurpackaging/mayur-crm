@@ -1949,6 +1949,10 @@ export default function CRM({ currentUser, onLogout }) {
                     </div>
                   ))}
                   <div style={{padding:"10px 12px",background:"var(--card2)"}}>
+                    <div style={{display:"flex",justifyContent:"space-between",fontSize:12,marginBottom:4}}>
+                      <span style={{color:"var(--mut)"}}>Total Cases</span>
+                      <span style={{fontWeight:700,color:"var(--acc)"}}>{orderItems.reduce((s,i)=>s+(Number(i.qty_cases)||0),0)} cases · {orderItems.length} SKU</span>
+                    </div>
                     <div style={{display:"flex",justifyContent:"space-between",fontSize:12,marginBottom:4}}><span style={{color:"var(--mut)"}}>Subtotal</span><span style={{fontWeight:600}}>₹{orderTotal.toLocaleString("en-IN")}</span></div>
                     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",fontSize:12,marginBottom:6,gap:12}}>
                       <label style={{display:"flex",alignItems:"center",gap:5,cursor:"pointer",color:"var(--mut)"}}>
