@@ -1043,7 +1043,7 @@ export default function CRM({ currentUser, onLogout }) {
             <Av name={c.name||c.company} size={28}/>
             <div>
               <div style={{fontWeight:700,fontSize:12}}>{c.company||c.name}</div>
-              <div style={{fontSize:10,color:"var(--mut)"}}>{c.city||""}</div>
+              <div style={{fontSize:10,color:"var(--mut)"}}>{c.city||""}{c.city&&c.phone?" · ":""}{c.phone||""}</div>
             </div>
           </div></td>
           <td><span style={{fontSize:9.5,fontWeight:800,padding:"2px 8px",borderRadius:12,
