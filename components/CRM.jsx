@@ -478,7 +478,8 @@ export default function CRM({ currentUser, onLogout }) {
       ${freight>0?`Freight & Forwarding: ₹${freight.toLocaleString("en-IN")}<br/>`:""}
       ${freightGstAmt>0?`Freight GST @18%: ₹${freightGstAmt.toLocaleString("en-IN")}<br/>`:""}
       ${gst>0?`GST @18% (${selOrder?.gst_type==="including"?"Incl.":"Excl."}): ₹${gst.toLocaleString("en-IN")}<br/>`:""}
-      <b style="font-size:15px;">Grand Total: ₹${grandTotal.toLocaleString("en-IN")}</b>
+      <b style="font-size:15px;">Grand Total: ₹${grandTotal.toLocaleString("en-IN")}</b><br/>
+      <span style="font-size:12px;color:#666;">Total Cartons: <b>${(selOrder?.items||[]).reduce((s,i)=>s+(Number(i.qty_cases)||0),0)} CTN</b> | Total SKUs: <b>${(selOrder?.items||[]).length}</b></span>
     </div>
     ${selOrder?.notes?`<div style="margin-top:10px;font-size:12px;"><b>Notes:</b> ${selOrder.notes}</div>`:""}
     <div class="bank">
@@ -512,7 +513,8 @@ export default function CRM({ currentUser, onLogout }) {
     <table><thead><tr><th>#</th><th>SKU</th><th>Product</th><th>Packing</th><th>Cases</th><th>Total CTN</th><th>Price/Pcs (₹)</th><th>CTN Price (₹)</th><th>Disc(₹)</th><th>Amount (₹)</th></tr></thead>
     <tbody>${(selOrder?.items||[]).map((item,idx)=>`<tr><td>${idx+1}</td><td>${item.sku_code||""}</td><td>${item.product_name||""}</td><td>${item.packing||""}</td><td>${item.qty_cases||""}</td><td>${Number(item.qty_cases||0)} CTN</td><td>${item.price_per_pcs||""}</td><td>${item.ctn_price||""}</td><td>${item.discount||0}</td><td><b>₹${Number(item.amount||0).toLocaleString("en-IN")}</b></td></tr>`).join("")}</tbody></table>
     <div class="total">Subtotal: ₹${subtotal.toLocaleString("en-IN")}<br/>${epr>0?`EPR @1%: ₹${epr.toLocaleString("en-IN")}<br/>`:""}${freight>0?`Freight & Forwarding: ₹${freight.toLocaleString("en-IN")}<br/>`:""}${freightGstAmt>0?`Freight GST @18%: ₹${freightGstAmt.toLocaleString("en-IN")}<br/>`:""}${gst>0?`GST @18%: ₹${gst.toLocaleString("en-IN")}<br/>`:""}
-    <b>Grand Total: ₹${grandTotal.toLocaleString("en-IN")}</b></div>
+    <b>Grand Total: ₹${grandTotal.toLocaleString("en-IN")}</b><br/>
+    <span style="font-size:12px;color:#666;">Total Cartons: <b>${(selOrder?.items||[]).reduce((s,i)=>s+(Number(i.qty_cases)||0),0)} CTN</b> | Total SKUs: <b>${(selOrder?.items||[]).length}</b></span></div>
     ${selOrder?.notes?`<div style="margin-top:12px;font-size:12px;"><b>Notes:</b> ${selOrder.notes}</div>`:""}
     <div style="margin-top:20px;padding:12px;background:#f8f9fa;border:1px solid #dee2e6;border-radius:6px;font-size:12px;">
       <b>Bank Details:</b><br/>
