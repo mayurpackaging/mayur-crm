@@ -925,7 +925,7 @@ export default function CRM({ currentUser, onLogout }) {
       .filter(c=>typeFilter==="all"||c.type===typeFilter)
       .filter(c=>assignFilter==="all"||c.assigned_to===assignFilter)
       .filter(c=>alphaFilter==="all"||(getFirst(c)===alphaFilter)||(alphaFilter==="#"&&getFirst(c)==="#"))
-      .filter(c=>!localQ||[c.name,c.company,c.city,c.assigned_to].some(v=>v?.toLowerCase().includes(localQ.toLowerCase())))
+      .filter(c=>!localQ||[c.name,c.company,c.city,c.phone,c.email,c.assigned_to].some(v=>v&&String(v).toLowerCase().includes(localQ.toLowerCase())))
       .sort((a,b)=>{
         if(sortBy==="company") return (a.company||"").localeCompare(b.company||"");
         if(sortBy==="assigned") return (a.assigned_to||"").localeCompare(b.assigned_to||"");
