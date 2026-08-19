@@ -7174,8 +7174,6 @@ export default function CRM({ currentUser, onLogout }) {
               <div style={{fontSize:9,color:"var(--mut)"}}>= ₹{(fixedMonthlyCs/1e5).toFixed(1)}L ÷ {csHrsMonth}h</div>
             </div>
           </div>
-          <div style={{display:"none"}}>
-          </div>
         </div>
 
         {/* Zone Legend */}
