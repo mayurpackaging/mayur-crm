@@ -6802,6 +6802,8 @@ export default function CRM({ currentUser, onLogout }) {
     };
 
     const [fixedPerHrInput, setFixedPerHrInput] = useState(()=>Number(localStorage.getItem("fixed_per_hr")||1083));
+    const [fixedMonthlyCs, setFixedMonthlyCs] = useState(()=>Number(localStorage.getItem("fixed_monthly_cs")||11160770));
+    const [csHrsMonth, setCsHrsMonth] = useState(()=>Number(localStorage.getItem("cs_hrs_month")||8297));
     const setHomo = v=>{ setHomoPrice(v); localStorage.setItem("daana_homo",v); };
     const setCP   = v=>{ setCpPrice(v);  localStorage.setItem("daana_cp",v); };
     const setRand = v=>{ setRandomPrice(v); localStorage.setItem("daana_random",v); };
@@ -7146,8 +7148,34 @@ export default function CRM({ currentUser, onLogout }) {
                 onChange={e=>{const v=Number(e.target.value);setFixedPerHrInput(v);localStorage.setItem("fixed_per_hr",v);}}
                 style={{width:"100%",padding:"6px 8px",borderRadius:8,border:"2px solid #cc0000",
                   fontSize:20,fontWeight:800,color:"#cc0000",textAlign:"center",background:"var(--bg)"}}/>
-              <div style={{fontSize:9,color:"var(--mut)",marginTop:2}}>MOS Model 1 = ₹1,083 | Model 2 = ₹850</div>
+              <div style={{fontSize:9,color:"var(--mut)",marginTop:2}}>MOS Model 1=₹1,083 | Model 2=₹850 | Actual=₹1,344</div>
             </div>
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginTop:10}}>
+            <div style={{textAlign:"center"}}>
+              <div style={{fontSize:10,color:"var(--mut)",marginBottom:4}}>💰 Fixed Cost/Month (₹)</div>
+              <input type="number" value={fixedMonthlyCs}
+                onChange={e=>{const v=Number(e.target.value);setFixedMonthlyCs(v);localStorage.setItem("fixed_monthly_cs",v);
+                  if(csHrsMonth>0) setFixedPerHrInput(Math.round(v/csHrsMonth));}}
+                style={{width:"100%",padding:"4px 8px",borderRadius:8,border:"1px solid var(--bdr)",
+                  fontSize:13,fontWeight:700,textAlign:"center",background:"var(--bg)",color:"var(--txt)"}}/>
+            </div>
+            <div style={{textAlign:"center"}}>
+              <div style={{fontSize:10,color:"var(--mut)",marginBottom:4}}>⏱️ Machine Hours/Month</div>
+              <input type="number" value={csHrsMonth}
+                onChange={e=>{const v=Number(e.target.value);setCsHrsMonth(v);localStorage.setItem("cs_hrs_month",v);
+                  if(v>0) setFixedPerHrInput(Math.round(fixedMonthlyCs/v));}}
+                style={{width:"100%",padding:"4px 8px",borderRadius:8,border:"1px solid var(--bdr)",
+                  fontSize:13,fontWeight:700,textAlign:"center",background:"var(--bg)",color:"var(--txt)"}}/>
+            </div>
+            <div style={{background:"rgba(204,0,0,.06)",borderRadius:8,padding:"8px",textAlign:"center"}}>
+              <div style={{fontSize:9,color:"var(--mut)"}}>Fixed Cost/hr (auto)</div>
+              <div style={{fontWeight:800,fontSize:18,color:"#cc0000"}}>₹{fixedPerHrInput.toLocaleString()}/hr</div>
+              <div style={{fontSize:9,color:"var(--mut)"}}>= ₹{(fixedMonthlyCs/1e5).toFixed(1)}L ÷ {csHrsMonth}h</div>
+            </div>
+          </div>
+          <div style={{display:"none"}}>
+          </div>
         </div>
 
         {/* Zone Legend */}
