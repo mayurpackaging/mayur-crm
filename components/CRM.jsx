@@ -7360,7 +7360,6 @@ export default function CRM({ currentUser, onLogout }) {
           </div>
         </div>}
 
-      </div>
         {selItem&&<DetailPopup/>}
       </div>
     );
