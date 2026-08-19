@@ -6199,6 +6199,110 @@ export default function CRM({ currentUser, onLogout }) {
           );
         })()}
 
+        {/* ── AI CALLING SUGGESTIONS ── */}
+        {(()=>{
+          const today = new Date().toISOString().slice(0,10);
+          
+          const scored = myParties.map(c=>{
+            const interactions = I.filter(i=>i.customer_id===c.id);
+            const lastI = interactions.sort((a,b)=>new Date(b.created_at)-new Date(a.created_at))[0];
+            const daysSince = lastI ? Math.floor((new Date()-new Date(lastI.created_at))/(1000*60*60*24)) : 999;
+            const hasOverdueFU = interactions.some(i=>i.next_follow_up&&i.next_follow_up<today);
+            const hasTodayFU = interactions.some(i=>i.next_follow_up===today);
+            const calledToday2 = interactions.some(i=>i.created_at?.startsWith(today));
+            const custOrders = ORDERS.filter(o=>o.customer_id===c.id);
+            const hasRecentOrder = custOrders.some(o=>o.order_date>=new Date(Date.now()-30*86400000).toISOString().slice(0,10));
+            
+            // Scoring
+            let score = 0;
+            let reason = "";
+            if(calledToday2) return null; // already called
+            if(hasOverdueFU){ score+=100; reason="🔴 Follow-up overdue"; }
+            else if(hasTodayFU){ score+=80; reason="🟡 Follow-up aaj"; }
+            else if(daysSince>30){ score+=60; reason="⏰ "+daysSince+" din se koi contact nahi"; }
+            else if(daysSince>14){ score+=40; reason="📅 "+daysSince+" din ho gaye"; }
+            else if(daysSince>7){ score+=20; reason="💬 "+daysSince+" din pehle call hua tha"; }
+            else { score+=5; reason="✅ Haal mein contact hua"; }
+            
+            if(c.type==="crm") score+=30;
+            else if(c.type==="retail"||c.type==="direct") score+=20;
+            if(hasRecentOrder) score+=10;
+            if(!c.phone) score-=20;
+            
+            return {...c, score, reason, daysSince, lastI, hasOverdueFU, hasTodayFU};
+          }).filter(Boolean).sort((a,b)=>b.score-a.score).slice(0,20);
+
+          const [aiLoad, setAiLoad] = React.useState(false);
+          const [aiSugg, setAiSugg] = React.useState("");
+
+          const getAiSugg = async() => {
+            setAiLoad(true);
+            const context = "Aaj calling ke liye top parties: "+scored.slice(0,10).map((c,i)=>(i+1)+". "+c.company+" ("+c.type.toUpperCase()+", "+c.reason+", last contact: "+(c.daysSince<999?c.daysSince+" din pehle":"kabhi nahi")+")").join(". ");
+            try {
+              const res = await fetch("/api/ai-polish",{method:"POST",headers:{"Content-Type":"application/json"},
+                body:JSON.stringify({text:context, type:"daily_summary"})});
+              const d = await res.json();
+              setAiSugg(d.polished||"");
+            } catch(e){}
+            setAiLoad(false);
+          };
+
+          return (
+            <div className="card" style={{marginBottom:14,background:"rgba(59,130,246,.03)",border:"1px solid rgba(59,130,246,.2)"}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+                <div>
+                  <div style={{fontWeight:800,fontSize:14,color:"#3b82f6"}}>🤖 AI Calling Suggestions — Aaj Kise Call Karo</div>
+                  <div style={{fontSize:11,color:"var(--mut)"}}>Score based on follow-up, last contact, party type</div>
+                </div>
+                <button className="btn btn-o btn-sm" onClick={getAiSugg} disabled={aiLoad}>
+                  {aiLoad?"⏳ Soch raha hoon...":"✨ AI Digest"}
+                </button>
+              </div>
+
+              {aiSugg&&(
+                <div style={{background:"#0e1a24",color:"#e2e8f0",borderRadius:8,padding:12,fontSize:12,
+                  lineHeight:1.8,marginBottom:12,whiteSpace:"pre-wrap"}}>{aiSugg}</div>
+              )}
+
+              {scored.map((c,i)=>{
+                const priorityColor = c.hasOverdueFU?"#ef4444":c.hasTodayFU?"#f59e0b":c.daysSince>30?"#f97316":c.daysSince>14?"#3b82f6":"#10b981";
+                const li = c.lastI;
+                return (
+                  <div key={c.id} style={{display:"flex",gap:10,alignItems:"center",
+                    padding:"10px 0",borderBottom:"1px solid var(--bdr)"}}>
+                    <div style={{width:28,height:28,borderRadius:"50%",flexShrink:0,
+                      background:priorityColor+"22",border:"2px solid "+priorityColor,
+                      display:"flex",alignItems:"center",justifyContent:"center",
+                      fontWeight:800,fontSize:12,color:priorityColor}}>{i+1}</div>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
+                        <span style={{fontWeight:700,fontSize:13}}>{c.company||c.name}</span>
+                        <span style={{fontSize:10,background:priorityColor+"15",color:priorityColor,
+                          padding:"1px 7px",borderRadius:6,fontWeight:700}}>{c.reason}</span>
+                        {c.type==="crm"&&<span style={{fontSize:9,background:"rgba(16,185,129,.1)",color:"#10b981",padding:"1px 6px",borderRadius:4,fontWeight:700}}>CRM</span>}
+                      </div>
+                      <div style={{fontSize:11,color:"var(--mut)",marginTop:2}}>
+                        {c.phone||"No phone"} · {c.city||""}
+                        {li&&<span style={{marginLeft:6}}>{TI[li.type]} {fd(li.created_at)}: {li.note?.slice(0,40)}...</span>}
+                      </div>
+                    </div>
+                    <div style={{display:"flex",gap:6,flexShrink:0}}>
+                      {c.phone&&<a href={"tel:"+c.phone} style={{padding:"5px 10px",borderRadius:6,fontSize:11,
+                        background:"rgba(16,185,129,.1)",color:"#10b981",border:"1px solid #10b981",
+                        textDecoration:"none",fontWeight:700}}>📞 Call</a>}
+                      <button className="btn btn-p btn-sm" onClick={()=>{setForm({customer_id:c.id,done_by:myName});setModal("ainter");}}>📝 Log</button>
+                      <button className="btn btn-o btn-sm" onClick={()=>openC(c.id)}>👁</button>
+                    </div>
+                  </div>
+                );
+              })}
+              {scored.length===0&&<div style={{textAlign:"center",padding:16,color:"var(--mut)"}}>
+                🎉 Sab parties aaj call ho gayi!
+              </div>}
+            </div>
+          );
+        })()}
+
         {/* ── CALLING LIST ── */}
         <div className="card" style={{padding:0}}>
           <div style={{padding:"12px 16px",fontWeight:700,fontSize:13,borderBottom:"1px solid var(--bdr)",display:"flex",justifyContent:"space-between"}}>
