@@ -6203,7 +6203,16 @@ export default function CRM({ currentUser, onLogout }) {
         {(()=>{
           const today = new Date().toISOString().slice(0,10);
           
-          const scored = myParties.map(c=>{
+          // scored = activeScored (defined above)
+          const scored = activeScored;
+
+          const [aiLoad, setAiLoad] = React.useState(false);
+          const [aiSugg, setAiSugg] = React.useState("");
+          const [skipped, setSkipped] = React.useState(new Set());
+          const [showCount, setShowCount] = React.useState(20);
+          
+          // All scored parties (more than 20 for buffer)
+          const allScored = myParties.map(c=>{
             const interactions = I.filter(i=>i.customer_id===c.id);
             const lastI = interactions.sort((a,b)=>new Date(b.created_at)-new Date(a.created_at))[0];
             const daysSince = lastI ? Math.floor((new Date()-new Date(lastI.created_at))/(1000*60*60*24)) : 999;
@@ -6212,32 +6221,30 @@ export default function CRM({ currentUser, onLogout }) {
             const calledToday2 = interactions.some(i=>i.created_at?.startsWith(today));
             const custOrders = ORDERS.filter(o=>o.customer_id===c.id);
             const hasRecentOrder = custOrders.some(o=>o.order_date>=new Date(Date.now()-30*86400000).toISOString().slice(0,10));
-            
-            // Scoring
-            let score = 0;
-            let reason = "";
-            if(calledToday2) return null; // already called
+            if(calledToday2) return null;
+            let score = 0; let reason = "";
             if(hasOverdueFU){ score+=100; reason="🔴 Follow-up overdue"; }
             else if(hasTodayFU){ score+=80; reason="🟡 Follow-up aaj"; }
-            else if(daysSince>30){ score+=60; reason="⏰ "+daysSince+" din se koi contact nahi"; }
+            else if(daysSince>30){ score+=60; reason="⏰ "+daysSince+" din se contact nahi"; }
             else if(daysSince>14){ score+=40; reason="📅 "+daysSince+" din ho gaye"; }
-            else if(daysSince>7){ score+=20; reason="💬 "+daysSince+" din pehle call hua tha"; }
-            else { score+=5; reason="✅ Haal mein contact hua"; }
-            
+            else if(daysSince>7){ score+=20; reason="💬 "+daysSince+" din pehle call"; }
+            else { score+=5; reason="✅ Haal mein hua"; }
             if(c.type==="crm") score+=30;
             else if(c.type==="retail"||c.type==="direct") score+=20;
             if(hasRecentOrder) score+=10;
             if(!c.phone) score-=20;
-            
             return {...c, score, reason, daysSince, lastI, hasOverdueFU, hasTodayFU};
-          }).filter(Boolean).sort((a,b)=>b.score-a.score).slice(0,20);
-
-          const [aiLoad, setAiLoad] = React.useState(false);
-          const [aiSugg, setAiSugg] = React.useState("");
+          }).filter(Boolean).sort((a,b)=>b.score-a.score);
+          
+          // Active list = not skipped, show showCount
+          const activeScored = allScored.filter(c=>!skipped.has(c.id)).slice(0, showCount);
+          const skipParty = (id) => {
+            setSkipped(prev=>new Set([...prev, id]));
+          };
 
           const getAiSugg = async() => {
             setAiLoad(true);
-            const context = "Aaj calling ke liye top parties: "+scored.slice(0,10).map((c,i)=>(i+1)+". "+c.company+" ("+c.type.toUpperCase()+", "+c.reason+", last contact: "+(c.daysSince<999?c.daysSince+" din pehle":"kabhi nahi")+")").join(". ");
+            const context = "Aaj calling ke liye top parties: "+allScored.slice(0,10).map((c,i)=>(i+1)+". "+c.company+" ("+c.type.toUpperCase()+", "+c.reason+", last contact: "+(c.daysSince<999?c.daysSince+" din pehle":"kabhi nahi")+")").join(". ");
             try {
               const res = await fetch("/api/ai-polish",{method:"POST",headers:{"Content-Type":"application/json"},
                 body:JSON.stringify({text:context, type:"daily_summary"})});
@@ -6252,7 +6259,10 @@ export default function CRM({ currentUser, onLogout }) {
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
                 <div>
                   <div style={{fontWeight:800,fontSize:14,color:"#3b82f6"}}>🤖 AI Calling Suggestions — Aaj Kise Call Karo</div>
-                  <div style={{fontSize:11,color:"var(--mut)"}}>Score based on follow-up, last contact, party type</div>
+                  <div style={{fontSize:11,color:"var(--mut)"}}>
+                    {activeScored.length} parties · {skipped.size>0&&<span style={{color:"#f59e0b"}}>⏭️ {skipped.size} skipped</span>}
+                    {skipped.size>0&&<button onClick={()=>setSkipped(new Set())} style={{marginLeft:8,fontSize:10,padding:"1px 6px",borderRadius:4,border:"1px solid var(--bdr)",background:"transparent",cursor:"pointer",color:"var(--mut)"}}>Reset</button>}
+                  </div>
                 </div>
                 <button className="btn btn-o btn-sm" onClick={getAiSugg} disabled={aiLoad}>
                   {aiLoad?"⏳ Soch raha hoon...":"✨ AI Digest"}
@@ -6292,13 +6302,26 @@ export default function CRM({ currentUser, onLogout }) {
                         textDecoration:"none",fontWeight:700}}>📞 Call</a>}
                       <button className="btn btn-p btn-sm" onClick={()=>{setForm({customer_id:c.id,done_by:myName});setModal("ainter");}}>📝 Log</button>
                       <button className="btn btn-o btn-sm" onClick={()=>openC(c.id)}>👁</button>
+                      <button onClick={()=>skipParty(c.id)} title="Skip — aaj nahi karni"
+                        style={{padding:"4px 8px",borderRadius:6,fontSize:11,border:"1px solid var(--bdr)",
+                          background:"transparent",cursor:"pointer",color:"var(--mut)"}}>⏭️</button>
                     </div>
                   </div>
                 );
               })}
-              {scored.length===0&&<div style={{textAlign:"center",padding:16,color:"var(--mut)"}}>
-                🎉 Sab parties aaj call ho gayi!
-              </div>}
+              {scored.length===0&&allScored.filter(c=>!skipped.has(c.id)).length===0&&(
+                <div style={{textAlign:"center",padding:16,color:"var(--mut)"}}>
+                  🎉 Sab parties aaj call ho gayi ya skip ho gayi!
+                </div>
+              )}
+              {allScored.filter(c=>!skipped.has(c.id)).length > showCount&&(
+                <div style={{textAlign:"center",paddingTop:12}}>
+                  <button className="btn btn-o" onClick={()=>setShowCount(n=>n+20)}
+                    style={{width:"100%",justifyContent:"center"}}>
+                    ⬇️ Aur 20 parties load karo ({allScored.filter(c=>!skipped.has(c.id)).length - showCount} remaining)
+                  </button>
+                </div>
+              )}
             </div>
           );
         })()}
