@@ -6208,8 +6208,28 @@ export default function CRM({ currentUser, onLogout }) {
 
           const [aiLoad, setAiLoad] = React.useState(false);
           const [aiSugg, setAiSugg] = React.useState("");
-          const [skipped, setSkipped] = React.useState(new Set());
+          const [skipped, setSkipped] = React.useState(()=>{
+            try{
+              const today2=new Date().toISOString().slice(0,10);
+              const saved=JSON.parse(localStorage.getItem("ai_skipped_"+today2)||"[]");
+              return new Set(saved);
+            }catch(e){return new Set();}
+          });
           const [showCount, setShowCount] = React.useState(20);
+          
+          const skipPartyFn = (id) => {
+            setSkipped(prev=>{
+              const next=new Set([...prev,id]);
+              const today2=new Date().toISOString().slice(0,10);
+              localStorage.setItem("ai_skipped_"+today2, JSON.stringify([...next]));
+              return next;
+            });
+          };
+          const resetSkipped = () => {
+            const today2=new Date().toISOString().slice(0,10);
+            localStorage.removeItem("ai_skipped_"+today2);
+            setSkipped(new Set());
+          };
           
           // All scored parties (more than 20 for buffer)
           const allScored = myParties.map(c=>{
@@ -6238,9 +6258,7 @@ export default function CRM({ currentUser, onLogout }) {
           
           // Active list = not skipped, show showCount
           const activeScored = allScored.filter(c=>!skipped.has(c.id)).slice(0, showCount);
-          const skipParty = (id) => {
-            setSkipped(prev=>new Set([...prev, id]));
-          };
+          // skipParty defined above as skipPartyFn
 
           const getAiSugg = async() => {
             setAiLoad(true);
@@ -6261,7 +6279,7 @@ export default function CRM({ currentUser, onLogout }) {
                   <div style={{fontWeight:800,fontSize:14,color:"#3b82f6"}}>🤖 AI Calling Suggestions — Aaj Kise Call Karo</div>
                   <div style={{fontSize:11,color:"var(--mut)"}}>
                     {activeScored.length} parties · {skipped.size>0&&<span style={{color:"#f59e0b"}}>⏭️ {skipped.size} skipped</span>}
-                    {skipped.size>0&&<button onClick={()=>setSkipped(new Set())} style={{marginLeft:8,fontSize:10,padding:"1px 6px",borderRadius:4,border:"1px solid var(--bdr)",background:"transparent",cursor:"pointer",color:"var(--mut)"}}>Reset</button>}
+                    {skipped.size>0&&<button onClick={()=>resetSkipped()} style={{marginLeft:8,fontSize:10,padding:"1px 6px",borderRadius:4,border:"1px solid var(--bdr)",background:"transparent",cursor:"pointer",color:"var(--mut)"}}>Reset</button>}
                   </div>
                 </div>
                 <button className="btn btn-o btn-sm" onClick={getAiSugg} disabled={aiLoad}>
@@ -6312,7 +6330,7 @@ export default function CRM({ currentUser, onLogout }) {
                         textDecoration:"none",fontWeight:700}}>📞 Call</a>}
                       <button className="btn btn-p btn-sm" onClick={()=>{setForm({customer_id:c.id,done_by:myName});setModal("ainter");}}>📝 Log</button>
                       <button className="btn btn-o btn-sm" onClick={()=>openC(c.id)}>👁</button>
-                      <button onClick={()=>skipParty(c.id)} title="Skip — aaj nahi karni"
+                      <button onClick={()=>skipPartyFn(c.id)} title="Skip — aaj nahi karni"
                         style={{padding:"4px 8px",borderRadius:6,fontSize:11,border:"1px solid var(--bdr)",
                           background:"transparent",cursor:"pointer",color:"var(--mut)"}}>⏭️</button>
                     </div>
