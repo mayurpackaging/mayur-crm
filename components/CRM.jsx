@@ -6289,7 +6289,17 @@ export default function CRM({ currentUser, onLogout }) {
                         <span style={{fontWeight:700,fontSize:13}}>{c.company||c.name}</span>
                         <span style={{fontSize:10,background:priorityColor+"15",color:priorityColor,
                           padding:"1px 7px",borderRadius:6,fontWeight:700}}>{c.reason}</span>
-                        {c.type==="crm"&&<span style={{fontSize:9,background:"rgba(16,185,129,.1)",color:"#10b981",padding:"1px 6px",borderRadius:4,fontWeight:700}}>CRM</span>}
+                        {(()=>{
+                          const typeMap = {
+                            crm:["CRM","#10b981","rgba(16,185,129,.1)"],
+                            retail:["Retail","#8b5cf6","rgba(139,92,246,.1)"],
+                            direct:["Direct","#f59e0b","rgba(245,158,11,.1)"],
+                            enduser:["End User","#3b82f6","rgba(59,130,246,.1)"],
+                            nbd:["NBD","#6b7280","rgba(107,114,128,.1)"],
+                          };
+                          const [lbl,clr,bg]=typeMap[c.type]||["—","#999","#f5f5f5"];
+                          return <span style={{fontSize:9,background:bg,color:clr,padding:"1px 7px",borderRadius:4,fontWeight:700}}>{lbl}</span>;
+                        })()}
                       </div>
                       <div style={{fontSize:11,color:"var(--mut)",marginTop:2}}>
                         {c.phone||"No phone"} · {c.city||""}
